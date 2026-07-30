@@ -22,6 +22,7 @@ import {
   markRunAwaitingApproval,
   markRunStarted,
   markRunStarting,
+  nextRunSequence,
   setHermesResponseId,
 } from "./repository";
 import { HermesResponsesNormalizer } from "./responses-normalizer";
@@ -169,7 +170,9 @@ async function resumeAgentStream(
   runtime: ResolvedRuntimeConfig,
   controller: AbortController,
 ) {
-  const normalizer = new HermesEventNormalizer();
+  // Reprise d'une mission qui a deja des evenements en base : la sequence doit
+  // continuer la serie existante, pas la recommencer.
+  const normalizer = new HermesEventNormalizer(await nextRunSequence(runId));
   let context: Awaited<ReturnType<typeof getRunContext>> | null = null;
 
   try {
@@ -270,7 +273,7 @@ async function handleAgentRunError(
       ...normalizer.flush(),
       normalizer.notice("Mission annulée par l’utilisateur.", "cancelled"),
     ]);
-    await persistEvents(context.threadId, runId, events);
+    await persistEventsBestEffort(context.threadId, runId, events);
     await failRun(runId, "", "cancelled");
     return;
   }
@@ -282,7 +285,7 @@ async function handleAgentRunError(
         ? error.message
         : "Erreur inconnue pendant l’exécution.";
   const event = toProductEvents([normalizer.error(message)])[0]!;
-  await persistEvents(context.threadId, runId, [
+  await persistEventsBestEffort(context.threadId, runId, [
     ...toProductEvents(normalizer.flush()),
     event,
   ]);
@@ -420,6 +423,23 @@ async function persistEvents(
 ) {
   const stored = await appendRunEvents(threadId, runId, events);
   for (const event of stored) publishThreadEvent(threadId, event);
+}
+
+/**
+ * Variante pour les chemins de cloture : la mission doit atteindre son etat
+ * terminal meme si la trace ne peut pas etre ecrite. Sans cela une erreur de
+ * persistance laisse le run `running` a vie (§29).
+ */
+async function persistEventsBestEffort(
+  threadId: string,
+  runId: string,
+  events: ProductEventInput[],
+) {
+  try {
+    await persistEvents(threadId, runId, events);
+  } catch (error) {
+    console.error("[runner] event append failed", { runId, error });
+  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

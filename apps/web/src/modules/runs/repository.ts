@@ -1,6 +1,6 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, max } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
 import {
   artifacts,
@@ -119,7 +119,14 @@ export async function createRunForThread(threadId: string, input: string) {
   const now = new Date();
 
   await db.transaction(async (tx) => {
-    const [thread] = await tx.select({ id: threads.id }).from(threads).where(eq(threads.id, threadId));
+    // `FOR UPDATE` sérialise les créations concurrentes sur la même conversation.
+    // Sans ce verrou, deux POST simultanés lisent tous les deux « aucun run
+    // actif » (READ COMMITTED) et démarrent deux missions sur le même fil.
+    const [thread] = await tx
+      .select({ id: threads.id })
+      .from(threads)
+      .where(eq(threads.id, threadId))
+      .for("update");
     if (!thread) {
       throw new ProductRepositoryError("THREAD_NOT_FOUND", "Conversation introuvable.");
     }
@@ -241,6 +248,18 @@ export async function markRunAwaitingApproval(runId: string) {
 
 export async function setHermesResponseId(runId: string, responseId: string) {
   await getDatabase().update(runs).set({ hermesResponseId: responseId }).where(eq(runs.id, runId));
+}
+
+/**
+ * Prochaine `sequence` libre pour une mission. A appeler avant de construire un
+ * `HermesEventNormalizer` sur un run qui a deja des evenements en base.
+ */
+export async function nextRunSequence(runId: string): Promise<number> {
+  const [row] = await getDatabase()
+    .select({ max: max(runEvents.sequence) })
+    .from(runEvents)
+    .where(eq(runEvents.runId, runId));
+  return (row?.max ?? -1) + 1;
 }
 
 export async function appendRunEvents(

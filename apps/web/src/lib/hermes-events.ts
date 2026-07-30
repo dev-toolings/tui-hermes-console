@@ -53,7 +53,17 @@ export const DELTA_FLUSH_MS = 100;
  *     `tool.completed` en FIFO par nom d'outil.
  */
 export class HermesEventNormalizer {
-  private sequence = 0;
+  private sequence: number;
+
+  /**
+   * `startAt` doit valoir MAX(sequence)+1 quand on reprend une mission qui a
+   * deja des evenements persistes (resume au boot, annulation hors process,
+   * cloture d'orphelin). Repartir de 0 viole UNIQUE(run_id, sequence) et fait
+   * echouer la transition d'etat qui suit.
+   */
+  constructor(startAt = 0) {
+    this.sequence = startAt;
+  }
   /** File FIFO des appels d'outil ouverts, par nom d'outil. */
   private openToolCalls = new Map<string, string[]>();
   private toolCallCounter = 0;

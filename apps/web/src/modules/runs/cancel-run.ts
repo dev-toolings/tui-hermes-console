@@ -10,6 +10,7 @@ import {
   failRun,
   getRunCancelTarget,
   isTerminalRunStatus,
+  nextRunSequence,
 } from "./repository";
 import { cancelActiveRun } from "./runner";
 
@@ -65,11 +66,18 @@ export async function cancelRun(runId: string): Promise<CancelRunResult> {
 }
 
 async function closeAsCancelled(threadId: string, runId: string) {
-  const normalizer = new HermesEventNormalizer();
-  const events = toProductEvents([
-    normalizer.notice("Mission annulée par l’utilisateur.", "cancelled"),
-  ]);
-  const stored = await appendRunEvents(threadId, runId, events);
-  for (const item of stored) publishThreadEvent(threadId, item);
+  // Même règle que la réconciliation : l'annulation doit aboutir en base même
+  // si la trace ne peut pas être écrite, sinon POST /cancel renvoie 500 et la
+  // mission reste `running`.
+  try {
+    const normalizer = new HermesEventNormalizer(await nextRunSequence(runId));
+    const events = toProductEvents([
+      normalizer.notice("Mission annulée par l’utilisateur.", "cancelled"),
+    ]);
+    const stored = await appendRunEvents(threadId, runId, events);
+    for (const item of stored) publishThreadEvent(threadId, item);
+  } catch (error) {
+    console.error("[cancel] event append failed", { runId, error });
+  }
   await failRun(runId, "", "cancelled");
 }
