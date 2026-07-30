@@ -61,6 +61,12 @@ export class ArtifactPathError extends Error {
   }
 }
 
+/** Même normalisation que les chemins locaux — indispensable pour que le miroir
+ *  distant retombe sur le même nom de dossier. */
+export function sanitizeRunId(runId: string) {
+  return sanitizeSegment(runId);
+}
+
 function sanitizeSegment(value: string) {
   const cleaned = value.replace(/[^a-zA-Z0-9_\-]/g, "");
   if (!cleaned) throw new ArtifactPathError("Identifiant de mission invalide.");

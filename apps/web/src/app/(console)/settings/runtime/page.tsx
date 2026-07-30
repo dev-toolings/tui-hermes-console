@@ -8,6 +8,7 @@ import { Badge, Card, CardSurface, SectionHeading } from "@/components/ui/boardu
 
 type RuntimeDto = {
   configured: boolean;
+  transport?: "direct" | "ssh";
   baseUrl: string | null;
   lastHealthStatus: string;
   detectedVersion: string | null;

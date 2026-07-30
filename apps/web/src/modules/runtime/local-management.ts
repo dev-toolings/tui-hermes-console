@@ -12,7 +12,10 @@ type CommandResult = {
 
 export async function assertLocalHermesRuntime(action: string) {
   const config = await resolveHermesRuntimeConfig();
-  const hostname = new URL(config.baseUrl).hostname;
+  // En mode tunnel, baseUrl pointe sur 127.0.0.1 alors qu'Hermes tourne ailleurs :
+  // lancer la CLI ici piloterait la mauvaise machine.
+  const hostname =
+    config.transport === "ssh" ? "remote" : new URL(config.baseUrl).hostname;
   if (!["127.0.0.1", "localhost", "::1"].includes(hostname)) {
     throw new HermesRuntimeError(
       `${action} n’est disponible que pour un runtime Hermes local. Le runtime distant doit exposer une API d’administration dédiée.`,

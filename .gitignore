@@ -1,6 +1,8 @@
 node_modules/
 .env
 .env.local
+# Identifiants de test en clair — ne doit jamais partir dans un commit
+auth.md
 *.png
 *.jpg
 *.jpeg

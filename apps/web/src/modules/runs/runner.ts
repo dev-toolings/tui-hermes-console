@@ -27,6 +27,7 @@ import {
 import { HermesResponsesNormalizer } from "./responses-normalizer";
 import type { ProductEventInput } from "./types";
 import { augmentPromptWithArtifacts } from "@/modules/artifacts/prompt";
+import { pushRunInputs, resolveRunRoot } from "@/modules/artifacts/remote-sync";
 
 type ActiveRun = {
   controller: AbortController;
@@ -120,10 +121,15 @@ async function executeAgentRun(runId: string, controller: AbortController) {
     const active = activeRuns.get(runId);
     if (active) active.runtime = runtime;
 
+    // Runtime distant : les pièces jointes doivent exister sur SA machine avant le run.
+    const { root: remoteRoot } = await resolveRunRoot();
+    if (remoteRoot) await pushRunInputs(runId);
+
     const prompt = augmentPromptWithArtifacts({
       prompt: context.input,
       inputArtifacts: context.inputArtifacts,
       runId,
+      remoteRoot,
     });
 
     const { hermesRunId } = await createHermesAgentRun({
@@ -296,10 +302,15 @@ async function executeResponsesRun(runId: string, controller: AbortController) {
     const active = activeRuns.get(runId);
     if (active) active.runtime = runtime;
 
+    // Runtime distant : les pièces jointes doivent exister sur SA machine avant le run.
+    const { root: remoteRoot } = await resolveRunRoot();
+    if (remoteRoot) await pushRunInputs(runId);
+
     const prompt = augmentPromptWithArtifacts({
       prompt: context.input,
       inputArtifacts: context.inputArtifacts,
       runId,
+      remoteRoot,
     });
 
     const response = await streamHermesResponse({

@@ -147,7 +147,9 @@ export async function DELETE(request: Request) {
 
 async function assertLocalHermesRuntime() {
   const config = await resolveHermesRuntimeConfig();
-  const hostname = new URL(config.baseUrl).hostname;
+  // Cf. assertLocalHermesRuntime : en mode tunnel, 127.0.0.1 n'est pas la machine d'Hermes.
+  const hostname =
+    config.transport === "ssh" ? "remote" : new URL(config.baseUrl).hostname;
   if (!["127.0.0.1", "localhost", "::1"].includes(hostname)) {
     throw new HermesRuntimeError(
       "Le runtime Hermes est distant et n’expose pas son API OAuth. Lancez `hermes auth add openai-codex` sur cette machine.",

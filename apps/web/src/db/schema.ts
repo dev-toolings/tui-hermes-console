@@ -33,6 +33,13 @@ export type RuntimeHealthStatus =
   | "unauthorized"
   | "missing_feature";
 
+/** `direct` = la Console appelle baseUrl telle quelle. `ssh` = via un tunnel SSH sortant. */
+export type RuntimeTransport = "direct" | "ssh";
+
+/** `agent` = binaire `ssh` + ~/.ssh/config (clé, agent, ProxyJump).
+ *  `password` = ssh2 avec un mot de passe stocké chiffré. */
+export type RuntimeSshAuth = "agent" | "password";
+
 export const agents = pgTable(
   "agents",
   {
@@ -57,8 +64,17 @@ export const agents = pgTable(
 export const runtimeConfig = pgTable("runtime_config", {
   id: text("id").primaryKey().default("default"),
   name: text("name").notNull().default("Hermes"),
+  /** En transport `ssh`, l'URL est celle vue depuis la machine distante. */
   baseUrl: text("base_url").notNull(),
   encryptedToken: text("encrypted_token").notNull(),
+  transport: text("transport").notNull().default("direct").$type<RuntimeTransport>(),
+  sshHost: text("ssh_host"),
+  sshPort: integer("ssh_port").notNull().default(22),
+  sshUser: text("ssh_user"),
+  sshAuth: text("ssh_auth").notNull().default("agent").$type<RuntimeSshAuth>(),
+  encryptedSshPassword: text("encrypted_ssh_password"),
+  /** Racine du volume de travail côté machine distante (transport `ssh`). */
+  remoteWorkdir: text("remote_workdir"),
   detectedVersion: text("detected_version"),
   capabilities: jsonb("capabilities").$type<Record<string, unknown>>(),
   lastHealthStatus: text("last_health_status").notNull().default("unknown").$type<RuntimeHealthStatus>(),

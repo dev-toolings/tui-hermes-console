@@ -7,6 +7,7 @@ import { notifyRuntimePublicChanged } from "@/lib/runtime/public-client";
 
 type RuntimeDto = {
   configured: boolean;
+  transport?: "direct" | "ssh";
   baseUrl: string | null;
   lastHealthStatus: string;
   detectedVersion: string | null;
@@ -28,7 +29,9 @@ export function RuntimeLifecycle({
   onRuntimeChange: (runtime: RuntimeDto) => void;
 }) {
   const [state, setState] = React.useState<LifecycleState>({ kind: "idle" });
-  const managedLocally = isLocalRuntimeUrl(runtime?.baseUrl);
+  // En mode tunnel, baseUrl côté serveur pointe sur 127.0.0.1 sans qu'Hermes soit local.
+  const managedLocally =
+    runtime?.transport !== "ssh" && isLocalRuntimeUrl(runtime?.baseUrl);
 
   async function restart() {
     setState({ kind: "restarting" });

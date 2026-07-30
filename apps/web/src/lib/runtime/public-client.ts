@@ -1,8 +1,15 @@
 export type RuntimePublicDto = {
   configured: boolean;
   source: "database" | "env" | "none";
+  transport: "direct" | "ssh";
   baseUrl: string | null;
   tokenConfigured: boolean;
+  sshHost: string | null;
+  sshPort: number;
+  sshUser: string | null;
+  sshAuth: "agent" | "password";
+  sshPasswordConfigured: boolean;
+  remoteWorkdir: string | null;
   lastHealthStatus: string;
   detectedVersion: string | null;
 };

@@ -60,25 +60,61 @@ le volume partagé est le seul chemin fichiers (upload API Hermes rejeté).
 
 ## Configuration locale
 
+Prérequis : le conteneur `infra-postgres` (`~/Documents/infra/compose.yml`) démarré sur `:5432`,
+avec une base dédiée `hermes_console` :
+
 ```bash
-cp apps/web/.env.example apps/web/.env.local
-# DATABASE_URL, HERMES_*, APP_ENCRYPTION_KEY, HERMES_SHARED_WORKDIR
-bun run db:migrate
+docker start infra-postgres
+docker exec infra-postgres createdb -U test hermes_console   # une seule fois
+```
+
+Puis, à la racine du repo :
+
+```bash
+make setup   # install + .env.local (clé de chiffrement générée) + db-check + migrations
 ```
 
 Variables serveur :
 
-- `DATABASE_URL` — Postgres dédié (`infra-postgres`) ;
-- `HERMES_BASE_URL` / `HERMES_RUNTIME_TOKEN` — fallback si pas de config DB ;
+- `DATABASE_URL` — Postgres dédié `infra-postgres`
+  (`postgres://test:test@localhost:5432/hermes_console`) ;
+- `HERMES_BASE_URL` / `HERMES_RUNTIME_TOKEN` — fallback **accès direct** si pas de config DB ;
+  le mode tunnel SSH (Hermes sur une autre machine) se configure dans Paramètres → Runtime ;
 - `HERMES_PROTOCOL` — `agent` (défaut) ou `responses` ;
 - `HERMES_SHARED_WORKDIR` — même chemin que l’hôte Hermes (défaut `/tmp/hermes-console-work`) ;
 - `APP_ENCRYPTION_KEY` — chiffrement du token runtime.
 
-Puis :
+## Runtime Hermes distant (tunnel SSH)
+
+Hermes n'a pas besoin de tourner sur la machine de la Console. Dans **Paramètres → Runtime**,
+mode « Tunnel SSH » : la Console monte un port-forward SSH côté serveur et joint Hermes à travers.
+Le même canal sert au SFTP des pièces jointes et des artefacts. Rien n'est exposé sur le réseau.
+
+Deux authentifications, à ne pas confondre :
+
+| Couche | Ce qu'elle protège | Où la trouver |
+|---|---|---|
+| SSH | l'accès à la machine | clé/agent (`ssh-add -l`) via `~/.ssh/config`, ou mot de passe |
+| Token Hermes | l'API du runtime | `API_SERVER_KEY` dans `~/.hermes/.env` sur la machine distante |
+
+Côté machine distante :
+
+- `AllowTcpForwarding yes` dans `sshd_config` — sinon le tunnel est refusé (message dédié dans l'UI) ;
+- l'URL à saisir est celle vue **depuis cette machine**, en général `http://127.0.0.1:8642` ;
+- « Dossier de travail distant » (défaut `/tmp/hermes-console-work`) reçoit `runs/<id>/{in,out}`.
+
+Piège de diagnostic : `ssh <hôte> 'hermes --version'` peut échouer alors que le runtime tourne —
+un SSH non interactif ne charge pas le `PATH` du shell de connexion. Vérifiez plutôt le service
+(`systemctl --user status hermes-gateway`) ou le port (`ss -lntp | grep 8642`).
+
+Le redémarrage d'Hermes depuis la Console reste réservé à un runtime local : en mode tunnel, le
+`127.0.0.1` que voit la Console n'est pas la machine d'Hermes.
+
+## Démarrage
 
 ```bash
-bun run db:seed   # agent miroir depuis /health + /v1/models
-bun run dev
+make db-seed   # agent miroir depuis /health + /v1/models (runtime Hermes requis)
+make dev
 ```
 
 Parcours : `/agents/new` → `/runs/new` → `/runs/thr_*` → composer (± pièce jointe)
