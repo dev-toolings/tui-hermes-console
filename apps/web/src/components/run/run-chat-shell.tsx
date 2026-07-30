@@ -2,7 +2,7 @@
 
 import { type ReactNode } from "react";
 import type { ThreadSnapshot } from "@/modules/runs/types";
-import { OpenClawChatShell } from "@/components/chat/openclaw-shell";
+import { ChatPane } from "@/components/chat/openclaw-shell";
 import { EventStream } from "./event-stream";
 import { RunDetailsRegistrar, type RunPageDetails } from "./run-page-chrome";
 import { RunThreadHeader } from "./run-thread-header";
@@ -42,15 +42,15 @@ export function RunChatShell({
     return (
       <RunDetailsRegistrar details={details}>
         <RunThreadMetaProvider snapshot={threadSnapshot}>
-          <OpenClawChatShell
-            sessionId={threadSnapshot?.id}
+          <ChatPane
             title={loading ? "…" : title}
             modelLabel={model}
+            loading={loading}
             trailing={trailing}
             alerts={alerts}
           >
             {stream}
-          </OpenClawChatShell>
+          </ChatPane>
         </RunThreadMetaProvider>
       </RunDetailsRegistrar>
     );

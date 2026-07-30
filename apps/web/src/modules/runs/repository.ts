@@ -24,6 +24,7 @@ import type {
 import { resolveEffectiveInference } from "@/modules/runtime/resolve-effective-model";
 import { ensureRunWorkdirs, runInputDir } from "@/modules/artifacts/paths";
 import { listArtifactsForRun, scanOutputArtifacts } from "@/modules/artifacts/repository";
+import { pullRunOutputs } from "@/modules/artifacts/remote-sync";
 
 const ACTIVE_STATUSES: ProductRunStatus[] = [
   "pending",
@@ -40,7 +41,8 @@ export class ProductRepositoryError extends Error {
       | "RUN_NOT_FOUND"
       | "RUN_ALREADY_ACTIVE"
       | "RUN_ALREADY_TERMINAL"
-      | "RUN_NOT_AWAITING_APPROVAL",
+      | "RUN_NOT_AWAITING_APPROVAL"
+      | "AGENT_IN_CHAT",
     message: string,
   ) {
     super(message);
@@ -58,6 +60,15 @@ export async function createThreadWithRun(input: {
   reasoningEffort?: string | null;
   message: string;
 }) {
+  // Un agent ne s'attache qu'à une mission : `/chat` reste du chat libre, et on
+  // n'y accède à un agent que par une mention `@`, qui crée sa propre mission.
+  if (input.source === "chat" && input.agentId) {
+    throw new ProductRepositoryError(
+      "AGENT_IN_CHAT",
+      "Un agent ne peut pas être attaché à une session de chat.",
+    );
+  }
+
   const db = getDatabase();
   const threadId = makeId("thr");
   const runId = makeId("run");
@@ -317,8 +328,9 @@ export async function completeRun(
     await tx.update(threads).set({ updatedAt: now }).where(eq(threads.id, run.threadId));
   });
 
-  // Hors transaction : I/O filesystem (scan out/).
+  // Hors transaction : I/O filesystem (rapatriement puis scan out/).
   try {
+    await pullRunOutputs(runId);
     await scanOutputArtifacts(runId);
   } catch (error) {
     console.error("[hermes-console] scan outputs failed", runId, error);

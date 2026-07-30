@@ -1,8 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { usePathname, useRouter, useSelectedLayoutSegment } from "next/navigation";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 import {
   LayoutDashboardIcon,
   ListFilterIcon,
@@ -24,6 +33,10 @@ import {
 import { cn } from "@/lib/cn";
 import { RUN_STATUS, type RunStatus } from "@/lib/run-status";
 import { ChatModelsSettingsButton } from "@/components/chat/chat-models-settings-button";
+import {
+  dropThreadSnapshotCache,
+  prefetchThreadSnapshot,
+} from "@/components/run/use-live-thread";
 
 export type ChatSessionRow = {
   id: string;
@@ -78,24 +91,46 @@ function relativeTime(iso: string, nowMs: number) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-/** OpenClaw Control UI — session-first shell (iso layout). */
-export function OpenClawChatShell({
-  sessionId,
-  title,
-  modelLabel,
-  trailing,
-  alerts,
-  children,
-  draft = false,
-}: {
-  sessionId?: string;
-  title: string;
-  modelLabel?: string;
-  trailing?: ReactNode;
-  alerts?: ReactNode;
-  children: ReactNode;
-  draft?: boolean;
-}) {
+type ChatSurfaceContextValue = {
+  sessionId: string | null;
+  sessions: ChatSessionRow[];
+  /**
+   * Recharge la liste des sessions. La sidebar n'est plus remontée à chaque
+   * navigation : sans cet appel, une session tout juste créée n'apparaîtrait
+   * dans l'historique qu'au sondage suivant (jusqu'à 8 s plus tard).
+   */
+  refreshSessions: () => Promise<void>;
+  sidebarCollapsed: boolean;
+  toggleSidebar: () => void;
+  openMobileSidebar: () => void;
+};
+
+const ChatSurfaceContext = createContext<ChatSurfaceContextValue | null>(null);
+
+export function useChatSurface() {
+  const context = useContext(ChatSurfaceContext);
+  if (!context) {
+    throw new Error("ChatSurfaceFrame is missing above this component.");
+  }
+  return context;
+}
+
+/**
+ * OpenClaw Control UI — coque de la surface chat.
+ *
+ * Montée **une seule fois** par `app/(console)/chat/layout.tsx` : passer de
+ * `/chat` à `/chat/:id` ne change que `children`. La sidebar, sa liste de
+ * sessions et l'état replié/déplié survivent donc à la navigation — sans quoi
+ * chaque switch remontait le squelette de chargement (le « flash »).
+ *
+ * La session active est lue depuis le segment de route, pas depuis une prop :
+ * aucune page n'a besoin de la faire remonter.
+ */
+export function ChatSurfaceFrame({ children }: { children: ReactNode }) {
+  const segment = useSelectedLayoutSegment();
+  const sessionId = segment && segment !== "new" ? segment : null;
+  const draft = segment === "new";
+
   const pathname = usePathname();
   const router = useRouter();
   const { sessions, loading, refresh } = useChatSessions();
@@ -112,8 +147,6 @@ export function OpenClawChatShell({
     setMobileOpen(false);
   }, [pathname]);
 
-  const activeId = sessionId ?? (draft ? "__draft__" : "");
-
   const handleDeleted = useCallback(
     async (deletedId: string) => {
       await refresh().catch(() => undefined);
@@ -124,11 +157,23 @@ export function OpenClawChatShell({
     [refresh, router, sessionId],
   );
 
+  const surface = useMemo<ChatSurfaceContextValue>(
+    () => ({
+      sessionId,
+      sessions,
+      refreshSessions: () => refresh().catch(() => undefined),
+      sidebarCollapsed,
+      toggleSidebar: () => setSidebarCollapsed((value) => !value),
+      openMobileSidebar: () => setMobileOpen(true),
+    }),
+    [refresh, sessionId, sessions, sidebarCollapsed],
+  );
+
   const sidebar = (
     <OpenClawSessionSidebar
       sessions={sessions}
       loading={loading}
-      activeId={activeId}
+      activeId={sessionId ?? (draft ? "__draft__" : "")}
       draft={draft}
       nowMs={nowMs}
       collapsed={sidebarCollapsed}
@@ -139,85 +184,139 @@ export function OpenClawChatShell({
   );
 
   return (
-    <div className="oc-chat-shell flex h-full min-h-0 w-full bg-[var(--oc-shell-bg,#f4f1ea)] text-foreground dark:bg-background">
-      <div
-        className={cn(
-          "hidden h-full shrink-0 border-r border-border/70 bg-[var(--oc-sidebar-bg,#efeae2)] transition-[width] duration-200 dark:bg-sidebar md:flex",
-          sidebarCollapsed ? "w-0 overflow-hidden border-0" : "w-[17.5rem]",
-        )}
-      >
-        {!sidebarCollapsed ? sidebar : null}
-      </div>
+    <ChatSurfaceContext.Provider value={surface}>
+      <div className="oc-chat-shell flex h-full min-h-0 w-full bg-[var(--oc-shell-bg,#f4f1ea)] text-foreground dark:bg-background">
+        <div
+          className={cn(
+            "hidden h-full shrink-0 border-r border-border/70 bg-[var(--oc-sidebar-bg,#efeae2)] transition-[width] duration-200 dark:bg-sidebar md:flex",
+            sidebarCollapsed ? "w-0 overflow-hidden border-0" : "w-[17.5rem]",
+          )}
+        >
+          {!sidebarCollapsed ? sidebar : null}
+        </div>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/60 bg-background/80 px-3 backdrop-blur-sm">
-          <button
-            type="button"
-            className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted md:hidden"
-            aria-label="Open sessions"
-            onClick={() => setMobileOpen(true)}
-          >
-            <MenuIcon className="size-4" />
-          </button>
-          <button
-            type="button"
-            className="hidden size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted md:inline-flex"
-            aria-label={sidebarCollapsed ? "Show sessions" : "Hide sessions"}
-            onClick={() => setSidebarCollapsed((value) => !value)}
-          >
-            <PanelLeftIcon className="size-4" />
-          </button>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
 
-          <button
-            type="button"
-            className="min-w-0 flex-1 truncate text-left text-sm font-medium hover:opacity-80"
-            title="Rename (soon)"
-            onClick={() => undefined}
-          >
-            {title}
-          </button>
-
-          <div className="ml-auto flex shrink-0 items-center gap-1.5">
-            {modelLabel ? (
-              <span className="hidden h-7 max-w-[10rem] items-center truncate rounded-full border border-border px-2.5 text-xs font-medium text-muted-foreground sm:inline-flex">
-                {modelLabel}
-              </span>
-            ) : null}
-            {trailing}
-            <ChatModelsSettingsButton />
-          </div>
-        </header>
-
-        {alerts}
-        <main className="min-h-0 flex-1 overflow-hidden bg-background">{children}</main>
-      </div>
-
-      {mobileOpen ? (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <button
-            type="button"
-            aria-label="Close"
-            className="absolute inset-0 bg-neutral-950/40"
-            onClick={() => setMobileOpen(false)}
-          />
-          <div className="absolute inset-y-0 left-0 w-[17.5rem] shadow-xl">
-            <div className="flex h-full flex-col bg-[var(--oc-sidebar-bg,#efeae2)] dark:bg-sidebar">
-              <div className="flex h-12 items-center justify-end px-2">
-                <button
-                  type="button"
-                  aria-label="Close"
-                  className="inline-flex size-8 items-center justify-center rounded-md hover:bg-muted"
-                  onClick={() => setMobileOpen(false)}
-                >
-                  <XIcon className="size-4" />
-                </button>
+        {mobileOpen ? (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <button
+              type="button"
+              aria-label="Close"
+              className="absolute inset-0 bg-neutral-950/40"
+              onClick={() => setMobileOpen(false)}
+            />
+            <div className="absolute inset-y-0 left-0 w-[17.5rem] shadow-xl">
+              <div className="flex h-full flex-col bg-[var(--oc-sidebar-bg,#efeae2)] dark:bg-sidebar">
+                <div className="flex h-12 items-center justify-end px-2">
+                  <button
+                    type="button"
+                    aria-label="Close"
+                    className="inline-flex size-8 items-center justify-center rounded-md hover:bg-muted"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <XIcon className="size-4" />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1">{sidebar}</div>
               </div>
-              <div className="min-h-0 flex-1">{sidebar}</div>
             </div>
           </div>
-        </div>
-      ) : null}
-    </div>
+        ) : null}
+      </div>
+    </ChatSurfaceContext.Provider>
+  );
+}
+
+/**
+ * Contenu d'une page chat : en-tête + bandeaux + pane. Léger par construction —
+ * il remonte à chaque navigation, contrairement au `ChatSurfaceFrame`.
+ */
+export function ChatPane({
+  title,
+  modelLabel,
+  loading = false,
+  trailing,
+  alerts,
+  children,
+}: {
+  title: string;
+  modelLabel?: string;
+  loading?: boolean;
+  trailing?: ReactNode;
+  alerts?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <ChatPaneHeader
+        title={title}
+        modelLabel={modelLabel}
+        loading={loading}
+        trailing={trailing}
+      />
+      {alerts}
+      <main className="min-h-0 flex-1 overflow-hidden bg-background">{children}</main>
+    </>
+  );
+}
+
+function ChatPaneHeader({
+  title,
+  modelLabel,
+  loading,
+  trailing,
+}: {
+  title: string;
+  modelLabel?: string;
+  loading: boolean;
+  trailing?: ReactNode;
+}) {
+  const { sessionId, sessions, sidebarCollapsed, toggleSidebar, openMobileSidebar } =
+    useChatSurface();
+
+  // Le titre du thread arrive après un fetch : afficher celui déjà connu de la
+  // sidebar évite un « … » clignotant à l'ouverture d'une session.
+  const cached = sessionId ? sessions.find((item) => item.id === sessionId)?.title : undefined;
+  const label = loading ? (cached ?? title) : title;
+
+  return (
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/60 bg-background/80 px-3 backdrop-blur-sm">
+      <button
+        type="button"
+        className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted md:hidden"
+        aria-label="Open sessions"
+        onClick={openMobileSidebar}
+      >
+        <MenuIcon className="size-4" />
+      </button>
+      <button
+        type="button"
+        className="hidden size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted md:inline-flex"
+        aria-label={sidebarCollapsed ? "Show sessions" : "Hide sessions"}
+        onClick={toggleSidebar}
+      >
+        <PanelLeftIcon className="size-4" />
+      </button>
+
+      <button
+        type="button"
+        className="min-w-0 flex-1 truncate text-left text-sm font-medium hover:opacity-80"
+        title="Rename (soon)"
+        onClick={() => undefined}
+      >
+        {label}
+      </button>
+
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        {modelLabel ? (
+          <span className="hidden h-7 max-w-[10rem] items-center truncate rounded-full border border-border px-2.5 text-xs font-medium text-muted-foreground sm:inline-flex">
+            {modelLabel}
+          </span>
+        ) : null}
+        {trailing}
+        <ChatModelsSettingsButton />
+      </div>
+    </header>
   );
 }
 
@@ -263,6 +362,7 @@ function OpenClawSessionSidebar({
         window.alert(body.error?.message ?? "Delete failed.");
         return;
       }
+      dropThreadSnapshotCache(session.id);
       onNavigate();
       await onDeleted(session.id);
     } finally {
@@ -360,6 +460,10 @@ function OpenClawSessionSidebar({
                       <Link
                         href={`/chat/${session.id}`}
                         onClick={onNavigate}
+                        // Le snapshot est chargé dès le survol : au clic, la
+                        // session s'affiche depuis le cache, sans squelette.
+                        onPointerEnter={() => prefetchThreadSnapshot(session.id)}
+                        onFocus={() => prefetchThreadSnapshot(session.id)}
                         aria-current={active ? "page" : undefined}
                         className="flex min-w-0 flex-1 items-center gap-2 px-2.5 text-sm"
                       >

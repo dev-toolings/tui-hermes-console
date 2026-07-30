@@ -11,6 +11,7 @@ import type { ConnectorType } from "@/db/schema";
 import { buildThreadMessagesFromSnapshot } from "@/lib/thread-messages";
 import { consumeProductEventStream } from "@/lib/consume-product-event-stream";
 import { isSessionCommandMessage } from "@/modules/session/commands";
+import { parseAgentMention } from "@/modules/session/mentions";
 import {
   applyProductEventToSnapshot,
   isTerminalProductEvent,
@@ -25,6 +26,46 @@ const ACTIVE_STATUSES: ProductRunStatus[] = [
   "awaiting_approval",
 ];
 const RECONNECT_POLL_MS = 500;
+const SNAPSHOT_CACHE_LIMIT = 20;
+
+type CachedSnapshot = { thread: ThreadSnapshot; gaps: ConnectorType[] };
+
+/**
+ * Cache mémoire des conversations déjà ouvertes. Changer de session remonte le
+ * hook : sans lui, chaque switch repart de `snapshot=null` et réaffiche le
+ * squelette le temps du fetch. Ici on rend immédiatement le dernier état connu,
+ * puis on revalide en tâche de fond (stale-while-revalidate).
+ */
+const snapshotCache = new Map<string, CachedSnapshot>();
+
+function readSnapshotCache(threadId: string) {
+  return snapshotCache.get(threadId) ?? null;
+}
+
+function writeSnapshotCache(threadId: string, value: Partial<CachedSnapshot>) {
+  const previous = snapshotCache.get(threadId);
+  const thread = value.thread ?? previous?.thread;
+  if (!thread) return; // rien à mettre en cache tant qu'aucun snapshot n'est arrivé
+  snapshotCache.delete(threadId); // ré-insérer garde l'ordre LRU
+  snapshotCache.set(threadId, { thread, gaps: value.gaps ?? previous?.gaps ?? [] });
+  while (snapshotCache.size > SNAPSHOT_CACHE_LIMIT) {
+    const oldest = snapshotCache.keys().next().value;
+    if (oldest === undefined) break;
+    snapshotCache.delete(oldest);
+  }
+}
+
+export function dropThreadSnapshotCache(threadId: string) {
+  snapshotCache.delete(threadId);
+}
+
+/** Réchauffe le cache avant le clic (survol d'une session dans la sidebar). */
+export function prefetchThreadSnapshot(threadId: string) {
+  if (snapshotCache.has(threadId)) return;
+  void fetchThreadSnapshot(threadId)
+    .then(({ thread, gaps }) => writeSnapshotCache(threadId, { thread, gaps }))
+    .catch(() => undefined);
+}
 
 type ApiErrorBody = {
   error?: {
@@ -35,17 +76,27 @@ type ApiErrorBody = {
 
 export function useLiveThread(threadId: string) {
   const router = useRouter();
-  const [snapshot, setSnapshot] = useState<ThreadSnapshot | null>(null);
-  const [connectorGaps, setConnectorGaps] = useState<ConnectorType[]>([]);
+  const [cached] = useState(() => readSnapshotCache(threadId));
+  const [snapshot, setSnapshot] = useState<ThreadSnapshot | null>(cached?.thread ?? null);
+  const [connectorGaps, setConnectorGaps] = useState<ConnectorType[]>(cached?.gaps ?? []);
   const [commandMessages, setCommandMessages] = useState<ThreadMessageLike[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
-  const snapshotRef = useRef<ThreadSnapshot | null>(null);
+  const snapshotRef = useRef<ThreadSnapshot | null>(cached?.thread ?? null);
 
   const applySnapshot = useCallback((next: ThreadSnapshot) => {
     snapshotRef.current = next;
+    writeSnapshotCache(next.id, { thread: next });
     setSnapshot(next);
   }, []);
+
+  const applyConnectorGaps = useCallback(
+    (gaps: ConnectorType[]) => {
+      writeSnapshotCache(threadId, { gaps });
+      setConnectorGaps(gaps);
+    },
+    [threadId],
+  );
 
   const refresh = useCallback(async () => {
     const { thread, gaps } = await fetchThreadSnapshot(threadId);
@@ -55,10 +106,10 @@ export function useLiveThread(threadId: string) {
     } else {
       applySnapshot(thread);
     }
-    setConnectorGaps(gaps);
+    applyConnectorGaps(gaps);
     setError(null);
     return thread;
-  }, [applySnapshot, threadId]);
+  }, [applyConnectorGaps, applySnapshot, threadId]);
 
   useEffect(() => {
     let disposed = false;
@@ -66,7 +117,7 @@ export function useLiveThread(threadId: string) {
       .then(({ thread, gaps }) => {
         if (!disposed) {
           applySnapshot(thread);
-          setConnectorGaps(gaps);
+          applyConnectorGaps(gaps);
         }
       })
       .catch((reason) => {
@@ -78,11 +129,70 @@ export function useLiveThread(threadId: string) {
     return () => {
       disposed = true;
     };
-  }, [applySnapshot, threadId]);
+  }, [applyConnectorGaps, applySnapshot, threadId]);
+
+  /** Échange affiché côté client seulement — rien n'est persisté ni exécuté. */
+  const pushLocalExchange = useCallback((userText: string, systemText: string) => {
+    const now = new Date();
+    const key = crypto.randomUUID().replaceAll("-", "");
+    setCommandMessages((prev) => [
+      ...prev,
+      {
+        id: `local_user_${key}`,
+        role: "user",
+        content: [{ type: "text", text: userText }],
+        createdAt: now,
+      },
+      {
+        id: `local_assistant_${key}`,
+        role: "assistant",
+        content: [{ type: "text", text: systemText }],
+        createdAt: now,
+        status: { type: "complete", reason: "stop" },
+      },
+    ]);
+  }, []);
 
   const sendMessage = useCallback(
     async (message: string, files: File[] = []) => {
       setError(null);
+
+      // `@agent …` n'exécute jamais l'agent dans la session courante : une
+      // mission dédiée est créée et on y navigue. Le thread reste intact.
+      const mention = parseAgentMention(message);
+      if (mention) {
+        if (!mention.prompt) {
+          pushLocalExchange(message, `Ajoutez une instruction après « @${mention.ref} ».`);
+          return;
+        }
+        if (files.length > 0) {
+          pushLocalExchange(
+            message,
+            "Les pièces jointes ne passent pas par une mention `@`. Lancez la mission, puis joignez les fichiers depuis celle-ci.",
+          );
+          return;
+        }
+
+        const response = await fetch("/api/threads", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            // Le résultat est déjà rendu dans le fil : pas de toast en double.
+            "X-Hermes-Toast": "0",
+          },
+          body: JSON.stringify({ agentRef: mention.ref, message: mention.prompt }),
+        });
+        const body = (await response.json()) as {
+          threadId?: string;
+          error?: { message?: string };
+        };
+        if (!response.ok || !body.threadId) {
+          pushLocalExchange(message, body.error?.message ?? "La mission n’a pas pu être créée.");
+          return;
+        }
+        router.push(`/runs/${body.threadId}`);
+        return;
+      }
 
       if (isSessionCommandMessage(message) && files.length === 0) {
         const response = await fetch(
@@ -106,23 +216,7 @@ export function useLiveThread(threadId: string) {
           throw new Error(err);
         }
         if (body.handled) {
-          const now = new Date().toISOString();
-          setCommandMessages((prev) => [
-            ...prev,
-            {
-              id: `cmd_user_${now}`,
-              role: "user",
-              content: [{ type: "text", text: message }],
-              createdAt: new Date(now),
-            },
-            {
-              id: `cmd_assistant_${now}`,
-              role: "assistant",
-              content: [{ type: "text", text: body.systemMessage ?? "Commande exécutée." }],
-              createdAt: new Date(now),
-              status: { type: "complete", reason: "stop" },
-            },
-          ]);
+          pushLocalExchange(message, body.systemMessage ?? "Commande exécutée.");
           if (body.refreshThread) {
             await refresh().catch((reason) => setError(toMessage(reason)));
           }
@@ -243,7 +337,7 @@ export function useLiveThread(threadId: string) {
         throw new Error(toMessage(reason));
       }
     },
-    [applySnapshot, refresh, router, threadId],
+    [applySnapshot, pushLocalExchange, refresh, router, threadId],
   );
 
   const latestRun = snapshot?.runs.at(-1) ?? null;

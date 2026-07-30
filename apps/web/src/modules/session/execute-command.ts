@@ -1,11 +1,10 @@
-import { and, eq, isNull, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
-import { agents, threads } from "@/db/schema";
+import { threads } from "@/db/schema";
 import {
-  AgentRepositoryError,
   createAgent,
   getAgent,
-  requireActiveAgent,
+  resolveActiveAgentRef,
   updateAgent,
   type AgentDto,
 } from "@/modules/agents/repository";
@@ -105,7 +104,7 @@ export async function executeSessionCommand(input: {
     }
 
     case "agent_switch": {
-      const agent = await resolveAgentRef(command.target);
+      const agent = await resolveActiveAgentRef(command.target);
       await applyAgentToThread(input.threadId, agent);
       return {
         handled: true,
@@ -184,38 +183,6 @@ export async function applyAgentToThread(threadId: string, agent: AgentDto) {
 
 async function syncThreadFromAgent(threadId: string, agent: AgentDto) {
   await applyAgentToThread(threadId, agent);
-}
-
-async function resolveAgentRef(target: string): Promise<AgentDto> {
-  const db = getDatabase();
-  const normalized = target.trim();
-  const [byId] = await db
-    .select()
-    .from(agents)
-    .where(and(eq(agents.id, normalized), isNull(agents.archivedAt)))
-    .limit(1);
-  if (byId) return requireActiveAgent(byId.id);
-
-  const [bySlug] = await db
-    .select()
-    .from(agents)
-    .where(and(eq(agents.slug, normalized), isNull(agents.archivedAt)))
-    .limit(1);
-  if (bySlug) return requireActiveAgent(bySlug.id);
-
-  const [byName] = await db
-    .select()
-    .from(agents)
-    .where(
-      and(
-        or(eq(agents.name, normalized), eq(agents.slug, normalized.toLowerCase())),
-        isNull(agents.archivedAt),
-      ),
-    )
-    .limit(1);
-  if (byName) return requireActiveAgent(byName.id);
-
-  throw new AgentRepositoryError("AGENT_NOT_FOUND", `Agent « ${target} » introuvable.`);
 }
 
 function formatAgentSnapshot(input: {

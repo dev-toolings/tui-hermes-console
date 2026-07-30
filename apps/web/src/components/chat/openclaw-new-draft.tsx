@@ -4,10 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUpIcon, LoaderCircleIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useChatSurface } from "@/components/chat/openclaw-shell";
+import { parseAgentMention } from "@/modules/session/mentions";
 
 /** OpenClaw `/new` — draft page; nothing persisted until first send. */
 export function OpenClawNewSessionDraft() {
   const router = useRouter();
+  const { refreshSessions } = useChatSurface();
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -15,13 +18,27 @@ export function OpenClawNewSessionDraft() {
   const send = async () => {
     const text = message.trim();
     if (!text || submitting) return;
+
+    // `@agent …` ne démarre jamais une session de chat : ça part en mission.
+    const mention = parseAgentMention(text);
+    if (mention && !mention.prompt) {
+      setError(`Ajoutez une instruction après « @${mention.ref} ».`);
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
       const response = await fetch("/api/threads", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        headers: {
+          "Content-Type": "application/json",
+          // Le formulaire rend déjà l'erreur sous le composer : pas de toast.
+          "X-Hermes-Toast": "0",
+        },
+        body: JSON.stringify(
+          mention ? { agentRef: mention.ref, message: mention.prompt } : { message: text },
+        ),
       });
       const body = (await response.json()) as {
         threadId?: string;
@@ -30,7 +47,10 @@ export function OpenClawNewSessionDraft() {
       if (!response.ok || !body.threadId) {
         throw new Error(body.error?.message ?? "Could not create session.");
       }
-      router.push(`/chat/${body.threadId}`);
+      // La sidebar n'est plus remontée par la navigation : sans ce rafraîchissement,
+      // la session créée manquerait de l'historique jusqu'au prochain sondage.
+      if (!mention) void refreshSessions();
+      router.push(mention ? `/runs/${body.threadId}` : `/chat/${body.threadId}`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Error.");
       setSubmitting(false);
@@ -45,7 +65,9 @@ export function OpenClawNewSessionDraft() {
         </div>
         <h1 className="text-xl font-semibold tracking-tight">Ready to chat</h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          Chat libre — session créée à l’envoi. Les agents se configurent via **Missions**.
+          Chat libre — session créée à l’envoi. Pour lancer un agent, commencez par{" "}
+          <code className="rounded bg-muted px-1">@slug</code> suivi de son instruction : une
+          mission est créée à sa place.
         </p>
       </div>
 

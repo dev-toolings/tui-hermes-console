@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
 import { agents, runs, threads } from "@/db/schema";
 import { resolveHermesRuntimeConfig } from "@/modules/runtime/config";
@@ -139,6 +139,49 @@ export async function requireActiveAgent(agentId: string) {
     throw new AgentRepositoryError("AGENT_ARCHIVED", "Cet agent est archivé.");
   }
   return agent;
+}
+
+/**
+ * Résout une référence d'agent saisie à la main — `/agent switch <ref>` ou une
+ * mention `@ref`. Cherche par id, puis slug, puis nom, parmi les agents actifs.
+ */
+export async function resolveActiveAgentRef(target: string): Promise<AgentDto> {
+  const db = getDatabase();
+  const normalized = target.trim();
+
+  const [match] = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(
+      and(
+        or(
+          eq(agents.id, normalized),
+          eq(agents.slug, normalized),
+          eq(agents.slug, normalized.toLowerCase()),
+          eq(agents.name, normalized),
+        ),
+        isNull(agents.archivedAt),
+      ),
+    )
+    .limit(1);
+
+  if (match) return requireActiveAgent(match.id);
+
+  const available = await db
+    .select({ slug: agents.slug })
+    .from(agents)
+    .where(isNull(agents.archivedAt))
+    .orderBy(desc(agents.updatedAt))
+    .limit(10);
+
+  throw new AgentRepositoryError(
+    "AGENT_NOT_FOUND",
+    available.length
+      ? `Agent « ${target} » introuvable. Agents disponibles : ${available
+          .map((row) => `@${row.slug}`)
+          .join(", ")}.`
+      : `Agent « ${target} » introuvable. Aucun agent actif — créez-en un depuis Agents.`,
+  );
 }
 
 export async function deleteAgent(agentId: string): Promise<void> {

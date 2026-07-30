@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { apiErrorResponse } from "@/modules/api/errors";
-import { requireActiveAgent } from "@/modules/agents/repository";
+import { requireActiveAgent, resolveActiveAgentRef } from "@/modules/agents/repository";
 import { ensureHermesSeededAgent } from "@/modules/agents/seed";
 import { createThreadWithRun, listThreads } from "@/modules/runs/repository";
 import { startRun } from "@/modules/runs/runner";
@@ -16,15 +16,20 @@ Règles :
 - Va droit au résultat. Signale clairement les limites ou les outils manquants.
 - Utilise les outils disponibles quand c’est nécessaire ; sinon réponds en texte.`;
 
-const createThreadSchema = z.union([
-  z.object({
-    message: z.string().trim().min(1).max(100_000),
-  }),
-  z.object({
-    agentId: z.string().trim().min(1),
-    message: z.string().trim().min(1).max(100_000),
-  }),
-]);
+/**
+ * Un seul objet, pas une union : `z.object` supprime les clés inconnues, donc
+ * une union ferait matcher `{agentId, message}` sur la branche « message seul »
+ * et l'agent serait perdu en silence.
+ *
+ * `agentId` — sélection explicite (formulaire mission). `agentRef` — référence
+ * saisie à la main via une mention `@slug`. Les deux produisent une mission ;
+ * sans agent, c'est du chat libre.
+ */
+const createThreadSchema = z.object({
+  message: z.string().trim().min(1).max(100_000),
+  agentId: z.string().trim().min(1).optional(),
+  agentRef: z.string().trim().min(1).optional(),
+});
 
 function parseThreadSource(value: string | null): ThreadSource | undefined {
   if (value === "chat" || value === "mission") return value;
@@ -43,34 +48,37 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const input = createThreadSchema.parse(await request.json());
-    const resolved =
-      "agentId" in input
-        ? await (async () => {
-            const agent = await requireActiveAgent(input.agentId);
-            return {
-              source: "mission" as const,
-              agentId: agent.id,
-              agentName: agent.name,
-              instructions: agent.instructions,
-              provider: agent.provider,
-              model: agent.model || "hermes-agent",
-              reasoningEffort: agent.reasoningEffort,
-              message: input.message,
-            };
-          })()
-        : await (async () => {
-            const seeded = await ensureHermesSeededAgent();
-            return {
-              source: "chat" as const,
-              agentId: null,
-              agentName: "Chat libre",
-              instructions: FREE_CHAT_INSTRUCTIONS,
-              provider: seeded?.provider ?? null,
-              model: seeded?.model || "hermes-agent",
-              reasoningEffort: seeded?.reasoningEffort ?? null,
-              message: input.message,
-            };
-          })();
+
+    const agent = input.agentId
+      ? await requireActiveAgent(input.agentId)
+      : input.agentRef
+        ? await resolveActiveAgentRef(input.agentRef)
+        : null;
+
+    const resolved = agent
+      ? {
+          source: "mission" as const,
+          agentId: agent.id,
+          agentName: agent.name,
+          instructions: agent.instructions,
+          provider: agent.provider,
+          model: agent.model || "hermes-agent",
+          reasoningEffort: agent.reasoningEffort,
+          message: input.message,
+        }
+      : await (async () => {
+          const seeded = await ensureHermesSeededAgent();
+          return {
+            source: "chat" as const,
+            agentId: null,
+            agentName: "Chat libre",
+            instructions: FREE_CHAT_INSTRUCTIONS,
+            provider: seeded?.provider ?? null,
+            model: seeded?.model || "hermes-agent",
+            reasoningEffort: seeded?.reasoningEffort ?? null,
+            message: input.message,
+          };
+        })();
 
     const created = await createThreadWithRun(resolved);
     startRun(created.runId);

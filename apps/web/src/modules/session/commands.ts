@@ -19,6 +19,9 @@ const COMMAND_HELP = `Commandes session :
 • /model <modèle>
 • /connector status — connecteurs requis
 
+Appeler un agent :
+• @<slug> <instruction> — crée une mission avec cet agent (la session de chat n'est jamais modifiée)
+
 Agents (missions /runs uniquement) :
 • /agent show — agent actif
 • /agent create Nom | instructions…
