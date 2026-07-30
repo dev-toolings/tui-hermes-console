@@ -1,7 +1,14 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { getRemoteWorkspace } from "@/modules/runtime/config";
-import { ensureRunWorkdirs, runInputDir, runOutputDir, sanitizeRunId } from "./paths";
+import {
+  assertWithinDir,
+  ensureRunWorkdirs,
+  runInputDir,
+  runOutputDir,
+  sanitizeFilename,
+  sanitizeRunId,
+} from "./paths";
 
 /** Chemins d'une mission côté machine distante. Toujours en séparateurs POSIX :
  *  la Console peut tourner sur macOS pendant qu'Hermes est sur Linux. */
@@ -50,6 +57,17 @@ export async function pullRunOutputs(runId: string): Promise<void> {
   await ensureRunWorkdirs(runId);
   const localDir = runOutputDir(runId);
   for (const name of names) {
-    await sftp.download(`${remote.output}/${name}`, path.join(localDir, name));
+    // `names` vient de la machine distante : source non fiable. Même traitement
+    // que n'importe quel nom entrant (§18 « contrôle des chemins »), sinon un
+    // hôte compromis écrit où il veut sur la Console via `../`.
+    let target: string;
+    try {
+      target = assertWithinDir(path.join(localDir, sanitizeFilename(name)), localDir);
+    } catch {
+      continue; // `.`, `..` et noms hostiles : ignorés, pas fatals.
+    }
+    // Un fichier illisible (sous-dossier, permission) ne doit pas faire perdre
+    // les autres sorties de la mission.
+    await sftp.download(`${remote.output}/${name}`, target).catch(() => {});
   }
 }

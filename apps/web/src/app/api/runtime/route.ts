@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { apiErrorResponse } from "@/modules/api/errors";
+import { assertSameOriginMutation } from "@/modules/api/same-origin";
 import { getRuntimePublic, saveRuntimeConfig } from "@/modules/runtime/config";
 
 export const runtime = "nodejs";
@@ -32,6 +33,8 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
+    // Écrit la cible du runtime et les secrets associés : même garde que /test.
+    assertSameOriginMutation(request);
     const input = putRuntimeSchema.parse(await request.json());
     const runtimeDto = await saveRuntimeConfig(input);
     return Response.json({ runtime: runtimeDto });

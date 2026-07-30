@@ -283,16 +283,36 @@ export async function probeAndPersistRuntime(
   }
 }
 
-/** Résout ce que « Tester » doit appeler, y compris pour une config pas encore enregistrée. */
+/** Résout ce que « Tester » doit appeler, y compris pour une config pas encore enregistrée.
+ *
+ *  Règle de sécurité : un secret enregistré n'est réutilisé que pour la destination
+ *  pour laquelle il a été enregistré. Sans cette règle, `POST /api/runtime/test`
+ *  est un *confused deputy* — l'appelant fournit une cible arbitraire et la Console
+ *  y expédie le token Hermes ou le mot de passe SSH qu'elle détient. La garde reste
+ *  nécessaire même une fois l'authentification en place (§17) : une session valide
+ *  n'autorise pas davantage ce détournement. */
 async function resolveProbeTarget(
   options?: Partial<RuntimeConnectionInput>,
 ): Promise<{ baseUrl: string; token: string }> {
   if (!options?.baseUrl) return resolveHermesRuntimeConfig();
 
   const remoteBaseUrl = normalizeBaseUrl(options.baseUrl);
-  const token = options.token?.trim() || (await resolveHermesRuntimeConfig()).token;
+  const row = await getRuntimeRow();
+  const transport = options.transport ?? "direct";
 
-  if ((options.transport ?? "direct") !== "ssh") {
+  let token = options.token?.trim() ?? "";
+  if (!token) {
+    if (!row || normalizeBaseUrl(row.baseUrl) !== remoteBaseUrl) {
+      throw new HermesRuntimeError(
+        "Saisissez le token du runtime pour tester cette adresse.",
+        400,
+        "RUNTIME_TOKEN_REQUIRED",
+      );
+    }
+    token = decryptSecret(row.encryptedToken);
+  }
+
+  if (transport !== "ssh") {
     return { baseUrl: remoteBaseUrl, token };
   }
 
@@ -305,31 +325,36 @@ async function resolveProbeTarget(
     );
   }
 
+  const host = ssh.host.trim();
+  const user = ssh.user.trim();
+  const port = ssh.port ?? 22;
   const auth = ssh.auth ?? "agent";
+
   let password: string | undefined;
   if (auth === "password") {
-    password = ssh.password?.trim() || (await storedSshPassword()) || undefined;
+    password = ssh.password?.trim() || undefined;
     if (!password) {
-      throw new HermesRuntimeError(
-        "Saisissez le mot de passe SSH pour tester le tunnel.",
-        400,
-        "SSH_PASSWORD_REQUIRED",
-      );
+      const reusable =
+        row?.transport === "ssh" &&
+        row.sshAuth === "password" &&
+        row.encryptedSshPassword !== null &&
+        row.sshHost === host &&
+        row.sshUser === user &&
+        row.sshPort === port;
+      if (!reusable) {
+        throw new HermesRuntimeError(
+          "Saisissez le mot de passe SSH pour tester ce tunnel.",
+          400,
+          "SSH_PASSWORD_REQUIRED",
+        );
+      }
+      password = decryptSecret(row.encryptedSshPassword!);
     }
   }
 
   const endpoint = remoteEndpoint(remoteBaseUrl);
-  const baseUrl = await ensureTunnel(
-    { host: ssh.host.trim(), port: ssh.port ?? 22, user: ssh.user.trim(), auth, password },
-    endpoint.host,
-    endpoint.port,
-  );
+  const baseUrl = await ensureTunnel({ host, port, user, auth, password }, endpoint.host, endpoint.port);
   return { baseUrl, token };
-}
-
-async function storedSshPassword(): Promise<string | null> {
-  const row = await getRuntimeRow();
-  return row?.encryptedSshPassword ? decryptSecret(row.encryptedSshPassword) : null;
 }
 
 function sshTargetFromRow(row: {
