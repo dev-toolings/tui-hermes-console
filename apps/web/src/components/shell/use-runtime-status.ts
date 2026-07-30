@@ -6,6 +6,7 @@ import {
   subscribeRuntimePublic,
   type RuntimePublicDto,
 } from "@/lib/runtime/public-client";
+import { runtimeTargetLabel } from "@/lib/runtime/target";
 
 export type RuntimePublicStatus = RuntimePublicDto;
 
@@ -49,7 +50,7 @@ function toView(runtime: RuntimePublicStatus | null, loading: boolean): RuntimeS
       configured: true,
       healthy: true,
       title: `Connecté${version}`,
-      detail: runtime.baseUrl ?? "Runtime Hermes",
+      detail: runtimeTargetLabel(runtime),
       dotClass: "bg-pos-700",
     };
   }
@@ -60,7 +61,9 @@ function toView(runtime: RuntimePublicStatus | null, loading: boolean): RuntimeS
       configured: true,
       healthy: false,
       title: "Runtime injoignable",
-      detail: runtime.baseUrl ?? "Vérifiez Hermes",
+      // Nommer la machine à vérifier vaut mieux qu'un 127.0.0.1 qui, en
+      // tunnel, désigne l'autre bout.
+      detail: runtime.baseUrl ? runtimeTargetLabel(runtime) : "Vérifiez Hermes",
       dotClass: "bg-destructive",
     };
   }
@@ -71,7 +74,7 @@ function toView(runtime: RuntimePublicStatus | null, loading: boolean): RuntimeS
       configured: true,
       healthy: false,
       title: "Token invalide",
-      detail: runtime.baseUrl ?? "Ressaisissez le token",
+      detail: runtime.baseUrl ? runtimeTargetLabel(runtime) : "Ressaisissez le token",
       dotClass: "bg-destructive",
     };
   }

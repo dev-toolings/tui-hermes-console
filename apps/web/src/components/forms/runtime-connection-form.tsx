@@ -435,7 +435,7 @@ export function RuntimeConnectionForm({
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-seam pt-4">
         <StatusMessage status={status} />
         <div className="flex gap-2">
           <Button type="button" disabled={disabled} onClick={() => void testConnection()}>

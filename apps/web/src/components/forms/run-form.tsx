@@ -158,7 +158,7 @@ export function RunForm() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-seam pt-4">
         <p
           role={error ? "alert" : "status"}
           className={`text-[0.6875rem] ${error ? "text-destructive" : "text-muted-foreground"}`}

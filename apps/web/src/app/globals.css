@@ -27,8 +27,39 @@
   --color-ai-icon-secondary: var(--ai-chat-icon-secondary);
   --color-ai-icon-tertiary: var(--ai-chat-icon-tertiary);
 
+  /*
+    Trait visible SUR une surface haute (card, popover, dialog, muted).
+    En dark, BoardUI pose `--border: #262626`, soit exactement la couleur de
+    ces surfaces : le trait s'y efface. `--input` (#404040) est le seul bord
+    dessiné du thème ; en light les deux valent #ebebeb, donc rien ne bouge.
+    Sur `--background` / `--surface`, garder `border-border` : c'est la couture
+    voulue par le design system.
+  */
+  --color-seam: var(--input);
+
+  /*
+    Même histoire pour les remplissages : `--muted` vaut #262626 en dark, soit
+    la couleur des cards, popovers et dialogs. Un bloc `bg-muted` posé dessus
+    n'a donc aucun fond visible. `--surface` (#171717) descend d'un cran et
+    redonne un vrai fond neutre ; en light les deux valent #f7f7f7.
+  */
+  --color-inset: var(--surface);
+
   --shadow-board-xs: var(--shadow-xs);
   --shadow-board-card: var(--shadow-card);
   --shadow-board-elevated: var(--shadow-elevated);
   --shadow-board-sidebar: var(--shadow-sidebar);
+}
+
+/*
+  Même problème dans le Dialog de BoardUI : contour et séparateurs sont posés en
+  `--border` sur `bg-card`, donc invisibles en dark. Le composant vient de
+  node_modules et n'expose pas de classe pour ces éléments — on retint donc le
+  conteneur et ses séparateurs directs. Le contenu imbriqué garde ses propres
+  bordures.
+*/
+.dark [role="dialog"],
+.dark [role="dialog"] > [class*="border-b"],
+.dark [role="dialog"] > [class*="border-t"] {
+  border-color: var(--input);
 }

@@ -169,8 +169,18 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
 
 function ConsoleShellFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { setMobileOpen } = useBui();
+  const { setMobileOpen, collapsed, setCollapsed } = useBui();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  /**
+   * Rail déplié explicitement pendant qu'on est sur le chat.
+   *
+   * Le chat porte déjà sa propre sidebar de sessions : deux colonnes de
+   * navigation mangeraient le transcript, donc le rail y est replié par
+   * défaut. On le calcule au rendu plutôt que d'écrire dans le store : celui-ci
+   * est persisté globalement, et le forcer imposerait un rail replié sur
+   * TOUTES les pages après un simple passage par le chat.
+   */
+  const [chatRailOpen, setChatRailOpen] = useState(false);
   const appearance = hermesAppearance.useAppearance();
   hermesAppearance.useApplyUiScale(appearance.uiScale);
 
@@ -195,15 +205,10 @@ function ConsoleShellFrame({ children }: { children: ReactNode }) {
     isChatSurface ||
     (pathname.startsWith("/runs/") && pathname !== "/runs/new" && pathname !== "/runs");
 
-  // OpenClaw-iso: Chat owns the full viewport (session sidebar + pane).
-  if (isChatSurface) {
-    return (
-      <div className="flex h-dvh min-h-0 w-full flex-col overflow-hidden bg-background">
-        {children}
-        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
-      </div>
-    );
-  }
+  const railCollapsed = isChatSurface ? !chatRailOpen : collapsed;
+  const toggleRail = isChatSurface
+    ? () => setChatRailOpen((value) => !value)
+    : () => setCollapsed(!collapsed);
 
   return (
     <BuiLayoutFrame
@@ -222,9 +227,15 @@ function ConsoleShellFrame({ children }: { children: ReactNode }) {
       <ConsoleSidebar
         sidebarWidth={appearance.sidebarWidth}
         onOpenPalette={() => setPaletteOpen(true)}
+        collapsed={railCollapsed}
+        onToggleCollapsed={toggleRail}
       />
       <BuiContentFrame
-        containerContent={hermesAppearance.contentWidthCss(appearance.contentWidth)}
+        containerContent={
+          // Le chat gère sa propre largeur (3 panneaux) : le brider à la
+          // largeur de lecture des pages Console tasserait le transcript.
+          isChatSurface ? "100%" : hermesAppearance.contentWidthCss(appearance.contentWidth)
+        }
       >
         {immersiveView ? null : <ConsoleHeader onOpenPalette={() => setPaletteOpen(true)} />}
         <main
@@ -244,11 +255,15 @@ function ConsoleShellFrame({ children }: { children: ReactNode }) {
 function ConsoleSidebar({
   sidebarWidth,
   onOpenPalette,
+  collapsed,
+  onToggleCollapsed,
 }: {
   sidebarWidth: number;
   onOpenPalette: () => void;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }) {
-  const { collapsed, setCollapsed, mobileOpen, setMobileOpen, layout } = useBui();
+  const { mobileOpen, setMobileOpen, layout } = useBui();
   const pathname = usePathname();
   const shortcut = useShortcutLabel();
   const runtime = useRuntimeStatus();
@@ -305,7 +320,7 @@ function ConsoleSidebar({
 
           <button
             type="button"
-            onClick={() => setCollapsed(!collapsed)}
+            onClick={onToggleCollapsed}
             aria-label={collapsed ? "Déplier la navigation" : "Replier la navigation"}
             aria-pressed={collapsed}
             className="hidden size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:flex"

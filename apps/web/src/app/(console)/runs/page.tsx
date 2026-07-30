@@ -73,7 +73,7 @@ export default async function RunsPage({
       />
       <Card>
         <CardSurface className="overflow-hidden p-0">
-          <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+          <div className="flex flex-wrap items-center gap-2 border-b border-seam p-3">
             {filters.map((item) => {
               const active = filter === item.value || (!filter && !item.value);
               const href = item.value ? `/runs?filter=${item.value}` : "/runs";
@@ -105,7 +105,7 @@ export default async function RunsPage({
             <div className="overflow-x-auto scrollbar-subtle">
               <table className="w-full min-w-[760px] text-left">
                 <thead>
-                  <tr className="border-b border-border text-[0.6875rem] font-medium text-muted-foreground">
+                  <tr className="border-b border-seam text-[0.6875rem] font-medium text-muted-foreground">
                     <th className="px-4 py-3">Mission</th>
                     <th className="px-4 py-3">Statut</th>
                     <th className="px-4 py-3">Mise à jour</th>

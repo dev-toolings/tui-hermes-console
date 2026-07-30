@@ -6,7 +6,9 @@ import { resolveHermesRuntimeConfig } from "@/modules/runtime/config";
 import {
   HermesRuntimeError,
   createHermesAgentRun,
+  ensureHermesSession,
   iterateHermesAgentEvents,
+  listHermesSessionMessages,
   stopHermesAgentRun,
   streamHermesAgentRun,
   streamHermesResponse,
@@ -16,6 +18,7 @@ import { publishThreadEvent } from "./event-bus";
 import { resolveHermesProtocol } from "./protocol";
 import {
   appendRunEvents,
+  applyToolOutputs,
   completeRun,
   failRun,
   getRunContext,
@@ -27,7 +30,10 @@ import {
 } from "./repository";
 import { HermesResponsesNormalizer } from "./responses-normalizer";
 import type { ProductEventInput } from "./types";
-import { augmentPromptWithArtifacts } from "@/modules/artifacts/prompt";
+import {
+  augmentInstructionsWithArtifacts,
+  augmentPromptWithArtifacts,
+} from "@/modules/artifacts/prompt";
 import { pushRunInputs, resolveRunRoot } from "@/modules/artifacts/remote-sync";
 
 type ActiveRun = {
@@ -132,13 +138,30 @@ async function executeAgentRun(runId: string, controller: AbortController) {
       runId,
       remoteRoot,
     });
+    const instructions = augmentInstructionsWithArtifacts({
+      instructions: context.instructions,
+      runId,
+      remoteRoot,
+    });
+
+    // La session Hermes du thread doit exister AVANT le run : c'est elle qui
+    // rend `/api/sessions/:id/messages` interrogeable, donc le backfill des
+    // sorties d'outils possible. Échec silencieux : on perd le backfill, pas
+    // la mission.
+    const sessionReady = await ensureHermesSession(
+      runtime,
+      context.hermesConversation,
+      context.input,
+    );
 
     const { hermesRunId } = await createHermesAgentRun({
       input: prompt,
-      instructions: context.instructions,
+      instructions,
       provider: context.provider,
       model: context.model,
       reasoningEffort: context.reasoningEffort,
+      sessionId: context.hermesConversation,
+      conversationHistory: context.conversationHistory,
       baseUrl: runtime.baseUrl,
       token: runtime.token,
       signal: controller.signal,
@@ -149,7 +172,7 @@ async function executeAgentRun(runId: string, controller: AbortController) {
     const stream = await streamHermesAgentRun({
       hermesRunId,
       input: prompt,
-      instructions: context.instructions,
+      instructions,
       provider: context.provider,
       model: context.model,
       reasoningEffort: context.reasoningEffort,
@@ -159,6 +182,10 @@ async function executeAgentRun(runId: string, controller: AbortController) {
     });
     await markRunStarted(runId);
     await consumeAgentStream(runId, context.threadId, stream.body, normalizer, controller);
+
+    if (sessionReady) {
+      await backfillToolOutputs(runId, context.threadId, context.hermesConversation, runtime);
+    }
   } catch (error) {
     await handleAgentRunError(runId, context, normalizer, controller, error);
   }
@@ -259,6 +286,34 @@ async function consumeAgentStream(
   }
 }
 
+/**
+ * Rapatrie les sorties d'outils depuis la session Hermes une fois la mission
+ * terminée, puis republie les événements corrigés vers l'UI live.
+ *
+ * Best-effort de bout en bout : une mission réussie ne doit jamais être
+ * dégradée parce que le transcript de session est indisponible. En cas
+ * d'échec, l'UI garde « Sortie non transmise par le runtime » — la vérité.
+ */
+async function backfillToolOutputs(
+  runId: string,
+  threadId: string,
+  sessionId: string,
+  runtime: ResolvedRuntimeConfig,
+) {
+  try {
+    const transcript = await listHermesSessionMessages(runtime, sessionId);
+    const outputs = transcript
+      .filter((message) => message.role === "tool")
+      .map((message) => ({ toolName: message.toolName, content: message.content }));
+    if (outputs.length === 0) return;
+
+    const updated = await applyToolOutputs(runId, outputs);
+    for (const event of updated) publishThreadEvent(threadId, event);
+  } catch (error) {
+    console.error("[runner] tool output backfill failed", { runId, error });
+  }
+}
+
 async function handleAgentRunError(
   runId: string,
   context: Awaited<ReturnType<typeof getRunContext>> | null,
@@ -318,7 +373,11 @@ async function executeResponsesRun(runId: string, controller: AbortController) {
 
     const response = await streamHermesResponse({
       input: prompt,
-      instructions: context.instructions,
+      instructions: augmentInstructionsWithArtifacts({
+        instructions: context.instructions,
+        runId,
+        remoteRoot,
+      }),
       provider: context.provider,
       model: context.model,
       reasoningEffort: context.reasoningEffort,

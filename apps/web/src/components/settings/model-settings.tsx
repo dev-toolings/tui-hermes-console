@@ -527,7 +527,7 @@ export function ModelSettings() {
             </div>
 
             {activeProvider?.acceptsApiKey ? (
-              <div className="border-t border-border pt-4 lg:col-span-2">
+              <div className="border-t border-seam pt-4 lg:col-span-2">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
@@ -603,7 +603,7 @@ export function ModelSettings() {
             ) : null}
 
             {codexProvider && !codexProvider.authenticated ? (
-              <div className="rounded-xl border border-border bg-card p-4 lg:col-span-2">
+              <div className="rounded-xl border border-seam bg-card p-4 lg:col-span-2">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
@@ -675,7 +675,7 @@ export function ModelSettings() {
               </div>
             ) : null}
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 lg:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-seam pt-4 lg:col-span-2">
               {saved ? (
                 <p role="status" className="flex items-center gap-2 text-[0.75rem] text-pos-700">
                   <CheckCircle2Icon className="size-4" />
@@ -753,7 +753,7 @@ function ModelSettingsSkeleton() {
           </div>
         </div>
 
-        <div className="border-t border-border pt-4 lg:col-span-2">
+        <div className="border-t border-seam pt-4 lg:col-span-2">
           <div className="flex flex-wrap items-center gap-2">
             <Skeleton className="h-4 w-36" />
             <Skeleton className="h-5 w-28 rounded-full" />
@@ -769,7 +769,7 @@ function ModelSettingsSkeleton() {
           <Skeleton className="mt-2 h-3 w-full max-w-[52ch]" />
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 lg:col-span-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-seam pt-4 lg:col-span-2">
           <Skeleton className="h-3 w-full max-w-[40ch]" />
           <Skeleton className="h-10 w-40 rounded-lg" />
         </div>

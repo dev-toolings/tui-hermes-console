@@ -108,7 +108,7 @@ function SecurityRow({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-3 border-b border-border pb-4 last:border-0 last:pb-0">
+    <div className="flex items-start gap-3 border-b border-seam pb-4 last:border-0 last:pb-0">
       <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-ai-tertiary text-muted-foreground">
         <Icon className="size-4" />
       </span>

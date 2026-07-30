@@ -1,10 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUpIcon, LoaderCircleIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useChatSurface } from "@/components/chat/openclaw-shell";
+import {
+  AGENT_MENTION_LISTBOX_ID,
+  AgentMentionPopup,
+  agentMentionOptionId,
+} from "@/components/chat/agent-mention-popup";
+import { useAgentMention } from "@/components/chat/use-agent-mention";
 import { parseAgentMention } from "@/modules/session/mentions";
 
 /** OpenClaw `/new` — draft page; nothing persisted until first send. */
@@ -14,6 +20,14 @@ export function OpenClawNewSessionDraft() {
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mentionPicker = useAgentMention(textareaRef, message, setMessage);
+
+  // Une mention n'ouvrant pas le message reste du texte libre : le dire tout de suite.
+  const tokens = message.split(/\s+/);
+  const strayMention =
+    !parseAgentMention(message) &&
+    mentionPicker.agents.some((agent) => tokens.includes(`@${agent.slug}`));
 
   const send = async () => {
     const text = message.trim();
@@ -59,36 +73,70 @@ export function OpenClawNewSessionDraft() {
 
   return (
     <div className="flex h-full min-h-0 flex-col items-center justify-center px-4 py-10">
-      <div className="mb-8 text-center">
+      {/* Masqué quand le popup s'ouvre : il recouvrirait ce bloc de toute façon. */}
+      <div
+        className={cn(
+          "mb-8 w-full max-w-xl text-center transition-opacity duration-150",
+          mentionPicker.open && "opacity-0",
+        )}
+        aria-hidden={mentionPicker.open}
+      >
         <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-[image:var(--gradient-primary)] text-xl font-bold text-primary-foreground shadow-sm">
           H
         </div>
         <h1 className="text-xl font-semibold tracking-tight">Ready to chat</h1>
-        <p className="mt-1.5 text-sm text-muted-foreground">
-          Chat libre — session créée à l’envoi. Pour lancer un agent, commencez par{" "}
-          <code className="rounded bg-muted px-1">@slug</code> suivi de son instruction : une
-          mission est créée à sa place.
+        <p className="mt-1.5 text-sm text-balance text-muted-foreground">
+          Chat libre — la session est créée à l’envoi. Commencez par{" "}
+          <code className="rounded bg-muted px-1">@slug</code> pour lancer un agent : une mission
+          est créée à sa place.
         </p>
       </div>
 
       <div className="w-full max-w-xl">
-        <div className="rounded-2xl border border-border bg-background p-3 shadow-[0_8px_30px_-12px_rgba(0,0,0,0.18)]">
+        <div className="relative rounded-2xl border border-border bg-background p-3 shadow-[0_8px_30px_-12px_rgba(0,0,0,0.18)] transition-colors focus-within:border-muted-foreground/30">
+          {mentionPicker.open ? (
+            <AgentMentionPopup
+              items={mentionPicker.items}
+              activeIndex={mentionPicker.activeIndex}
+              query={mentionPicker.query}
+              loading={mentionPicker.loading}
+              error={mentionPicker.error}
+              onSelect={mentionPicker.select}
+              onHover={mentionPicker.setActiveIndex}
+            />
+          ) : null}
           <textarea
+            ref={textareaRef}
             value={message}
-            onChange={(event) => setMessage(event.target.value)}
+            onChange={(event) => {
+              setMessage(event.target.value);
+              mentionPicker.syncFromCaret();
+            }}
+            onSelect={mentionPicker.syncFromCaret}
+            onBlur={mentionPicker.close}
             onKeyDown={(event) => {
+              if (mentionPicker.handleKeyDown(event)) return;
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 void send();
               }
             }}
-            rows={3}
-            placeholder="Message…"
-            className="max-h-40 min-h-[4.5rem] w-full resize-none bg-transparent px-1 py-1 text-base outline-none placeholder:text-muted-foreground"
+            rows={2}
+            placeholder="Message… (@ pour appeler un agent)"
+            role="combobox"
+            aria-expanded={mentionPicker.open}
+            aria-controls={mentionPicker.open ? AGENT_MENTION_LISTBOX_ID : undefined}
+            aria-activedescendant={
+              mentionPicker.open && mentionPicker.items.length
+                ? agentMentionOptionId(mentionPicker.activeIndex)
+                : undefined
+            }
+            className="max-h-40 min-h-[3.25rem] w-full resize-none bg-transparent px-1 py-1 text-base outline-none placeholder:text-muted-foreground"
           />
           <div className="flex items-center justify-between pt-1">
             <span className="text-[0.6875rem] text-muted-foreground">
-              Enter to send · Shift+Enter newline
+              Enter to send · Shift+Enter newline ·{" "}
+              <span className="text-foreground/70">@</span> pour un agent
             </span>
             <button
               type="button"
@@ -112,6 +160,11 @@ export function OpenClawNewSessionDraft() {
         {error ? (
           <p role="alert" className="mt-3 text-center text-sm text-destructive">
             {error}
+          </p>
+        ) : strayMention ? (
+          <p className="mt-3 text-center text-sm text-muted-foreground">
+            La mention doit ouvrir le message pour lancer un agent — sinon elle part en chat
+            libre.
           </p>
         ) : null}
       </div>

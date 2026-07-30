@@ -192,6 +192,15 @@ function LiveThreadScreen({
             sizeBytes: item.sizeBytes,
             downloadUrl: `/api/files/${encodeURIComponent(item.id)}`,
           })),
+        inputArtifacts: (snapshot?.artifacts ?? [])
+          .filter((item) => !latestRun || item.runId === latestRun.id)
+          .filter((item) => item.direction === "input")
+          .map((item) => ({
+            id: item.id,
+            filename: item.filename,
+            sizeBytes: item.sizeBytes,
+            downloadUrl: `/api/files/${encodeURIComponent(item.id)}`,
+          })),
         error: latestRun?.error ?? null,
       }}
       streamProps={{

@@ -137,7 +137,7 @@ export function AppearanceSettings() {
             onChange={(value) => hermesAppearance.setAppearance("uiScale", value)}
           />
 
-          <div className="flex justify-end border-t border-border pt-4">
+          <div className="flex justify-end border-t border-seam pt-4">
             <Button type="button" onClick={() => hermesAppearance.resetAppearance()}>
               Réinitialiser les dimensions
             </Button>

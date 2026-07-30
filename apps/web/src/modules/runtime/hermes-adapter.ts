@@ -390,6 +390,86 @@ export async function deleteHermesSession(
   }
 }
 
+/**
+ * Crée la session Hermes du thread si elle n'existe pas.
+ *
+ * MESURÉ : un `id` fourni est accepté tel quel (`console:thr_…` passe), et une
+ * seconde création renvoie 409 — l'appel est donc idempotent côté Console.
+ * Sans cette session, `GET /api/sessions/:id/messages` répond 404 et le
+ * backfill des sorties d'outils est impossible.
+ *
+ * Ne jette jamais : la mission doit partir même si le runtime refuse la
+ * session. On perdrait le backfill, pas l'exécution.
+ */
+export async function ensureHermesSession(
+  config: { baseUrl: string; token: string },
+  sessionId: string,
+  title: string,
+): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
+  try {
+    const response = await fetch(`${config.baseUrl.replace(/\/+$/, "")}/api/sessions`, {
+      method: "POST",
+      headers: { ...authHeaders(config.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ id: sessionId, title: title.slice(0, 200) }),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    return response.ok || response.status === 409;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export type HermesSessionMessage = {
+  role: string;
+  content: string;
+  toolName: string | null;
+  toolCallId: string | null;
+};
+
+/**
+ * Transcript persisté d'une session Hermes.
+ *
+ * C'est la SEULE source des sorties d'outils : le flux `/v1/runs` émet un
+ * `tool.completed` sans résultat (cf. §4.2 du spike), alors que les messages
+ * `role: "tool"` de la session portent leur `content` complet (§11.4).
+ */
+export async function listHermesSessionMessages(
+  config: { baseUrl: string; token: string },
+  sessionId: string,
+): Promise<HermesSessionMessage[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8_000);
+  try {
+    const response = await fetch(
+      `${config.baseUrl.replace(/\/+$/, "")}/api/sessions/${encodeURIComponent(sessionId)}/messages`,
+      { headers: authHeaders(config.token), cache: "no-store", signal: controller.signal },
+    );
+    if (!response.ok) return [];
+
+    const body = (await response.json()) as { data?: unknown };
+    if (!Array.isArray(body.data)) return [];
+
+    return body.data.map((entry) => {
+      const item = (entry ?? {}) as Record<string, unknown>;
+      return {
+        role: String(item.role ?? ""),
+        content: typeof item.content === "string" ? item.content : "",
+        toolName: typeof item.tool_name === "string" ? item.tool_name : null,
+        toolCallId: typeof item.tool_call_id === "string" ? item.tool_call_id : null,
+      };
+    });
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function getHermesSession(
   config: {
     baseUrl: string;
@@ -450,6 +530,13 @@ export type HermesAgentRunRequest = {
   model?: string;
   provider?: string | null;
   reasoningEffort?: string | null;
+  /** Session Hermes stable du thread. Portée persistance/mémoire uniquement :
+   *  MESURÉ (spike §11.3), elle n'injecte AUCUN historique dans le prompt. */
+  sessionId?: string | null;
+  /** Historique du thread. Sans lui, chaque mission repart sans contexte —
+   *  c'est le défaut qui faisait répondre « l'heure à Paris » à une question
+   *  de suivi sur la météo (spike §11.1). */
+  conversationHistory?: Array<{ role: string; content: string }>;
   signal?: AbortSignal;
   baseUrl?: string;
   token?: string;
@@ -483,6 +570,10 @@ export async function createHermesAgentRun(
         ...(request.model ? { model: request.model } : {}),
         ...(request.provider ? { provider: request.provider } : {}),
         ...(modelOptions ? { model_options: modelOptions } : {}),
+        ...(request.sessionId ? { session_id: request.sessionId } : {}),
+        ...(request.conversationHistory?.length
+          ? { conversation_history: request.conversationHistory }
+          : {}),
       }),
       cache: "no-store",
       signal: request.signal,

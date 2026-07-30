@@ -17,7 +17,7 @@ export default async function ArtifactsPage() {
       />
       <Card>
         <CardSurface className="p-0">
-          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3.5">
+          <div className="flex items-center justify-between gap-3 border-b border-seam px-4 py-3.5">
             <span className="flex items-center gap-2 text-[0.8125rem] font-medium">
               <FolderOpenIcon className="size-4 text-muted-foreground" />
               Tous les artefacts

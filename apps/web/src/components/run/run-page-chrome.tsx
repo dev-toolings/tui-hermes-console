@@ -28,6 +28,14 @@ export type RunPageDetails = {
     sizeBytes?: number;
     downloadUrl?: string;
   }[];
+  /** Pièces jointes fournies à la mission — affichées par le panneau workspace
+   *  du chat, qui montre `in/` et `out/` comme deux dossiers réels. */
+  inputArtifacts?: {
+    id?: string;
+    filename: string;
+    sizeBytes?: number;
+    downloadUrl?: string;
+  }[];
   error: string | null;
 };
 
@@ -99,6 +107,13 @@ export function RunDetailsRegistrar({
   }, [details, detailsKey, setDetails]);
 
   return children;
+}
+
+/** Détails de la mission courante, ou `null` hors d'une page mission.
+ *  Alimenté par `RunDetailsRegistrar` — le panneau workspace du chat s'y
+ *  branche plutôt que de refaire descendre le snapshot dans le layout. */
+export function useRunDetails(): RunPageDetails | null {
+  return useContext(RunDetailsContext)?.details ?? null;
 }
 
 export function useRunPageChromeActions() {

@@ -68,7 +68,7 @@ export default async function AgentsPage() {
                     {agent.runs} mission{agent.runs === 1 ? "" : "s"}
                   </span>
                 </div>
-                <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
+                <div className="mt-4 flex items-center justify-between border-t border-seam pt-3">
                   <span className="text-[0.6875rem] text-muted-foreground">
                     Dernière : {formatRelative(agent.lastRunAt)}
                   </span>
@@ -87,7 +87,7 @@ export default async function AgentsPage() {
 
       <Card>
         <CardSurface className="p-0">
-          <div className="border-b border-border px-4 py-3.5">
+          <div className="border-b border-seam px-4 py-3.5">
             <SectionHeading
               title="Modèle d’exécution"
               description="Les instructions sont injectées à chaque lancement, sans provisioning de profil côté Hermes."

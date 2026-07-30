@@ -171,4 +171,65 @@ describe("createHermesAgentRun", () => {
       model_options: { reasoning_effort: "high" },
     });
   });
+
+  test("forwards session_id and conversation_history", async () => {
+    // Sans `conversation_history`, chaque mission repart sans contexte : c'est
+    // ce qui faisait répondre « l'heure à Paris » à une question de suivi sur
+    // la météo. MESURÉ (spike §11.3) : le `session_id` seul ne suffit pas,
+    // `/v1/runs` ne rejoue jamais l'historique de session.
+    const previousFetch = globalThis.fetch;
+    let requestBody: Record<string, unknown> = {};
+    globalThis.fetch = (async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return Response.json({ run_id: "hermes_run_3" }, { status: 202 });
+    }) as typeof fetch;
+
+    try {
+      await createHermesAgentRun({
+        input: "paris là à cette heure ci",
+        instructions: "Réponds.",
+        sessionId: "console:thr_42",
+        conversationHistory: [
+          { role: "user", content: "execute une research de météo" },
+          { role: "assistant", content: "Quelle ville ?" },
+        ],
+        baseUrl: "http://127.0.0.1:8642",
+        token: "test-token",
+      });
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+
+    expect(requestBody.session_id).toBe("console:thr_42");
+    expect(requestBody.conversation_history).toEqual([
+      { role: "user", content: "execute une research de météo" },
+      { role: "assistant", content: "Quelle ville ?" },
+    ]);
+  });
+
+  test("omits session_id and conversation_history when absent", async () => {
+    // Un `conversation_history: []` sur le premier message du thread serait du
+    // bruit inutile dans le body.
+    const previousFetch = globalThis.fetch;
+    let requestBody: Record<string, unknown> = {};
+    globalThis.fetch = (async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return Response.json({ run_id: "hermes_run_4" }, { status: 202 });
+    }) as typeof fetch;
+
+    try {
+      await createHermesAgentRun({
+        input: "Bonjour",
+        instructions: "Réponds.",
+        conversationHistory: [],
+        baseUrl: "http://127.0.0.1:8642",
+        token: "test-token",
+      });
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+
+    expect(requestBody).not.toHaveProperty("session_id");
+    expect(requestBody).not.toHaveProperty("conversation_history");
+  });
 });

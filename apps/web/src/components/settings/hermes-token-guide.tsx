@@ -189,9 +189,10 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+/** Bordure seule : un fond ferait disparaître les `Pre`/`Code` en `bg-inset`. */
 function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="space-y-2 rounded-xl border border-border p-3">
+    <section className="space-y-2 rounded-xl border border-seam p-3">
       <h3 className="text-[0.8125rem] font-semibold text-foreground">{title}</h3>
       {children}
     </section>
@@ -202,9 +203,10 @@ function Steps({ children }: { children: ReactNode }) {
   return <ol className="ml-4 list-decimal space-y-1.5">{children}</ol>;
 }
 
+/** Bordure seule, comme `Card` : ces lignes contiennent des `Code` en `bg-inset`. */
 function Row({ symptom, children }: { symptom: string; children: ReactNode }) {
   return (
-    <div className="rounded-lg bg-muted/50 px-3 py-2">
+    <div className="rounded-lg border border-seam px-3 py-2">
       <dt className="font-medium text-foreground">{symptom}</dt>
       <dd className="mt-0.5">{children}</dd>
     </div>
@@ -213,7 +215,7 @@ function Row({ symptom, children }: { symptom: string; children: ReactNode }) {
 
 function Code({ children }: { children: ReactNode }) {
   return (
-    <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.75em] text-foreground">
+    <code className="rounded bg-inset px-1 py-0.5 font-mono text-[0.75em] text-foreground">
       {children}
     </code>
   );
@@ -221,7 +223,7 @@ function Code({ children }: { children: ReactNode }) {
 
 function Pre({ children }: { children: string }) {
   return (
-    <pre className="my-1.5 overflow-x-auto rounded-lg bg-muted px-3 py-2 font-mono text-[0.6875rem] leading-relaxed text-foreground">
+    <pre className="my-1.5 overflow-x-auto rounded-lg bg-inset px-3 py-2 font-mono text-[0.6875rem] leading-relaxed text-foreground">
       {children}
     </pre>
   );

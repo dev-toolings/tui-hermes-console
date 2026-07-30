@@ -99,7 +99,7 @@ export function AgentForm({
           className={input}
         />
       </Field>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-seam pt-4">
         {error ? (
           <p role="alert" className="text-[0.8125rem] text-destructive">
             {error}

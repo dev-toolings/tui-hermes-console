@@ -336,3 +336,95 @@ bun run probe-approval.ts               # tentative de déclenchement d'approbat
 
 > La passe 0a reste utilisable **sans clé** : c'est elle qui fournira le mock déterministe des
 > tests E2E. Les passes 0b/0c consomment de vrais tokens (~40 k d'entrée par run).
+
+---
+
+## 11. Passe 5 — continuité de conversation et sorties d'outils
+
+**Date :** 30-07-2026 · **Runtime :** Hermes Agent v0.19.0 sur `kev@192.168.1.57` (tunnel SSH)
+· **Modèle :** `gpt-5.4-nano` · **Session de test :** `api_1785434743_0095df03`
+
+### 11.1 Le défaut observé en production
+
+Deux missions consécutives d'un même thread Console :
+
+| run | input | sortie |
+|---|---|---|
+| `run_cc69134c` | `execute une research de météo` | demande la ville — correct |
+| `run_e29cf69f` | `paris là à cette heure ci` | **donne l'heure**, pas la météo |
+
+`createHermesAgentRun` ne postait que `input` + `instructions` : le 2ᵉ run n'a jamais vu le mot
+« météo ». Ce n'est pas un défaut de modèle, c'est un contexte amputé par la Console.
+
+### 11.2 `POST /v1/runs` accepte déjà `conversation_history` — MESURÉ
+
+`api_server.py:6107-6148` accepte `conversation_history: [{role, content}]` (précédence la plus
+haute), `previous_response_id`, et un `input` multi-messages. Rejoué à l'identique, en ajoutant
+les deux messages précédents :
+
+```jsonc
+// même input, avec conversation_history
+{"event":"tool.started","tool":"terminal","preview":"curl -s 'https://wttr.in/Paris?format=%C+%t+%w+%h+%p'"}
+{"event":"run.completed","output":"Météo à Paris à l’instant (source: wttr.in) : Ensoleillé, 33°C.
+ Vent: 10 km/h (↑). Humidité: 25%. Précipitations: 0.0 mm.",
+ "usage":{"input_tokens":25366,"output_tokens":344}}
+```
+
+→ **La continuité ne demande aucun changement de protocole.** On reste sur `/v1/runs`, donc on
+garde `run_stop`, les approbations et la réconciliation.
+
+### 11.3 `session_id` ne rejoue PAS l'historique — MESURÉ
+
+Contre-épreuve, même `session_id`, **sans** `conversation_history` :
+
+```jsonc
+{"event":"run.completed","output":"Tu parles de quoi exactement “et à Lyon” ? (météo, prix,
+ horaires, événement, itinéraire, autre)","usage":{"input_tokens":12417}}
+```
+
+12 417 tokens d'entrée contre 25 366 : aucun historique injecté. Contrairement à
+`/api/sessions/{id}/chat/stream` qui appelle `_conversation_history_for_session`, le chemin
+`/v1/runs` ne lit jamais la session pour construire le prompt.
+
+**Conséquence de conception :** les deux mécanismes sont **orthogonaux**, sans risque de doublon.
+La Console reste la source de vérité de l'historique (Postgres → `conversation_history`) ; le
+`session_id` ne sert qu'à la persistance côté runtime.
+
+### 11.4 Les sorties d'outils sont récupérables — MESURÉ
+
+`tool.completed` du flux `/v1/runs` ne transporte toujours aucun résultat (cf. §4.2). Mais avec un
+`session_id` stable, `GET /api/sessions/{id}/messages` expose le tour complet :
+
+```jsonc
+{"role":"tool","tool_name":"terminal","tool_call_id":"call_zIhrlAkf8IV63587Gswo9awH",
+ "content":"{\"output\": \"Sunny +33°C ↗10km/h 25% 0.0mm\", \"exit_code\": 0, \"error\": null}"}
+```
+
+→ `hasResultPayload: false` codé en dur dans `lib/hermes-events.ts` cesse d'être une fatalité :
+la Console peut **backfiller** les sorties après `run.completed`, en appariant sur `tool_name`
+dans l'ordre FIFO (même appariement que le normaliseur, faute d'identifiant dans le flux SSE).
+
+### 11.5 Ce que la passe 5 n'a pas prouvé
+
+- Le comportement sous **runs concurrents partageant un `session_id`** (l'ordre FIFO du backfill
+  pourrait alors mal apparier). Les threads Console ayant chacun leur session, le cas ne se
+  présente pas aujourd'hui — à revérifier si un thread lance plusieurs missions en parallèle.
+- La **taille** que peut atteindre `conversation_history` avant troncature côté runtime : un
+  thread long finira par devoir être fenêtré côté Console.
+
+### 11.6 Reproduire
+
+```bash
+TOK=$(sed -n 's/^API_SERVER_KEY=//p' ~/.hermes/.env | head -1 | tr -d '"')
+SID=$(curl -s -X POST -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
+  -d '{"title":"spike-phase5"}' http://127.0.0.1:8642/api/sessions | jq -r .session.id)
+
+# 11.2 — avec historique : le modèle comprend « météo »
+curl -s -X POST -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
+  -d "{\"input\":\"paris là à cette heure ci\",\"model\":\"gpt-5.4-nano\",\"session_id\":\"$SID\",
+       \"conversation_history\":[{\"role\":\"user\",\"content\":\"execute une research de météo\"},
+       {\"role\":\"assistant\",\"content\":\"Quelle ville ?\"}]}" http://127.0.0.1:8642/v1/runs
+
+# 11.4 — les messages role=tool portent leur sortie
+curl -s -H "Authorization: Bearer $TOK" http://127.0.0.1:8642/api/sessions/$SID/messages | jq
+```

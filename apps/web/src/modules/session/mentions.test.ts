@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { isAgentMentionMessage, parseAgentMention } from "@/modules/session/mentions";
+import {
+  findMentionQuery,
+  isAgentMentionMessage,
+  parseAgentMention,
+} from "@/modules/session/mentions";
 
 describe("parseAgentMention", () => {
   test("parses a mention followed by an instruction", () => {
@@ -36,6 +40,38 @@ describe("parseAgentMention", () => {
       ref: "agent_hermes_runtime",
       prompt: "ping",
     });
+  });
+});
+
+describe("findMentionQuery", () => {
+  test("opens on a bare @", () => {
+    expect(findMentionQuery("@", 1)).toEqual({ start: 0, end: 1, query: "" });
+  });
+
+  test("captures what is typed after the @", () => {
+    expect(findMentionQuery("@au", 3)).toEqual({ start: 0, end: 3, query: "au" });
+  });
+
+  test("matches anywhere as long as the @ opens a word", () => {
+    expect(findMentionQuery("merci @au", 9)).toEqual({ start: 6, end: 9, query: "au" });
+    expect(findMentionQuery("ligne\n@au", 9)).toEqual({ start: 6, end: 9, query: "au" });
+  });
+
+  test("spans the whole token when the caret sits inside it", () => {
+    expect(findMentionQuery("@audit-seo", 3)).toEqual({ start: 0, end: 10, query: "au" });
+  });
+
+  test("ignores an @ glued to a previous word", () => {
+    expect(findMentionQuery("kevin@kweli", 11)).toBeNull();
+  });
+
+  test("closes once the token is left behind", () => {
+    expect(findMentionQuery("@audit-seo go", 13)).toBeNull();
+    expect(findMentionQuery("@audit-seo ", 11)).toBeNull();
+  });
+
+  test("ignores text after the caret", () => {
+    expect(findMentionQuery("@audit-seo", 0)).toBeNull();
   });
 });
 

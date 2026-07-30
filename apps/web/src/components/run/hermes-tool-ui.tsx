@@ -89,9 +89,27 @@ export function HermesToolCard({
       ) : null}
 
       {!running && hasResultPayload && output != null ? (
-        <pre className="max-h-52 overflow-auto border-t border-ai-separator px-3 py-2 whitespace-pre-wrap break-words font-mono text-[0.75rem] scrollbar-subtle">
-          {formatToolOutput(output)}
-        </pre>
+        // Repliée par défaut : cinq sorties d'outil dépliées poussent la
+        // réponse de l'agent hors de l'écran. On montre la première ligne
+        // comme aperçu, le détail reste à un clic.
+        <details className="group/output border-t border-ai-separator">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-1.5 text-[0.75rem] text-ai-icon-secondary transition-colors hover:text-foreground">
+            <svg
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden
+              className="size-3 shrink-0 transition-transform group-open/output:rotate-90"
+            >
+              <path d="M9 6l6 6-6 6z" />
+            </svg>
+            <span className="min-w-0 flex-1 truncate font-mono">
+              {previewToolOutput(output)}
+            </span>
+          </summary>
+          <pre className="max-h-52 overflow-auto px-3 pb-2 whitespace-pre-wrap break-words font-mono text-[0.75rem] scrollbar-subtle">
+            {formatToolOutput(output)}
+          </pre>
+        </details>
       ) : null}
     </div>
   );
@@ -129,6 +147,33 @@ function toolVerb(tool: string) {
     grep: "Recherche",
   };
   return verbs[tool] ?? tool;
+}
+
+/**
+ * Enveloppe que Hermes pose autour de toute donnée venue de l'extérieur :
+ * balise ouvrante, avertissement fixe, balise fermante. Elle est conservée dans
+ * la vue dépliée — c'est la sortie réelle du runtime — mais la répéter dans
+ * l'aperçu de cinq cartes n'apprendrait rien.
+ */
+const UNTRUSTED_PREAMBLE = [
+  "<untrusted_tool_result",
+  "</untrusted_tool_result>",
+  "The following content was retrieved",
+];
+
+/** Première ligne porteuse d'information, pour l'aperçu replié. */
+function previewToolOutput(output: unknown) {
+  const value = typeof output === "string" ? output : JSON.stringify(output);
+  if (!value) return "Sortie vide";
+  const line = value
+    .split("\n")
+    .map((item) => item.trim())
+    .find(
+      (item) =>
+        item.length > 0 && !UNTRUSTED_PREAMBLE.some((prefix) => item.startsWith(prefix)),
+    );
+  const preview = line ?? value.trim();
+  return preview.length > 120 ? `${preview.slice(0, 117)}…` : preview;
 }
 
 function formatToolOutput(output: unknown) {

@@ -167,6 +167,93 @@ export async function createRunForThread(threadId: string, input: string) {
   return { threadId, runId };
 }
 
+/**
+ * Historique du thread au format attendu par `POST /v1/runs`.
+ *
+ * MESURE (spike §11.3) : `/v1/runs` ne rejoue JAMAIS l'historique de la session
+ * Hermes — passer un `session_id` seul laisse le modèle sans contexte. La
+ * Console est donc la source de vérité et doit envoyer l'historique
+ * explicitement. Corollaire rassurant : aucun risque de doublon entre les deux.
+ *
+ * Le message utilisateur du run courant est exclu : il part déjà comme `input`.
+ */
+async function getConversationHistory(
+  threadId: string,
+  currentRunId: string,
+): Promise<Array<{ role: string; content: string }>> {
+  const rows = await getDatabase()
+    .select({ role: messages.role, content: messages.content, runId: messages.runId })
+    .from(messages)
+    .where(eq(messages.threadId, threadId))
+    .orderBy(asc(messages.createdAt));
+
+  const history: Array<{ role: string; content: string }> = [];
+  for (const row of rows) {
+    if (row.runId === currentRunId) continue;
+    // Seul le texte fait sens ici : le raisonnement est du bruit et les appels
+    // d'outils sont rejoués côté runtime, pas depuis notre transcript.
+    const text = row.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("")
+      .trim();
+    if (!text) continue;
+    history.push({ role: row.role, content: text });
+  }
+  return history;
+}
+
+export type RunActivityPoint = {
+  /** `YYYY-MM-DD`, en heure locale du serveur. */
+  date: string;
+  completed: number;
+  failed: number;
+  tokens: number;
+};
+
+/**
+ * Activité par jour pour le graphique de l'Aperçu.
+ *
+ * Les jours sans mission sont émis à zéro : sans eux, une courbe relierait le
+ * 12 au 28 comme s'il s'était passé quelque chose entre les deux.
+ */
+export async function getRunActivity(days = 30): Promise<RunActivityPoint[]> {
+  const since = new Date();
+  since.setHours(0, 0, 0, 0);
+  since.setDate(since.getDate() - (days - 1));
+
+  const rows = await getDatabase()
+    .select({ status: runs.status, usage: runs.usage, createdAt: runs.createdAt })
+    .from(runs)
+    .where(gt(runs.createdAt, since))
+    .orderBy(asc(runs.createdAt));
+
+  const buckets = new Map<string, RunActivityPoint>();
+  for (let index = 0; index < days; index += 1) {
+    const day = new Date(since);
+    day.setDate(since.getDate() + index);
+    const key = toDayKey(day);
+    buckets.set(key, { date: key, completed: 0, failed: 0, tokens: 0 });
+  }
+
+  for (const row of rows) {
+    const bucket = buckets.get(toDayKey(row.createdAt));
+    if (!bucket) continue;
+    if (row.status === "completed") bucket.completed += 1;
+    if (row.status === "failed" || row.status === "cancelled") bucket.failed += 1;
+    bucket.tokens += row.usage?.totalTokens ?? 0;
+  }
+
+  return [...buckets.values()];
+}
+
+function toDayKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export async function getRunContext(runId: string) {
   const db = getDatabase();
   const [row] = await db
@@ -202,6 +289,8 @@ export async function getRunContext(runId: string) {
     absolutePath: path.join(inputDir, item.filename),
   }));
 
+  const conversationHistory = await getConversationHistory(row.threadId, row.runId);
+
   return {
     runId: row.runId,
     threadId: row.threadId,
@@ -212,6 +301,7 @@ export async function getRunContext(runId: string) {
     model: inference.model,
     reasoningEffort: inference.reasoningEffort,
     hermesConversation: row.hermesConversation,
+    conversationHistory,
     inputArtifacts,
   };
 }
@@ -294,6 +384,98 @@ export async function appendRunEvents(
   });
 
   return stored;
+}
+
+/**
+ * Renseigne a posteriori les sorties d'outils d'une mission terminée.
+ *
+ * Le flux `/v1/runs` émet un `tool.completed` SANS résultat — mesuré dès la
+ * passe 0b, d'où le `hasResultPayload: false` codé en dur dans
+ * `lib/hermes-events.ts`. Les messages `role: "tool"` de la session Hermes,
+ * eux, portent leur `content` complet (spike §11.4) : on les rapatrie une fois
+ * la mission terminée et on complète les événements déjà persistés.
+ *
+ * Appariement FIFO par nom d'outil, faute d'identifiant d'appel dans le flux
+ * SSE — exactement la règle qu'applique déjà `HermesEventNormalizer`. Deux
+ * missions concurrentes sur un même thread mettraient cet appariement en
+ * défaut ; le cas ne se présente pas (une mission active par thread).
+ *
+ * Renvoie les événements mis à jour, pour republication vers l'UI live.
+ */
+export async function applyToolOutputs(
+  runId: string,
+  outputs: Array<{ toolName: string | null; content: string }>,
+): Promise<StoredProductEvent[]> {
+  if (outputs.length === 0) return [];
+  const db = getDatabase();
+
+  const eventRows = await db
+    .select({
+      cursor: runEvents.id,
+      sequence: runEvents.sequence,
+      type: runEvents.type,
+      payload: runEvents.payload,
+      occurredAt: runEvents.occurredAt,
+    })
+    .from(runEvents)
+    .where(eq(runEvents.runId, runId))
+    .orderBy(asc(runEvents.sequence));
+
+  const results = eventRows.filter(
+    (row) => row.type === "tool.result" && row.payload.hasResultPayload !== true,
+  );
+  if (results.length === 0) return [];
+
+  // La session accumule TOUS les tours du thread : seuls les derniers
+  // correspondent à cette mission.
+  const relevant = outputs.slice(-results.length);
+  const queues = new Map<string, string[]>();
+  for (const item of relevant) {
+    const key = item.toolName ?? "";
+    const queue = queues.get(key) ?? [];
+    queue.push(item.content);
+    queues.set(key, queue);
+  }
+
+  const updated: StoredProductEvent[] = [];
+  for (const row of results) {
+    const tool = String(row.payload.tool ?? "");
+    const content = queues.get(tool)?.shift();
+    if (content === undefined) continue;
+
+    const payload = { ...row.payload, hasResultPayload: true, result: content };
+    await db.update(runEvents).set({ payload }).where(eq(runEvents.id, row.cursor));
+    updated.push({
+      runId,
+      cursor: row.cursor,
+      sequence: row.sequence,
+      type: row.type as StoredProductEvent["type"],
+      payload,
+      occurredAt: row.occurredAt,
+    });
+  }
+
+  if (updated.length === 0) return [];
+
+  // Le message assistant a été construit avant le backfill : le reconstruire
+  // depuis les événements corrigés, sinon un rechargement de page reperd les
+  // sorties que le flux live vient d'afficher.
+  const patched = eventRows.map((row) => {
+    const match = updated.find((item) => item.cursor === row.cursor);
+    return match ? { type: row.type, payload: match.payload } : { type: row.type, payload: row.payload };
+  });
+  const [run] = await db
+    .select({ output: runs.output })
+    .from(runs)
+    .where(eq(runs.id, runId))
+    .limit(1);
+
+  await db
+    .update(messages)
+    .set({ content: buildAssistantContent(patched, run?.output ?? "") })
+    .where(and(eq(messages.runId, runId), eq(messages.role, "assistant")));
+
+  return updated;
 }
 
 export async function completeRun(
