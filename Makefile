@@ -6,11 +6,13 @@ SHELL := /bin/bash
 MAKEFLAGS += --no-print-directory
 
 PKG      := bun
-WEB      := apps/web
+SERVER   := apps/server
+CONSOLE  := apps/console
 SPIKE    := spike
-ENV_FILE := $(WEB)/.env.local
-ENV_TPL  := $(WEB)/.env.example
-PORT     ?= 3000
+ENV_FILE := $(SERVER)/.env.local
+ENV_TPL  := $(SERVER)/.env.example
+# Le serveur Hono sert l'API et le SPA compilé sur ce même port.
+PORT     ?= 3170
 
 # Postgres local — conteneur `infra-postgres` (~/Documents/infra/compose.yml)
 PG_HOST ?= localhost
@@ -65,7 +67,7 @@ install: ## Installe les dépendances du workspace (bun)
 	$(call ok,Dependencies installed)
 
 .PHONY: env
-env: ## Crée apps/web/.env.local s'il manque (clé de chiffrement générée)
+env: ## Crée apps/server/.env.local s'il manque (clé de chiffrement générée)
 	@if [ -f "$(ENV_FILE)" ]; then \
 		printf "$(GREEN)✓$(RESET) %s\n" "$(ENV_FILE) already exists"; \
 	elif [ ! -f "$(ENV_TPL)" ]; then \
@@ -90,19 +92,19 @@ setup: install env workdir db-check db-migrate ## Setup complet (install + env +
 ##@ Développement
 
 .PHONY: dev
-dev: ## Lance le serveur de dev Next.js (PORT=3000)
-	$(call say,Starting dev server on http://localhost:$(PORT))
-	@PORT=$(PORT) $(PKG) run dev
+dev: ## Lance l'API (3170) et le SPA Vite (1420)
+	$(call say,Starting API on :$(PORT) and SPA on http://localhost:1420)
+	@CONSOLE_SERVER_PORT=$(PORT) $(PKG) run dev
 
 .PHONY: build
-build: ## Build de production
-	$(call say,Building web app)
+build: ## Build de production du SPA
+	$(call say,Building the SPA)
 	@$(PKG) run build
 
 .PHONY: start
-start: ## Démarre le build de production (PORT=3000)
-	$(call say,Serving production build on http://localhost:$(PORT))
-	@PORT=$(PORT) $(PKG) run --filter web start
+start: build ## Sert l'API et le SPA compilé sur un seul port
+	$(call say,Serving the console on http://localhost:$(PORT))
+	@CONSOLE_SERVER_PORT=$(PORT) $(PKG) run start
 
 ##@ Qualité
 
@@ -114,7 +116,7 @@ lint: ## ESLint
 .PHONY: lint-fix
 lint-fix: ## ESLint --fix
 	$(call say,Linting with autofix)
-	@$(PKG) run --filter web lint -- --fix
+	@$(PKG) run --filter console lint -- --fix
 
 .PHONY: typecheck
 typecheck: ## tsc --noEmit
@@ -128,7 +130,7 @@ test: ## Tests unitaires (bun test)
 
 .PHONY: test-watch
 test-watch: ## Tests en mode watch
-	@cd $(WEB) && $(PKG) test --watch
+	@cd $(SERVER) && $(PKG) test --watch
 
 .PHONY: check
 check: lint typecheck test ## Lint + typecheck + tests
@@ -174,12 +176,12 @@ db-migrate: ## Applique les migrations
 .PHONY: db-seed
 db-seed: ## Seed l'agent miroir depuis le runtime Hermes
 	$(call say,Seeding Hermes mirror agent)
-	@$(PKG) run --filter web db:seed
+	@$(PKG) run db:seed
 
 .PHONY: db-studio
 db-studio: ## Ouvre Drizzle Studio
 	$(call say,Opening Drizzle Studio)
-	@cd $(WEB) && bunx drizzle-kit studio
+	@cd $(SERVER) && bunx drizzle-kit studio
 
 ##@ Runtime Hermes
 
@@ -206,9 +208,9 @@ fake-llm: ## Lance le faux LLM du spike
 ##@ Maintenance
 
 .PHONY: clean
-clean: ## Supprime les artefacts de build (.next, tsbuildinfo)
+clean: ## Supprime les artefacts de build (dist, tsbuildinfo)
 	$(call say,Removing build artifacts)
-	@rm -rf $(WEB)/.next $(WEB)/*.tsbuildinfo
+	@rm -rf $(CONSOLE)/dist $(CONSOLE)/*.tsbuildinfo $(SERVER)/*.tsbuildinfo
 	$(call ok,Build artifacts removed)
 
 .PHONY: clean-all

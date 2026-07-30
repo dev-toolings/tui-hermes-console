@@ -20,7 +20,7 @@ Canal    = web d’abord (messaging / workspace = transports futurs)
 
 ## Interface actuelle
 
-`apps/web` reprend la coque BoardUI pour en faire l’interface Hermes Console :
+`apps/console` reprend la coque BoardUI pour en faire l’interface Hermes Console :
 
 - sidebar, recherche, thèmes BoardUI ;
 - aperçu, agents, missions, **artefacts (DB)**, paramètres ;
@@ -34,16 +34,18 @@ Créer un agent sur `/agents/new`, lancer sur `/runs/new`, suivre sur `/runs/thr
 ## Architecture exécutée
 
 ```text
-┌────────────────────┐
-│ BoardUI + assistant│
-│ UI dans le browser │
-└─────────┬──────────┘
+┌──────────────────────────────────┐
+│ apps/console — Vite + React 19   │
+│ TanStack Router · BoardUI        │
+│ navigateur ou fenêtre Tauri      │
+└─────────┬────────────────────────┘
           │ HTTP JSON + SSE (+ multipart files)
           ▼
 ╔══════════════════════════════════════════╗
-║ Next.js Console                          ║
+║ apps/server — Hono (Bun)                 ║
 ║ agents · runtime · threads · runner      ║
 ║ artifacts · cancel · approval · retry    ║
+║ sert aussi le SPA compilé                ║
 ╚══════╤═══════════════╤══════════╤════════╝
        │ SQL           │ HTTP/SSE │ FS partagé
        ▼               ▼          ▼
@@ -126,8 +128,13 @@ Parcours : `/agents/new` → `/runs/new` → `/runs/thr_*` → composer (± piè
 |---|---|
 | [`PRODUCT.md`](PRODUCT.md) | Axe produit, anti-références, principes UX |
 | [`docs/PRD.md`](docs/PRD.md) | PRD v0.7 — phases 0–4 + axe généraliste |
+| [`docs/DESKTOP.md`](docs/DESKTOP.md) | Architecture : SPA Vite, serveur Hono, app Tauri |
 | [`docs/SPIKE-REPORT.md`](docs/SPIKE-REPORT.md) | Rapport Phase 0 : mesures runtime |
 | `spike/` | Sonde v0 + faux LLM + fixtures |
+
+> Le PRD décrit encore la Console comme une application Next.js unique : sa
+> section « Stack » et son arborescence sont antérieures au retrait de Next.
+> `docs/DESKTOP.md` fait foi sur l'architecture.
 
 ## Le spike en bref
 
