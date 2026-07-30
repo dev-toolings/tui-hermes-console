@@ -443,13 +443,22 @@ export async function listHermesSessionMessages(
   sessionId: string,
 ): Promise<HermesSessionMessage[]> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8_000);
+  // Un transcript de mission longue dépasse facilement 250 Ko, et il transite
+  // par le tunnel SSH pendant que le runtime travaille encore. Un délai de
+  // quelques secondes le faisait expirer — et l'échec passait inaperçu.
+  const timeout = setTimeout(() => controller.abort(), 30_000);
   try {
     const response = await fetch(
       `${config.baseUrl.replace(/\/+$/, "")}/api/sessions/${encodeURIComponent(sessionId)}/messages`,
       { headers: authHeaders(config.token), cache: "no-store", signal: controller.signal },
     );
-    if (!response.ok) return [];
+    if (!response.ok) {
+      throw new HermesRuntimeError(
+        `Transcript de session indisponible (HTTP ${response.status}).`,
+        response.status,
+        "HERMES_SESSION_MESSAGES_FAILED",
+      );
+    }
 
     const body = (await response.json()) as { data?: unknown };
     if (!Array.isArray(body.data)) return [];
@@ -463,8 +472,6 @@ export async function listHermesSessionMessages(
         toolCallId: typeof item.tool_call_id === "string" ? item.tool_call_id : null,
       };
     });
-  } catch {
-    return [];
   } finally {
     clearTimeout(timeout);
   }

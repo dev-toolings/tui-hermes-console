@@ -305,12 +305,23 @@ async function backfillToolOutputs(
     const outputs = transcript
       .filter((message) => message.role === "tool")
       .map((message) => ({ toolName: message.toolName, content: message.content }));
-    if (outputs.length === 0) return;
+
+    if (outputs.length === 0) {
+      // Une mission sans outil est normale ; un transcript vide alors que la
+      // mission en a appelé ne l'est pas. Le distinguer évite de reproduire
+      // l'échec silencieux qui laissait « Sortie non transmise » sans trace.
+      console.warn("[runner] aucune sortie d’outil dans le transcript", {
+        runId,
+        sessionId,
+        transcriptMessages: transcript.length,
+      });
+      return;
+    }
 
     const updated = await applyToolOutputs(runId, outputs);
     for (const event of updated) publishThreadEvent(threadId, event);
   } catch (error) {
-    console.error("[runner] tool output backfill failed", { runId, error });
+    console.error("[runner] tool output backfill failed", { runId, sessionId, error });
   }
 }
 
