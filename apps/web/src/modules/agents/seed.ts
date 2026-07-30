@@ -1,4 +1,4 @@
-import { eq, ilike, ne } from "drizzle-orm";
+import { and, eq, ilike, like, ne } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
 import { agents, threads } from "@/db/schema";
 import { resolveHermesRuntimeConfig } from "@/modules/runtime/config";
@@ -27,7 +27,8 @@ const LEGACY_CONSOLE_BRANCHEE_PATTERN = "%console%branchée%";
 /**
  * Hermes n’a pas d’API CRUD d’agents : le « agent » runtime est le modèle
  * (`hermes-agent`) + le process gateway. Ce seeder sonde le runtime et
- * matérialise **un** agent local miroir, puis archive tout le reste.
+ * matérialise **un** agent local miroir, puis archive les miroirs périmés.
+ * Les agents créés à la main ne sont pas touchés.
  */
 export async function seedHermesAgentFromRuntime(): Promise<{
   agent: AgentDto;
@@ -123,10 +124,18 @@ export async function seedHermesAgentFromRuntime(): Promise<{
     });
   }
 
+  // N'archiver que les anciens miroirs (slug `hermes-agent…`), jamais les
+  // agents créés à la main : ils sont adressables par `@slug` et doivent
+  // survivre à un reseed.
   const archived = await db
     .update(agents)
     .set({ archivedAt: now, updatedAt: now })
-    .where(ne(agents.id, HERMES_SEEDED_AGENT_ID))
+    .where(
+      and(
+        ne(agents.id, HERMES_SEEDED_AGENT_ID),
+        like(agents.slug, `${HERMES_SEEDED_AGENT_SLUG}%`),
+      ),
+    )
     .returning({ id: agents.id });
 
   // Threads copient les instructions à la création : migrer les prompts legacy
