@@ -1,0 +1,5 @@
+dist/
+src-tauri/target/
+src-tauri/gen/
+# Binaire sidecar : 65 Mo produits par `bun build --compile`, régénérables.
+src-tauri/binaries/

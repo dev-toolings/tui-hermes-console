@@ -1,0 +1,3 @@
+/* Le design system est repris tel quel : c'est tout l'intérêt d'avoir gardé
+   BoardUI hors de Next. Aucun token n'est redéfini ici. */
+@import "@boardui/ui/styles";

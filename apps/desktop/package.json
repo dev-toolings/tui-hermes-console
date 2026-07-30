@@ -1,0 +1,33 @@
+{
+  "name": "desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "sidecar:build": "bun build --compile --target=bun-darwin-arm64 --external cpu-features ../server/src/index.ts --outfile src-tauri/binaries/hermes-server-aarch64-apple-darwin",
+    "tauri:dev": "bun run sidecar:build && cargo tauri dev --config src-tauri/tauri.conf.json",
+    "tauri:build": "bun run sidecar:build && cargo tauri build --config src-tauri/tauri.conf.json"
+  },
+  "dependencies": {
+    "@boardui/ui": "workspace:*",
+    "@tanstack/react-router": "^1.170.17",
+    "lucide-react": "^1.23.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "recharts": "^3.10.1",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5.1.1",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vite": "^7.2.7"
+  }
+}
