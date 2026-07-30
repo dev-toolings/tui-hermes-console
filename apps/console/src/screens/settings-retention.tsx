@@ -1,17 +1,11 @@
 import { ArchiveIcon, FileBoxIcon, MessageSquareIcon, RouteIcon } from "lucide-react";
 import { Badge, Card, CardSurface, SectionHeading } from "@/components/ui/boardui";
 import { SettingsContent } from "@/components/settings/settings-content";
-import {
-  formatBytes,
-  getFileLimits,
-  getStorageStats,
-} from "@/modules/settings/storage-stats";
+import { formatBytes } from "@console/core/lib/format-bytes";
+import type { RetentionData } from "@/loaders";
 
-export const dynamic = "force-dynamic";
-
-export default async function RetentionSettingsPage() {
-  const stats = await getStorageStats();
-  const limits = getFileLimits();
+export function SettingsRetentionScreen({ data }: { data: RetentionData }) {
+  const { stats, limits } = data;
 
   const rows = [
     { label: "Agents", value: stats.agents, icon: ArchiveIcon },

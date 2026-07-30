@@ -430,7 +430,7 @@ export function RuntimeConnectionForm({
         <p className="flex items-start gap-2">
           <ShieldCheckIcon className="mt-0.5 size-4 shrink-0" />
           {transport === "ssh"
-            ? "Le tunnel est monté par le serveur Next et rouvert automatiquement s’il tombe. La déconnexion ne supprime ni Hermes, ni ses profils, ni ses données."
+            ? "Le tunnel est monté par le serveur de la Console et rouvert automatiquement s’il tombe. La déconnexion ne supprime ni Hermes, ni ses profils, ni ses données."
             : "La déconnexion ne supprime ni Hermes, ni ses profils, ni ses données."}
         </p>
       </div>

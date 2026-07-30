@@ -5,7 +5,7 @@ import {
   BuiLayoutFrame,
   BuiSidebarProvider,
   useBui,
-} from "@boardui/ui/shell";
+} from "@boardui/ui/shell/primitives";
 import { Link } from "@/lib/router";
 import { usePathname, useRouter } from "@/lib/router";
 import {

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "@/lib/router";
 import {
   BellIcon,
   BrainCircuitIcon,
@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { Badge, Card, CardSurface, SectionHeading } from "@/components/ui/boardui";
 import { SettingsContent } from "@/components/settings/settings-content";
-import { getRuntimePublic } from "@/modules/runtime/config";
+import type { RuntimeData } from "@/loaders";
 
 const SECTIONS = [
   {
@@ -72,10 +72,9 @@ const SECTIONS = [
   },
 ];
 
-export const dynamic = "force-dynamic";
 
-export default async function SettingsPage() {
-  const runtime = await getRuntimePublic();
+export function SettingsHomeScreen({ data }: { data: RuntimeData }) {
+  const { runtime } = data;
   const runtimeLabel = !runtime.configured
     ? "Non configuré"
     : runtime.lastHealthStatus === "healthy"

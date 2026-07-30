@@ -2,7 +2,7 @@ import { LockKeyholeIcon, ServerIcon, TriangleAlertIcon } from "lucide-react";
 import { RuntimeConnectionForm } from "@/components/forms/runtime-connection-form";
 import { Card, CardSurface } from "@/components/ui/boardui";
 
-export default function SetupPage() {
+export function SetupScreen() {
   return (
     <main className="min-h-dvh bg-surface-sunken p-3 sm:p-6">
       <div className="mx-auto grid min-h-[calc(100dvh-1.5rem)] max-w-6xl overflow-hidden rounded-3xl bg-panel shadow-board-elevated lg:grid-cols-[360px_minmax(0,1fr)]">

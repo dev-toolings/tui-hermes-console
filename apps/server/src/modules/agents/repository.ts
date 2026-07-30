@@ -16,21 +16,8 @@ export class AgentRepositoryError extends Error {
   }
 }
 
-export type AgentDto = {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  instructions: string;
-  provider: string | null;
-  model: string | null;
-  reasoningEffort: string | null;
-  archivedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  runs: number;
-  lastRunAt: string | null;
-};
+export type { AgentDto } from "@console/core/types/api";
+import type { AgentDto } from "@console/core/types/api";
 
 export async function listAgents(options?: { includeArchived?: boolean }): Promise<AgentDto[]> {
   await ensureHermesSeededAgent();

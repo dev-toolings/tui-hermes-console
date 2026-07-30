@@ -1,8 +1,8 @@
-import Link from "next/link";
+import { Link } from "@/lib/router";
 import { PlusIcon } from "lucide-react";
 import { Badge, ButtonLink, Card, CardSurface, PageShell, SectionHeading } from "@/components/ui/boardui";
 import { RUN_STATUS, formatDuration, formatTokens, type RunStatus } from "@console/core/lib/run-status";
-import { listThreads } from "@/modules/runs/repository";
+import type { MissionsData } from "@/loaders";
 
 function formatWhen(iso: string) {
   const date = new Date(iso);
@@ -21,13 +21,15 @@ function runDuration(startedAt: string | null, endedAt: string | null) {
   return formatDuration(Math.max(0, end - start));
 }
 
-export default async function RunsPage({
-  searchParams,
+export function MissionsScreen({
+  data,
+  filter,
 }: {
-  searchParams: Promise<{ filter?: string }>;
+  data: MissionsData;
+  /** `?filter=` de l'URL — TanStack le valide dans la route et le passe ici. */
+  filter?: string;
 }) {
-  const { filter } = await searchParams;
-  const threads = await listThreads({ source: "mission" });
+  const { threads } = data;
 
   const rows = threads
     .map((thread) => {

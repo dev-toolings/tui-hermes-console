@@ -1,6 +1,6 @@
-import Link from "next/link";
+import { Link } from "@/lib/router";
 
-export default function NotFound() {
+export function NotFoundScreen() {
   return (
     <main className="flex min-h-dvh items-center justify-center bg-surface-sunken p-6">
       <div className="w-full max-w-md rounded-3xl bg-panel p-8 text-center shadow-board-elevated">

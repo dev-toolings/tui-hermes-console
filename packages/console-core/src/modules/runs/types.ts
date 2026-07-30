@@ -103,3 +103,14 @@ export type RunActivityPoint = {
   failed: number;
   tokens: number;
 };
+
+/** Une ligne de `GET /api/threads` — la conversation et son dernier run. */
+export type ThreadListItemDto = {
+  id: string;
+  title: string;
+  agentName: string;
+  provider: string | null;
+  model: string;
+  updatedAt: string;
+  latestRun: RunDto | null;
+};

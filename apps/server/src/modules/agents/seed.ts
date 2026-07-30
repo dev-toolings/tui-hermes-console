@@ -1,4 +1,8 @@
 import { and, eq, ilike, like, ne } from "drizzle-orm";
+import {
+  HERMES_SEEDED_AGENT_ID,
+  HERMES_SEEDED_AGENT_SLUG,
+} from "@console/core/modules/agents/identity";
 import { getDatabase } from "@/db/client";
 import { agents, threads } from "@/db/schema";
 import { resolveHermesRuntimeConfig } from "@/modules/runtime/config";
@@ -10,9 +14,10 @@ import {
 } from "@/modules/runtime/hermes-adapter";
 import type { AgentDto } from "./repository";
 
-/** Identifiant stable du miroir Console ↔ runtime Hermes. */
-export const HERMES_SEEDED_AGENT_ID = "agent_hermes_runtime";
-export const HERMES_SEEDED_AGENT_SLUG = "hermes-agent";
+export {
+  HERMES_SEEDED_AGENT_ID,
+  HERMES_SEEDED_AGENT_SLUG,
+} from "@console/core/modules/agents/identity";
 
 const DEFAULT_INSTRUCTIONS = `Tu es Hermes, un agent d’exécution. Réponds directement à la demande de l’utilisateur.
 

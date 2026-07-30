@@ -2,13 +2,8 @@ import { sql } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
 import { agents, messages, runEvents, runtimeConfig, threads } from "@/db/schema";
 
-export type StorageStats = {
-  agents: number;
-  threads: number;
-  messages: number;
-  events: number;
-  runtimeConfigured: boolean;
-};
+export type { StorageStats } from "@console/core/types/api";
+import type { StorageStats } from "@console/core/types/api";
 
 export async function getStorageStats(): Promise<StorageStats> {
   try {
@@ -40,11 +35,7 @@ export async function getStorageStats(): Promise<StorageStats> {
   }
 }
 
-export function formatBytes(bytes: number) {
-  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} Mo`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} Ko`;
-  return `${bytes} o`;
-}
+export { formatBytes } from "@console/core/lib/format-bytes";
 
 export function getFileLimits() {
   const maxFile = Number(process.env.MAX_FILE_SIZE_BYTES ?? 20_971_520);

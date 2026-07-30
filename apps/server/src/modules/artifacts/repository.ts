@@ -15,16 +15,8 @@ import {
   sanitizeFilename,
 } from "./paths";
 
-export type ArtifactDto = {
-  id: string;
-  runId: string;
-  direction: ArtifactDirection;
-  filename: string;
-  mimeType: string | null;
-  sizeBytes: number;
-  checksumSha256: string;
-  createdAt: string;
-};
+export type { ArtifactDto } from "@console/core/types/api";
+import type { ArtifactDto } from "@console/core/types/api";
 
 export class ArtifactError extends Error {
   constructor(

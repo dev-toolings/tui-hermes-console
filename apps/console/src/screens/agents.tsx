@@ -1,9 +1,9 @@
-import Link from "next/link";
+import { Link } from "@/lib/router";
 import { BotIcon, PlusIcon } from "lucide-react";
 import { AgentCardActions } from "@/components/agents/agent-card-actions";
 import { Badge, ButtonLink, Card, CardSurface, PageShell, SectionHeading } from "@/components/ui/boardui";
-import { listAgents } from "@/modules/agents/repository";
-import { HERMES_SEEDED_AGENT_ID } from "@/modules/agents/seed";
+import { HERMES_SEEDED_AGENT_ID } from "@console/core/modules/agents/identity";
+import type { AgentsData } from "@/loaders";
 
 function formatRelative(iso: string | null) {
   if (!iso) return "Jamais";
@@ -17,8 +17,8 @@ function formatRelative(iso: string | null) {
   return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
-export default async function AgentsPage() {
-  const agents = await listAgents();
+export function AgentsScreen({ data }: { data: AgentsData }) {
+  const { agents } = data;
 
   return (
     <PageShell>

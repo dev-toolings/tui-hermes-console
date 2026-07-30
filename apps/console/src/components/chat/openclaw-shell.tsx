@@ -162,9 +162,19 @@ export function ChatSurfaceFrame({ children }: { children: ReactNode }) {
     return () => window.clearInterval(timer);
   }, []);
 
-  useEffect(() => {
+  /**
+   * Refermer le tiroir mobile quand on change de session.
+   *
+   * C'était un effet : il repeignait le tiroir ouvert, puis le refermait au
+   * rendu suivant. En ajustant l'état pendant le rendu, React relance avant
+   * de peindre — le tiroir ne clignote pas. (react.dev, « adjusting state
+   * when props change ».)
+   */
+  const [lastPathname, setLastPathname] = useState(pathname);
+  if (lastPathname !== pathname) {
+    setLastPathname(pathname);
     setMobileOpen(false);
-  }, [pathname]);
+  }
 
   const handleDeleted = useCallback(
     async (deletedId: string) => {

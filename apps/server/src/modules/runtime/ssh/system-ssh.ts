@@ -17,7 +17,7 @@ const PROBE_TIMEOUT_MS = 2_000;
 /** Délai laissé au master détaché pour publier son port avant de conclure à l'échec. */
 const EXIT_GRACE_MS = 1_500;
 
-/** Options communes à toutes les invocations : jamais de prompt interactif (le serveur Next
+/** Options communes à toutes les invocations : jamais de prompt interactif (le serveur
  *  n'a pas de TTY), et échec immédiat si le forward ne peut pas être établi. */
 export function baseSshArgs(target: SshTarget): string[] {
   return [

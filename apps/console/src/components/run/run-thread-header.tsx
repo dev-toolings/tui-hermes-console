@@ -2,7 +2,7 @@
 
 import { XuluxTooltipIconButton } from "@/components/xulux-chat/tooltip-icon-button";
 import { useRunPageChromeActions } from "@/components/run/run-page-chrome";
-import { useBui } from "@boardui/ui/shell";
+import { useBui } from "@boardui/ui/shell/primitives";
 import { MenuIcon, PanelRightIcon } from "lucide-react";
 import type { FC, ReactNode } from "react";
 

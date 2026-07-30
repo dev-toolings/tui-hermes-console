@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
-import { useBui } from "@boardui/ui/shell";
+import { useBui } from "@boardui/ui/shell/primitives";
 import { Button, Card, CardSurface } from "@/components/ui/boardui";
 import { hermesAppearance } from "@/lib/settings/appearance";
 import {

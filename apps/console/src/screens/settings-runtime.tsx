@@ -39,7 +39,7 @@ function runtimeBadge(runtime: RuntimeDto | null) {
   );
 }
 
-export default function RuntimeSettingsPage() {
+export function SettingsRuntimeScreen() {
   const [runtime, setRuntime] = useState<RuntimeDto | null>(null);
   const onRuntimeChange = useCallback((next: RuntimeDto) => setRuntime(next), []);
 

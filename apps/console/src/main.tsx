@@ -1,16 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { RouterProvider, createRouter } from "@tanstack/react-router";
-import { routeTree } from "./routes";
-import "./styles.css";
-
-const router = createRouter({ routeTree });
-
-declare module "@tanstack/react-router" {
-  interface Register {
-    router: typeof router;
-  }
-}
+import { RouterProvider } from "@tanstack/react-router";
+import { router } from "./route-tree";
+import "./globals.css";
 
 const container = document.getElementById("root");
 if (!container) throw new Error("#root introuvable");

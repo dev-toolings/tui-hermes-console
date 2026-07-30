@@ -19,6 +19,7 @@ import type {
   RunActivityPoint,
   RunDto,
   StoredProductEvent,
+  ThreadListItemDto,
   ThreadMessageDto,
   ThreadSnapshot,
 } from "@console/core/modules/runs/types";
@@ -729,7 +730,9 @@ export async function getLatestRun(threadId: string): Promise<RunDto | null> {
   return run ? toRunDto(run) : null;
 }
 
-export async function listThreads(options?: { source?: ThreadSource }) {
+export async function listThreads(options?: {
+  source?: ThreadSource;
+}): Promise<ThreadListItemDto[]> {
   const db = getDatabase();
   const threadQuery = options?.source
     ? db.select().from(threads).where(eq(threads.source, options.source)).orderBy(desc(threads.updatedAt))

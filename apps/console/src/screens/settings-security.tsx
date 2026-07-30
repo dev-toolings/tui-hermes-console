@@ -1,16 +1,15 @@
-import type { ReactNode } from "react";
-import Link from "next/link";
+import { Link } from "@/lib/router";
 import { AlertTriangleIcon, KeyRoundIcon, LockIcon, ShieldAlertIcon, UserIcon } from "lucide-react";
 import { Badge, ButtonLink, Card, CardSurface, SectionHeading } from "@/components/ui/boardui";
 import { SettingsContent } from "@/components/settings/settings-content";
-import { hasEncryptionKey } from "@/lib/crypto";
-import { getRuntimePublic } from "@/modules/runtime/config";
+import type { RuntimeData } from "@/loaders";
 
-export const dynamic = "force-dynamic";
 
-export default async function SecuritySettingsPage() {
-  const runtime = await getRuntimePublic();
-  const encryptionReady = hasEncryptionKey();
+export function SettingsSecurityScreen({ data }: { data: RuntimeData }) {
+  const { runtime } = data;
+  // `hasEncryptionKey()` lisait `process.env` pendant le rendu serveur. Le
+  // navigateur n'a pas cet environnement : le serveur répond à sa place.
+  const encryptionReady = runtime.encryptionReady;
 
   return (
     <SettingsContent>
@@ -45,7 +44,7 @@ export default async function SecuritySettingsPage() {
           <SecurityRow
             icon={LockIcon}
             title="Chiffrement au repos"
-            description="Nécessite APP_ENCRYPTION_KEY côté serveur Next.js."
+            description="Nécessite APP_ENCRYPTION_KEY sur le serveur de la Console."
             badge={
               <Badge tone={encryptionReady ? "success" : "danger"}>
                 {encryptionReady ? "Actif" : "Clé absente"}

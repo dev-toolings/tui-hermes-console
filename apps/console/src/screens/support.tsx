@@ -1,63 +1,16 @@
-import Link from "next/link";
+import { Link } from "@/lib/router";
 import { ActivityIcon, BookOpenIcon, BracesIcon, HeartPulseIcon } from "lucide-react";
 import { Badge, ButtonLink, Card, CardSurface, PageShell, SectionHeading } from "@/components/ui/boardui";
-import { getRuntimePublic, resolveHermesRuntimeConfig } from "@/modules/runtime/config";
-import { testHermesRuntimeAgainst } from "@/modules/runtime/hermes-adapter";
+import type { SupportData } from "@/loaders";
 
-export const dynamic = "force-dynamic";
-
-export default async function SupportPage() {
-  const runtime = await getRuntimePublic();
-
-  let probe: {
-    ok: boolean;
-    version: string | null;
-    latencyMs: number | null;
-    error: string | null;
-    features: string[];
-  } = {
-    ok: false,
-    version: runtime.detectedVersion,
-    latencyMs: null,
-    error: null,
-    features: [],
-  };
-
-  if (runtime.configured) {
-    const started = Date.now();
-    try {
-      const config = await resolveHermesRuntimeConfig();
-      const result = await testHermesRuntimeAgainst(config);
-      const features = result.capabilities.features
-        ? Object.entries(result.capabilities.features)
-            .filter(([, enabled]) => enabled === true)
-            .map(([name]) => name)
-            .slice(0, 12)
-        : [];
-      const version =
-        typeof result.health === "object" &&
-        result.health &&
-        "version" in result.health &&
-        typeof (result.health as { version?: unknown }).version === "string"
-          ? (result.health as { version: string }).version
-          : runtime.detectedVersion;
-      probe = {
-        ok: true,
-        version,
-        latencyMs: Date.now() - started,
-        error: null,
-        features,
-      };
-    } catch (error) {
-      probe = {
-        ok: false,
-        version: runtime.detectedVersion,
-        latencyMs: Date.now() - started,
-        error: error instanceof Error ? error.message : "Probe runtime échoué.",
-        features: [],
-      };
-    }
-  }
+/**
+ * La sonde tournait ici, dans le rendu serveur : elle appelait
+ * `resolveHermesRuntimeConfig()`, qui déchiffre le token du runtime. Ce calcul
+ * est passé derrière `GET /api/runtime/probe` — l'écran n'en reçoit plus que le
+ * verdict, et le token ne quitte jamais le serveur.
+ */
+export function SupportScreen({ data }: { data: SupportData }) {
+  const { runtime, probe } = data;
 
   const hermesTone = !runtime.configured
     ? ("warning" as const)

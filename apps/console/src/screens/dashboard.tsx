@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   ActivityIcon,
   ArrowUpRightIcon,
@@ -8,22 +7,26 @@ import {
   PlusIcon,
   ServerIcon,
 } from "lucide-react";
-import { Badge, ButtonLink, Card, CardSurface, PageShell, SectionHeading } from "@/components/ui/boardui";
+import { Link } from "@/lib/router";
+import {
+  Badge,
+  ButtonLink,
+  Card,
+  CardSurface,
+  PageShell,
+  SectionHeading,
+} from "@/components/ui/boardui";
 import { RUN_STATUS, formatTokens, type RunStatus } from "@console/core/lib/run-status";
-import { runtimeTargetLabel, runtimeTransportLabel } from "@console/core/lib/runtime/target";
+import {
+  runtimeTargetLabel,
+  runtimeTransportLabel,
+} from "@console/core/lib/runtime/target";
 import { ActivityChart } from "@/components/dashboard/activity-chart";
 import { MissionsTable, type MissionRow } from "@/components/dashboard/missions-table";
-import { listAgents } from "@/modules/agents/repository";
-import { getRuntimePublic } from "@/modules/runtime/config";
-import { getRunActivity, listThreads } from "@/modules/runs/repository";
+import type { DashboardData } from "@/loaders";
 
-export default async function DashboardPage() {
-  const [agents, threads, runtime, activity] = await Promise.all([
-    listAgents(),
-    listThreads({ source: "mission" }),
-    getRuntimePublic(),
-    getRunActivity(30),
-  ]);
+export function DashboardScreen({ data }: { data: DashboardData }) {
+  const { agents, threads, runtime, activity } = data;
 
   const active = threads.filter(
     (thread) => thread.latestRun && !RUN_STATUS[thread.latestRun.status as RunStatus].terminal,
@@ -40,28 +43,26 @@ export default async function DashboardPage() {
     totalTokens: thread.latestRun?.usage?.totalTokens ?? null,
   }));
 
-  const runtimeTone =
-    !runtime.configured
-      ? ("warning" as const)
-      : runtime.lastHealthStatus === "healthy"
-        ? ("success" as const)
-        : runtime.lastHealthStatus === "unreachable" ||
-            runtime.lastHealthStatus === "unauthorized"
-          ? ("danger" as const)
-          : ("info" as const);
+  const runtimeTone = !runtime.configured
+    ? ("warning" as const)
+    : runtime.lastHealthStatus === "healthy"
+      ? ("success" as const)
+      : runtime.lastHealthStatus === "unreachable" ||
+          runtime.lastHealthStatus === "unauthorized"
+        ? ("danger" as const)
+        : ("info" as const);
 
-  const runtimeLabel =
-    !runtime.configured
-      ? "À configurer"
-      : runtime.lastHealthStatus === "healthy"
-        ? "Connecté"
-        : runtime.lastHealthStatus === "unreachable"
-          ? "Injoignable"
-          : runtime.lastHealthStatus === "unauthorized"
-            ? "Token invalide"
-            : runtime.source === "env"
-              ? "Env"
-              : "Configuré";
+  const runtimeLabel = !runtime.configured
+    ? "À configurer"
+    : runtime.lastHealthStatus === "healthy"
+      ? "Connecté"
+      : runtime.lastHealthStatus === "unreachable"
+        ? "Injoignable"
+        : runtime.lastHealthStatus === "unauthorized"
+          ? "Token invalide"
+          : runtime.source === "env"
+            ? "Env"
+            : "Configuré";
 
   return (
     <PageShell>

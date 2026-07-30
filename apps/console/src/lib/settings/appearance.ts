@@ -1,4 +1,4 @@
-import { createAppearance } from "@boardui/ui/shell";
+import { createAppearance } from "@boardui/ui/shell/appearance";
 
 export const hermesAppearance = createAppearance({
   storageKey: "hermes-console-appearance",

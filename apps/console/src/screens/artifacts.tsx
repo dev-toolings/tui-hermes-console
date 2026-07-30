@@ -1,13 +1,12 @@
-import Link from "next/link";
+import { Link } from "@/lib/router";
 import { DownloadIcon, FileIcon, FolderOpenIcon } from "lucide-react";
 import { Badge, Card, CardSurface, PageShell, SectionHeading } from "@/components/ui/boardui";
-import { listAllArtifacts } from "@/modules/artifacts/repository";
-import { formatBytes } from "@/modules/settings/storage-stats";
+import { formatBytes } from "@console/core/lib/format-bytes";
+import type { ArtifactsData } from "@/loaders";
 
-export const dynamic = "force-dynamic";
 
-export default async function ArtifactsPage() {
-  const rows = await listAllArtifacts(100);
+export function ArtifactsScreen({ data }: { data: ArtifactsData }) {
+  const rows = data.artifacts;
 
   return (
     <PageShell>

@@ -19,25 +19,8 @@ const RUNTIME_ID = "default";
 /** Racine de travail par défaut côté machine distante. */
 export const DEFAULT_REMOTE_WORKDIR = "/tmp/hermes-console-work";
 
-export type RuntimePublicDto = {
-  configured: boolean;
-  source: "database" | "env" | "none";
-  transport: RuntimeTransport;
-  baseUrl: string | null;
-  name: string | null;
-  tokenConfigured: boolean;
-  sshHost: string | null;
-  sshPort: number;
-  sshUser: string | null;
-  sshAuth: RuntimeSshAuth;
-  sshPasswordConfigured: boolean;
-  remoteWorkdir: string | null;
-  detectedVersion: string | null;
-  capabilities: Record<string, unknown> | null;
-  lastHealthStatus: RuntimeHealthStatus;
-  lastCheckedAt: string | null;
-  updatedAt: string | null;
-};
+export type { RuntimePublicDto } from "@console/core/types/api";
+import type { RuntimePublicDto } from "@console/core/types/api";
 
 export type ResolvedRuntimeConfig = {
   /** URL réellement appelable depuis ce process — en SSH, l'entrée locale du tunnel. */
@@ -77,6 +60,7 @@ export async function getRuntimePublic(): Promise<RuntimePublicDto> {
       baseUrl: row.baseUrl,
       name: row.name,
       tokenConfigured: true,
+      encryptionReady: hasEncryptionKey(),
       sshHost: row.sshHost,
       sshPort: row.sshPort,
       sshUser: row.sshUser,
@@ -111,6 +95,7 @@ export async function getRuntimePublic(): Promise<RuntimePublicDto> {
       baseUrl: envUrl,
       name: "Hermes (env)",
       tokenConfigured: true,
+      encryptionReady: hasEncryptionKey(),
       detectedVersion: null,
       capabilities: null,
       lastHealthStatus: "unknown",
@@ -126,6 +111,7 @@ export async function getRuntimePublic(): Promise<RuntimePublicDto> {
     baseUrl: envUrl,
     name: null,
     tokenConfigured: envToken,
+    encryptionReady: hasEncryptionKey(),
     detectedVersion: null,
     capabilities: null,
     lastHealthStatus: "unknown",
