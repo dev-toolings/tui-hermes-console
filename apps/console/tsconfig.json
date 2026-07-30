@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "types": ["bun"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@console/core/*": ["../../packages/console-core/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
+  // Zone de transit : les pages Next attendent d'être converties en routes
+  // TanStack (Lot 3). Elles référencent encore des modules serveur, donc elles
+  // sortent du typecheck jusqu'à leur conversion.
+  "exclude": ["src/_next-pages"]
+}

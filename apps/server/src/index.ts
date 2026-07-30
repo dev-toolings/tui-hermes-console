@@ -1,15 +1,16 @@
 /**
- * Serveur autonome de la Console — l'étape 6a de la transition desktop.
+ * Serveur de la Console.
  *
- * Il expose exactement la même API que l'app Next, mais sans Next : c'est lui
- * que Tauri embarquera en sidecar, pendant que le front devient un SPA Vite.
- * Tout le métier (runner SSE, tunnel SSH, chiffrement AES, réconciliation)
- * est réutilisé sans modification depuis `apps/web/src/modules`.
+ * Il détient toute l'API et tout le métier : runner SSE, tunnel SSH,
+ * chiffrement AES, réconciliation. Le front est un SPA Vite servi à part
+ * (`apps/console`), qui ne lui parle qu'en HTTP — c'est ce qui permet à Tauri
+ * d'embarquer ce même serveur en sidecar sans rien changer.
  */
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { ROUTES, type RouteModule } from "./routes";
+import { register } from "./instrumentation";
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 type HttpMethod = (typeof HTTP_METHODS)[number];
@@ -66,6 +67,9 @@ app.get("/__routes", (c) =>
     ),
   }),
 );
+
+// Un run laissé « en cours » par un arrêt brutal ne se terminerait jamais seul.
+void register();
 
 const port = Number(process.env.CONSOLE_SERVER_PORT ?? 3170);
 

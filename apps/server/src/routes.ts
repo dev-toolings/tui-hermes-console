@@ -1,40 +1,39 @@
 /**
  * Table de routage du serveur autonome.
  *
- * Les handlers viennent tels quels de `apps/web/src/app/api/**` : MESURÉ, aucun
- * d'eux n'importe `next/server` ni n'utilise `NextRequest`/`NextResponse`, ils
- * ne manipulent que les `Request`/`Response` standard du Web. Hono parle le
- * même dialecte, donc il n'y a rien à réécrire — seulement à monter.
+ * Les handlers de `src/api/**` ne manipulent que les `Request`/`Response`
+ * standard du Web — c'est ce qui a permis de les reprendre tels quels quand
+ * Next a été retiré, sans en réécrire un seul.
  *
- * Les segments dynamiques passent de la syntaxe Next `[threadId]` à celle de
- * Hono `:threadId`. Les méthodes ne sont pas déclarées ici : on enregistre
- * celles que le module exporte réellement (cf. `mountRoute`).
+ * Les dossiers gardent la syntaxe `[threadId]` ; les chemins montés utilisent
+ * celle de Hono, `:threadId`. Les méthodes ne sont pas déclarées ici : on
+ * enregistre celles que le module exporte réellement (cf. `mountRoute`).
  */
 
-import * as agents from "@/app/api/agents/route";
-import * as agentDetail from "@/app/api/agents/[agentId]/route";
-import * as connectors from "@/app/api/connectors/route";
-import * as connectorDetail from "@/app/api/connectors/[type]/route";
-import * as connectorTest from "@/app/api/connectors/[type]/test/route";
-import * as files from "@/app/api/files/route";
-import * as fileDetail from "@/app/api/files/[fileId]/route";
-import * as healthz from "@/app/api/healthz/route";
-import * as readyz from "@/app/api/readyz/route";
-import * as runApproval from "@/app/api/runs/[runId]/approval/route";
-import * as runCancel from "@/app/api/runs/[runId]/cancel/route";
-import * as runRetry from "@/app/api/runs/[runId]/retry/route";
-import * as runtime from "@/app/api/runtime/route";
-import * as runtimeModels from "@/app/api/runtime/models/route";
-import * as providerCredentials from "@/app/api/runtime/providers/[provider]/credentials/route";
-import * as codexAuth from "@/app/api/runtime/providers/openai-codex/auth/route";
-import * as runtimeRestart from "@/app/api/runtime/restart/route";
-import * as sshHosts from "@/app/api/runtime/ssh-hosts/route";
-import * as runtimeTest from "@/app/api/runtime/test/route";
-import * as threads from "@/app/api/threads/route";
-import * as threadDetail from "@/app/api/threads/[threadId]/route";
-import * as threadCommands from "@/app/api/threads/[threadId]/commands/route";
-import * as threadEvents from "@/app/api/threads/[threadId]/events/route";
-import * as threadMessages from "@/app/api/threads/[threadId]/messages/route";
+import * as agents from "@/api/agents/route";
+import * as agentDetail from "@/api/agents/[agentId]/route";
+import * as connectors from "@/api/connectors/route";
+import * as connectorDetail from "@/api/connectors/[type]/route";
+import * as connectorTest from "@/api/connectors/[type]/test/route";
+import * as files from "@/api/files/route";
+import * as fileDetail from "@/api/files/[fileId]/route";
+import * as healthz from "@/api/healthz/route";
+import * as readyz from "@/api/readyz/route";
+import * as runApproval from "@/api/runs/[runId]/approval/route";
+import * as runCancel from "@/api/runs/[runId]/cancel/route";
+import * as runRetry from "@/api/runs/[runId]/retry/route";
+import * as runtime from "@/api/runtime/route";
+import * as runtimeModels from "@/api/runtime/models/route";
+import * as providerCredentials from "@/api/runtime/providers/[provider]/credentials/route";
+import * as codexAuth from "@/api/runtime/providers/openai-codex/auth/route";
+import * as runtimeRestart from "@/api/runtime/restart/route";
+import * as sshHosts from "@/api/runtime/ssh-hosts/route";
+import * as runtimeTest from "@/api/runtime/test/route";
+import * as threads from "@/api/threads/route";
+import * as threadDetail from "@/api/threads/[threadId]/route";
+import * as threadCommands from "@/api/threads/[threadId]/commands/route";
+import * as threadEvents from "@/api/threads/[threadId]/events/route";
+import * as threadMessages from "@/api/threads/[threadId]/messages/route";
 
 export type RouteModule = Record<string, unknown>;
 

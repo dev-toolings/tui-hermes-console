@@ -1,0 +1,25 @@
+# dependencies
+/node_modules
+
+# testing
+/coverage
+
+# build
+dist/
+
+# tauri
+src-tauri/target/
+src-tauri/gen/
+# Binaire sidecar : 65 Mo produits par `bun build --compile`, régénérables.
+src-tauri/binaries/
+
+# misc
+.DS_Store
+*.pem
+
+# env files
+.env*
+!.env.example
+
+# typescript
+*.tsbuildinfo

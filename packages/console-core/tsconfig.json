@@ -9,13 +9,7 @@
     "noEmit": true,
     "strict": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "types": ["bun"],
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"],
-      "@console/core/*": ["../../packages/console-core/src/*"]
-    }
+    "types": ["bun"]
   },
-  "include": ["src/**/*.ts", "scripts/**/*.ts", "drizzle.config.ts"]
+  "include": ["src/**/*.ts"]
 }
