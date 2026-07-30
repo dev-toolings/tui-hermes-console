@@ -1,10 +1,47 @@
 # PRD — Hermes Console Core
 
-**Version :** 0.8
-**Statut :** Référence — Sessions + Connectors — 30-07-2026
+**Version :** 0.9
+**Statut :** Référence — Runtime distant (tunnel SSH) + mentions d'agent — 30-07-2026
 **Type de produit :** Application web self-hosted — couche d’exploitation agentique
 **Cible initiale :** Mono-utilisateur, mono-runtime Hermes (socle) ; surfaces et runtimes extensibles
 **Runtime validé :** Hermes Agent v0.19.0, API server `:8642`
+
+> **Amendement v0.9 — Runtime distant (tunnel SSH) + mentions d'agent.** Le runtime n'est plus
+> nécessairement joignable en direct : un second transport ouvre un tunnel SSH vers un Hermes
+> distant et miroite les artefacts par SFTP. Côté chat, l'agent s'invoque par mention et les
+> commandes de session passent par une route serveur dédiée.
+>
+> | # | Livré | Surface |
+> |---|---|---|
+> | 1 | Transport runtime `direct` \| `ssh` persisté (`transport`, `ssh_*`, `remote_workdir`) | migrations `0008` / `0009` |
+> | 2 | Tunnel `-L` par clé/agent via le binaire `ssh` (ControlMaster + ControlPersist) | `/settings/runtime` |
+> | 3 | Tunnel par mot de passe via `ssh2` (repli tout-JS — le binaire `ssh` ne prend pas de mot de passe sans TTY) | idem |
+> | 4 | Second secret chiffré AES-256-GCM : `encrypted_ssh_password`, jamais renvoyé (`sshPasswordConfigured`) | DTO runtime public |
+> | 5 | `GET /api/runtime/ssh-hosts` — alias `~/.ssh/config` en lecture seule (`Include`, profondeur 5) | `<datalist>` du formulaire |
+> | 6 | Miroir SFTP/scp des artefacts : push `in/` avant le run, pull `out/` à la complétion | `remote_workdir` |
+> | 7 | 11 codes d'erreur SSH métier (`SSH_AGENT_NO_KEY`, `SSH_FORWARDING_DISABLED`, `SSH_HOST_KEY_UNKNOWN`…) | messages actionnables |
+> | 8 | Garde-fous tunnel : gestion locale Hermes refusée, URL distante `https` refusée | `SSH_REMOTE_URL_UNSUPPORTED` |
+> | 9 | Mention `@<slug> <instruction>` → mission `/runs` dédiée (`agentRef` sur `POST /api/threads`) | composer chat et brouillon |
+> | 10 | `POST /api/threads/:threadId/commands` + `/help`, `/commands`, `/connector status` | control-plane des missions |
+> | 11 | Invariant « aucun agent dans une session `/chat` » (`AGENT_IN_CHAT`, double garde client + serveur) | `/agent*` refusé en chat |
+> | 12 | Coque `/chat` persistante : layout dédié, cache LRU de 20 snapshots, prefetch au survol | `/chat`, `/chat/new`, `/chat/:id` |
+> | 13 | Streaming inline `POST …/messages?stream=1` → `text/event-stream` + réconciliation par curseur | fil live |
+> | 14 | `Makefile` (setup, dev, check, db, runtime) + `apps/web/.env.example` | entrée unique de la DX |
+>
+> **Hors périmètre v0.9 :** Edge Gateway et enrôlement distant ; runtimes multiples ; redémarrage,
+> upgrade et backup d'un runtime distant ; écriture dans `~/.ssh/config` ; pièces jointes à la
+> création d'un thread ; autocomplétion `@` et palette de commandes ; mention de fichier (`@fichier`
+> n'existe pas — les fichiers passent par les pièces jointes, §16).
+>
+> **Non-régressions / dettes ouvertes :** aucune authentification (toutes les routes API sont
+> anonymes, `/setup` reste une maquette, §17) ; `POST /api/runtime/test` et `PUT /api/runtime` sans
+> garde d'origine, avec réutilisation d'un secret stocké vers une cible fournie par l'appelant ;
+> `ssh2` connecté sans vérification de clé d'hôte, contrairement au chemin `agent` qui, lui, mappe
+> `SSH_HOST_KEY_UNKNOWN` ; `forward()` sans sérialisation et canal unique fermé dès que l'empreinte
+> change — une mission en cours peut perdre son tunnel ; sessions SFTP `ssh2` jamais fermées ; noms
+> rapatriés de `out/` distant non passés par `sanitizeFilename` / `assertWithinDir` ; reprise,
+> annulation hors process et clôture d'orphelin en collision `UNIQUE(run_id, sequence)` ; aucun
+> quota sur les sorties ; aucun test du cycle de vie du tunnel ni de la synchronisation distante.
 
 > **Amendement v0.8 — Sessions + Connectors.**
 >
@@ -311,8 +348,14 @@ fichiers **et volume partagé avec Hermes** *(nouveau, cf. §16)*.
 Inchangé pour le **socle** : multi-tenant, organisations, rôles avancés, équipes d'agents, projets,
 tickets, Kanban, CRM, facturation, marketplace ; planification cron, workflows visuels,
 orchestration multi-agent, workers multiples, file de messages externe ; Edge Gateway, enrôlement
-distant, runtimes multiples, upgrade/rollback/backup distants, capacity planning ; RAG intégré,
+distant, **runtimes multiples**, upgrade/rollback/backup distants, capacity planning ; RAG intégré,
 mémoire long terme, vector DB, génération automatique d'agents.
+
+> **Correction v0.9.** Le *runtime distant* sort du hors-périmètre : un transport `ssh` (tunnel `-L`
+> vers un Hermes distant, miroir SFTP des artefacts) est livré et configurable dans
+> `/settings/runtime` (§11.2, §12, §16). Restent hors périmètre : l'Edge Gateway, l'enrôlement
+> sécurisé, la gestion à distance du cycle de vie Hermes (redémarrage, upgrade, backup) et le
+> support de plusieurs runtimes simultanés — une seule configuration reste active.
 
 **Hors périmètre explicite v0.6 (anti-dérive) :**
 - rebuild d’un workspace collab (channels, DMs, voice, Nostr) — Buzz reste un *connecteur* futur ;
@@ -398,8 +441,16 @@ Actions : télécharger un artefact, copier le résultat, relancer, nouvelle mis
 | `/agents/[agentId]` | Configuration, nouvelle mission, missions récentes, édition, archivage |
 | `/runs` | Historique global paginé |
 | `/runs/[runId]` | Écran principal : suivi, approbations, résultat, artefacts, vue brute |
+| `/chat` · `/chat/new` · `/chat/[sessionId]` | Surface conversationnelle : coque persistante, sidebar sessions, mention `@agent` |
+| `/runs/new` | Formulaire de mission |
+| `/artifacts` | Artefacts d'entrée et de sortie (base) |
 | `/settings` | Préférences Console et modèle LLM par défaut synchronisé depuis Hermes |
-| `/settings/runtime` | Modification de la connexion Hermes |
+| `/settings/runtime` | Modification de la connexion Hermes — transport `direct` ou tunnel SSH |
+| `/settings/models` · `/settings/connectors` · `/settings/security` · `/settings/retention` · `/settings/appearance` · `/settings/notifications` | Sous-pages Paramètres |
+
+**Correction v0.9 :** les routes `/chat/session*` et `/chat/sessions*` annoncées par l'amendement
+v0.8 n'existent pas — ce sont des redirections 307 (`next.config.ts`) vers `/chat*`. `/runs/*` n'est
+pas redirigé : c'est une surface de premier plan, et la mention `@agent` y navigue explicitement.
 
 **Exigence :** l'écran `/runs/[runId]` doit proposer une **vue « événements bruts »** dès la v0.1.
 Sans elle, l'utilisateur technique trouvera la Console inférieure au CLI et retournera au terminal.
@@ -418,8 +469,15 @@ type User = { id: string; email: string; passwordHash: string; createdAt: Date }
 type RuntimeConfig = {
   id: string;
   name: string;
-  baseUrl: string;               // http://hermes:8642
+  baseUrl: string;               // http://hermes:8642 — en transport `ssh`, URL vue depuis l'hôte distant
   encryptedToken: string;        // API_SERVER_KEY, chiffré au repos
+  transport: "direct" | "ssh";   // v0.9 — `direct` = fetch sur baseUrl, `ssh` = tunnel local -L
+  sshHost: string | null;
+  sshPort: number;               // défaut 22
+  sshUser: string | null;
+  sshAuth: "agent" | "password"; // `agent` = binaire ssh (clé/agent), `password` = ssh2
+  encryptedSshPassword: string | null;  // AES-256-GCM ; le DTO public n'expose que sshPasswordConfigured
+  remoteWorkdir: string | null;  // racine du volume de travail côté machine distante (§16)
   detectedVersion: string | null;
   capabilities: Record<string, unknown> | null;   // snapshot de /v1/capabilities
   lastHealthStatus: "unknown" | "healthy" | "unreachable" | "unauthorized" | "missing_feature";
@@ -486,7 +544,7 @@ type RunEvent = {
 ```ts
 type Artifact = {
   id: string;
-  runId: string | null;
+  runId: string;                 // NOT NULL, cascade sur `runs` — aucun artefact hors mission
   direction: "input" | "output";
   filename: string;
   storagePath: string;
@@ -545,12 +603,21 @@ type Artifact = {
   C'est ce qui rend le rafraîchissement de page gratuit (§29).
 - **Reconciler** — au démarrage, toute mission non terminale est réconciliée via `GET /v1/runs/:id`,
   sinon marquée terminale avec une cause explicite. *(Le runtime ne rejoue pas ses événements.)*
-- **Volume partagé** — indispensable : les outils de l'agent s'exécutent sur l'hôte Hermes
-  (`tool_execution: "server"` mesuré).
+- **Volume partagé** — indispensable en transport `direct` : les outils de l'agent s'exécutent sur
+  l'hôte Hermes (`tool_execution: "server"` mesuré).
+- **Canal SSH** *(v0.9)* — en transport `ssh`, l'adapter n'appelle plus `baseUrl` mais l'entrée
+  locale d'un tunnel `-L`. Un **canal unique** par empreinte de cible (`user|host|port|auth`) porte à
+  la fois le port-forward HTTP et le SFTP des artefacts. Deux implémentations derrière la même
+  interface : binaire `ssh` (ControlMaster/ControlPersist) pour l'auth clé/agent, `ssh2` pour l'auth
+  par mot de passe. *Limite connue : le canal est un singleton — changer de cible ou enregistrer la
+  configuration ferme le canal, y compris celui d'une mission en cours.*
+- **Routes du schéma** — `POST /api/runs` et `GET /api/runs/:id/events` datent du spike ; le parcours
+  produit passe par `/api/threads/*` (§14).
 
 ### 12.2 Stack
 Next.js App Router · React · TypeScript strict · Bun · Zod · Drizzle ORM · Postgres ·
-Docker Compose · Caddy en production.
+assistant-ui (rendu du fil) · `ssh2` (transport tunnel, `serverExternalPackages`) ·
+Docker Compose · Caddy en production *(cible — cf. §20)*.
 
 Temps réel : **HTTP + SSE** entre la Console et Hermes (mesuré), **SSE** entre Next.js et le
 navigateur. Le navigateur ne communique jamais directement avec Hermes.
@@ -561,9 +628,10 @@ navigateur. Le navigateur ne communique jamais directement avec Hermes.
 ### 12.3 Organisation du code
 ```text
 apps/web/src/
-├── app/{(auth),(app),api}/
-├── modules/{auth,runtime,agents,runs,artifacts}/
-├── db/  ·  lib/{logger,crypto,errors}/  ·  components/
+├── app/{(console),setup,api}/
+├── modules/{agents,api,artifacts,connectors,runs,runtime,session,settings}/
+│   └── runtime/ssh/   (system-ssh · ssh2-password · ssh-config · errors · types)
+├── db/  ·  lib/{crypto,…}/  ·  components/
 ```
 La découpe `domain/application/infrastructure/ui` n'est utilisée que lorsqu'elle réduit réellement
 le couplage.
@@ -661,6 +729,13 @@ cache côté serveur pendant 60 secondes ; le bouton « Actualiser » force une 
 et partage la requête en cours entre les appels concurrents. L'endpoint Console
 `/api/runtime/providers/openai-codex/auth` pilote le flux local sans exposer les secrets.
 
+> **Divergence v0.9 à résorber.** La slash command `/model <modèle>` (§14, route `/commands`) écrit la
+> valeur brute sur la conversation **et sur l'agent**, sans validation contre le catalogue ni contre
+> l'état d'authentification du provider. Deux chemins de sélection coexistent donc avec des règles
+> différentes, et la portée est globale : l'agent étant partagé, la commande affecte ses missions
+> futures. Cible : `/model` doit passer par la même validation que `PUT /api/runtime/models`, ou
+> déclarer explicitement sa portée.
+
 Les providers qui acceptent une clé manuelle exposent aussi
 `POST /api/runtime/providers/:provider/credentials`. Cette route est **locale uniquement** :
 elle transmet la clé au CLI Hermes par `stdin`, laisse Hermes la stocker dans son propre pool et ne
@@ -718,13 +793,17 @@ type RunEventType =
 
 ```text
 Runtime   GET|PUT /api/runtime  ·  POST /api/runtime/test  ·  POST /api/runtime/restart
+          GET  /api/runtime/ssh-hosts            (v0.9 — alias ~/.ssh/config, lecture seule)
 Modèles   GET|PUT /api/runtime/models
           POST /api/runtime/providers/:provider/credentials
           POST|GET|DELETE /api/runtime/providers/openai-codex/auth
 Agents    GET|POST /api/agents  ·  GET|PATCH /api/agents/:agentId   (archivage via PATCH)
-Threads   GET|POST /api/threads
-          GET  /api/threads/:threadId
-          POST /api/threads/:threadId/messages   (JSON ou multipart + files)
+Connect.  GET /api/connectors  ·  GET|PUT|DELETE /api/connectors/:type
+          POST /api/connectors/:type/test
+Threads   GET|POST /api/threads                  (POST accepte `agentId` ou `agentRef` — mention @)
+          GET|DELETE /api/threads/:threadId
+          POST /api/threads/:threadId/messages   (JSON ou multipart + files ; `?stream=1` -> SSE inline)
+          POST /api/threads/:threadId/commands   (v0.9 — backend des slash commands)
           GET  /api/threads/:threadId/events     (SSE, curseur Console)
 Missions  POST /api/runs/:runId/cancel
           POST /api/runs/:runId/approval
@@ -735,6 +814,14 @@ Santé     GET /api/healthz  ·  GET /api/readyz
 > **Note v0.7.** Protocoles Hermes : `HERMES_PROTOCOL=agent` (défaut, `/v1/runs`, réconciliable)
 > ou `responses` (`/v1/responses`). Fichiers : volume `HERMES_SHARED_WORKDIR` — pas d’upload API
 > Hermes (mesuré 400). Les routes missions legacy du spike restent au backlog.
+>
+> **Note v0.9.** (a) **Aucune route n'est authentifiée** (§17) ; seules `GET /api/files/:fileId`,
+> `POST /api/runtime/restart` et `POST /api/runtime/providers/:provider/credentials` appliquent une
+> garde same-origin, qui laisse par ailleurs passer toute requête sans en-tête `Origin`.
+> (b) `GET /api/threads/:threadId/events` existe et gère `Last-Event-ID`, mais **n'est consommée par
+> aucun client** : l'UI streame en ligne via `?stream=1` puis réconcilie par polling du snapshot.
+> (c) `POST /api/files` n'est câblé à aucun composant — l'upload réel passe par
+> `POST /api/threads/:threadId/messages` en multipart.
 
 ---
 
@@ -791,25 +878,49 @@ inputs are not supported`). Le champ `resources` de `POST /v1/runs` est accepté
 (`tool_execution: "server"`), et dispose de `read_file`, `write_file`, `search_files`, `terminal`.
 
 ```text
-1. L'utilisateur dépose des fichiers        → Console les écrit dans /work/runs/<runId>/in/
-2. La Console construit le prompt           → cite les chemins absolus des fichiers d'entrée
-3. L'agent lit avec read_file / terminal    → travaille, écrit dans /work/runs/<runId>/out/
-4. À l'événement terminal, la Console scanne /work/runs/<runId>/out/
-5. Chaque fichier trouvé devient un Artifact (direction: "output", checksum SHA-256)
+1. L'utilisateur dépose des fichiers        → Console les écrit dans <workdir>/runs/<runId>/in/
+2. (transport `ssh`) push SFTP de in/       → <remoteWorkdir>/runs/<runId>/in/ avant le run
+3. La Console construit le prompt           → cite les chemins absolus VUS PAR HERMES (POSIX)
+4. L'agent lit avec read_file / terminal    → travaille, écrit dans <…>/runs/<runId>/out/
+5. (transport `ssh`) pull SFTP de out/      → miroir local, avant le scan
+6. À l'événement terminal, la Console scanne <workdir>/runs/<runId>/out/
+7. Chaque fichier trouvé devient un Artifact (direction: "output", checksum SHA-256)
+
+> **Limite v0.9 :** le prompt ne cite le répertoire `out/` que s'il existe au moins un fichier
+> d'entrée. Une mission sans pièce jointe n'apprend donc jamais où écrire ses sorties, et le scan de
+> `out/` ne trouve rien. Les sorties ne sont scannées qu'à la **complétion** : un run annulé ou en
+> échec perd les fichiers déjà produits, et le workdir distant n'est jamais purgé.
 ```
 
-**Conséquence infra :** `web` et `hermes` **doivent partager un volume** — absent du compose de la
-v0.1. C'est une dépendance dure, à valider en Docker (non testé par le spike).
+**Conséquence infra :** en transport `direct`, `web` et `hermes` **doivent partager un volume** —
+absent du compose de la v0.1. C'est une dépendance dure, à valider en Docker (non testé par le spike).
+
+**Transport `ssh` (v0.9) :** le volume partagé est remplacé par un **miroir**. La racine distante est
+`runtime_config.remote_workdir` (défaut `/tmp/hermes-console-work`) ; la Console pousse `in/` avant le
+run et rapatrie `out/` avant le scan, via le même canal SSH que le port-forward. *Dettes connues :*
+les noms rapatriés ne passent ni par `sanitizeFilename` ni par `assertWithinDir` (contrairement au
+dépôt) ; une seule entrée non téléchargeable (sous-dossier, `.`/`..`, permission) fait échouer tout le
+rapatriement, donc tout le scan ; le chemin distant de `scp` n'est pas quoté.
 
 **Contraintes conservées :** taille max par fichier et par mission, nombre max de fichiers, noms
 normalisés, détection des traversées de chemin, checksum SHA-256, stockage hors répertoire public,
 téléchargement via route authentifiée, aucune exécution directe.
 
+**État v0.9 — portée réelle des contraintes.** Quotas, normalisation des noms et contrôle de
+traversée sont implémentés et testés **sur le sens entrant uniquement** (`depositInputFile`). Le sens
+sortant n'a ni limite de taille, ni limite de nombre, ni normalisation de nom, et le checksum charge
+le fichier entier en mémoire (`sizeBytes` est par ailleurs un `integer` Postgres). Aucun contrôle du
+type MIME : celui déclaré par le client est stocké puis renvoyé en `Content-Type`. Le téléchargement
+**n'est pas authentifié** (§17) : `GET /api/files/:fileId` n'a qu'une garde same-origin et aucun
+contrôle d'appartenance run/thread.
+
 ```env
 MAX_FILE_SIZE_BYTES=20971520
 MAX_RUN_FILES_TOTAL_BYTES=104857600
 MAX_RUN_FILE_COUNT=20
-HERMES_SHARED_WORKDIR=/work
+HERMES_SHARED_WORKDIR=/tmp/hermes-console-work   # défaut réel du code ; /work en cible Compose
+# Transport `ssh` : la racine distante n'est PAS une variable d'environnement.
+# Elle est stockée en base (runtime_config.remote_workdir, défaut /tmp/hermes-console-work).
 ```
 
 > **Risque — corrigé en v0.3.** L'agent dispose d'un terminal sur l'hôte Hermes, et son périmètre est
@@ -839,6 +950,18 @@ production, protection CSRF, limitation des tentatives, expiration des sessions,
 produit accessible sans authentification, **création du premier compte atomique** (contrainte
 d'unicité en base).
 
+> **État v0.9 — non implémenté, et c'est le blocage principal.** Aucune table `users`, aucun
+> `middleware.ts`, aucune session : **toutes les routes API et toutes les pages sont anonymes**.
+> L'écran `/setup` affiche un bloc « Compte administrateur » dont les champs n'ont ni `name`, ni
+> état, ni formulaire, ni bouton de soumission — il ne crée rien et ne doit pas être lu comme une
+> protection. La seule garde existante, `assertSameOriginMutation`, n'est appliquée qu'à trois routes
+> et laisse passer toute requête dépourvue d'en-tête `Origin` (donc tout client non-navigateur).
+>
+> **Conséquence opérationnelle :** tant que cette section n'est pas livrée, la Console ne doit être
+> exposée ni sur Internet ni sur un LAN — bind sur `127.0.0.1`, ou authentification imposée en amont
+> par un reverse-proxy. Créer une mission sans authentification équivaut à exécuter des commandes
+> sous le compte du runtime Hermes (§18.1, chemin *fail-open*).
+
 ---
 
 ## 18. Sécurité
@@ -849,9 +972,24 @@ Hermes directement.
 *Limite assumée :* le chiffrement protège contre un dump de base, **pas** contre une compromission de
 l'application, qui détient la clé. Rotation de clé = ressaisie du token dans `/settings/runtime`.
 
+**Second secret (v0.9).** Le mot de passe SSH (`encrypted_ssh_password`) est chiffré par le même
+mécanisme et n'est jamais renvoyé au navigateur (seul le booléen `sshPasswordConfigured` sort). La
+règle de rotation s'applique donc à **deux** secrets, tous deux à ressaisir dans `/settings/runtime`.
+*Dettes connues :* `APP_ENCRYPTION_KEY` accepte n'importe quelle passphrase, hachée en SHA-256 sans
+KDF ni sel ni longueur minimale, et `.env.example` livre un placeholder utilisable tel quel ; les
+routes qui déchiffrent ces secrets pour un test de connexion acceptent une cible fournie par
+l'appelant, sans garde d'origine.
+
 **Réseau.** Postgres et Hermes n'exposent aucun port public ; seule la Console ou Caddy publie un
 port ; réseau Docker interne partagé. `/v1/capabilities` renvoie `cors: false` : le runtime n'est
 de toute façon pas conçu pour un accès navigateur direct.
+
+**Réseau — transport `ssh` (v0.9).** Le modèle change : la Console ouvre une connexion SSH
+**sortante** et expose un forward en loopback vers un Hermes situé hors du réseau Docker. Ce chemin
+implique une gestion des clés d'hôte — assurée par `known_hosts` sur le chemin `agent`, **absente**
+sur le chemin `ssh2`/mot de passe — et un `ControlPath` de multiplexage dans un `/tmp` partagé, dont
+la propriété n'est pas vérifiée. L'URL distante doit être `http:` : le forward transporte du TCP brut
+et un `https` casserait SNI et certificat (`SSH_REMOTE_URL_UNSUPPORTED`).
 
 ### 18.1 Confinement du runtime — **exigence, pas commodité** *(nouveau en v0.3)*
 
@@ -866,6 +1004,11 @@ Règles v0.1 qui en découlent :
 
 1. **Hermes tourne en conteneur, jamais en natif** sur la machine de l'utilisateur. Le compose §20
    n'est pas une option de déploiement parmi d'autres : c'est le périmètre de sécurité.
+   > **Écart v0.9 à traiter.** Le transport `ssh` connecte la Console à un Hermes **arbitraire** sur
+   > une machine distante (racine de travail par défaut `/tmp/hermes-console-work`), sans vérifier ni
+   > rappeler cette contrainte. Le confinement de l'hôte distant reste entièrement à la charge de
+   > l'opérateur. Exigence ouverte : afficher l'avertissement de confinement dans l'UI du mode tunnel,
+   > au même titre que l'avertissement de la règle 4.
 2. Le conteneur Hermes ne monte **que** son volume de configuration et le volume de travail des
    missions. Aucun montage du home de l'utilisateur, aucun bind sur le système hôte.
 3. Le socket Docker n'est **jamais** exposé au conteneur Hermes.
@@ -968,6 +1111,14 @@ volumes: { postgres-data:, files-data:, hermes-data:, hermes-work:, caddy-data: 
 **Différences avec la v0.1 :** port `8642` et non `9119` ; `API_SERVER_ENABLED` requis ; volume
 `hermes-work` monté **des deux côtés** ; variables `HERMES_DASHBOARD_*` supprimées (mauvaise surface).
 
+> **État v0.9 — cible, pas livraison.** Aucun `Dockerfile`, `compose.yml` ni `Caddyfile` n'existe dans
+> le dépôt : cette section décrit la Phase 5, non l'existant. Le développement passe par le
+> `Makefile` (§21) et un Postgres partagé local.
+>
+> **Transport `ssh` :** ce compose décrit le transport `direct`. En mode tunnel, `hermes` n'est pas un
+> service du compose et le volume `hermes-work` n'est pas partagé — il est remplacé par le miroir SFTP
+> (§16). `SESSION_SECRET` est listé pour mémoire : aucune session n'existe encore (§17).
+
 > **En développement sur cette machine**, ne pas déployer un Postgres dédié : réutiliser
 > `infra-postgres` sur le réseau `dev-shared-net` (stack `dev-infra` déjà en place).
 
@@ -981,24 +1132,36 @@ volumes: { postgres-data:, files-data:, hermes-data:, hermes-work:, caddy-data: 
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
+    "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "bun run scripts/migrate.ts",
-    "check": "bun run typecheck && bun run lint && bun run test && bun run build"
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "bun run scripts/seed-hermes-agent.ts"
   }
 }
 ```
 
+**Entrée unique : le `Makefile`** *(v0.9)*. `make setup` (install + env + workdir + vérification
+Postgres + migrations), `make dev`, `make check` (lint + typecheck + test), `make db-*`,
+`make health` / `make ready`, `make spike-probe` / `make fake-llm`. `make env` génère
+`apps/web/.env.local` depuis `.env.example` avec une `APP_ENCRYPTION_KEY` fraîche.
+`test:e2e` n'existe pas : aucun harnais E2E n'est installé (§22).
+
 ```text
-.env.example
-├── DATABASE_URL             ├── HERMES_BASE_URL          (http://hermes:8642)
-├── APP_ENCRYPTION_KEY       ├── HERMES_RUNTIME_TOKEN     (= API_SERVER_KEY)
-├── SESSION_SECRET           ├── HERMES_SHARED_WORKDIR
-├── POSTGRES_PASSWORD        └── FILE_STORAGE_PATH
-└── HERMES_IMAGE_TAG
+```
+
+```text
+apps/web/.env.example                (réel — copié en .env.local par `make env`)
+├── DATABASE_URL             ├── HERMES_BASE_URL       (fallback si aucune config en base)
+├── APP_ENCRYPTION_KEY       ├── HERMES_RUNTIME_TOKEN  (= API_SERVER_KEY)
+│                            ├── HERMES_PROTOCOL       (agent | responses)
+│                            └── HERMES_SHARED_WORKDIR (/tmp/hermes-console-work)
+└── MAX_FILE_SIZE_BYTES · MAX_RUN_FILES_TOTAL_BYTES · MAX_RUN_FILE_COUNT   (commentés)
+
+La configuration du tunnel SSH n'a AUCUNE variable d'environnement : elle vit exclusivement en base
+(`runtime_config`) et se saisit dans Paramètres → Runtime. `SESSION_SECRET`, `FILE_STORAGE_PATH`,
+`POSTGRES_PASSWORD` et `HERMES_IMAGE_TAG` relèvent de la cible Compose (§20), pas du dev local.
 ```
 
 ---
@@ -1024,6 +1187,22 @@ run échoué, fichier trop volumineux, artefact introuvable, redémarrage en cou
 
 > Le mock runtime est construit à partir de `spike/fixtures/` : les tests E2E sont déterministes et
 > ne consomment aucun token.
+
+**État v0.9 — écart entre le plan et l'existant.** La suite réelle est **unitaire uniquement**
+(23 fichiers `*.test.ts`, 95 tests, verte via `make test`). **Aucun test d'intégration contre un mock
+runtime, aucun test E2E** : `playwright` n'est pas installé et le parcours critique ci-dessus n'est
+pas automatisé.
+
+Couvert : mapping et normalisation des événements, coalescing, décision de réconciliation,
+chiffrement, chemins d'artefacts et traversées, décisions d'annulation et de retry, garde
+same-origin, parser de slash commands, parser de mentions, refus `/agent*` en session chat, mapping
+des erreurs SSH et parsing de `~/.ssh/config` (28 tests).
+
+**Angles morts explicites :** cycle de vie du tunnel (`forward`, `close`, `probeForward`,
+concurrence), opérations SFTP et `remote-sync`, `scanOutputArtifacts`, branche `remoteRoot` du
+prompt, chemins d'erreur de `executeSessionCommand` (`/model`, `/agent create|edit|switch`,
+`/connector status`), commandes malformées. C'est-à-dire : **tout le code qui manipule des process,
+des sockets ou des fichiers distants n'est couvert par aucun test.**
 
 ---
 
@@ -1109,8 +1288,20 @@ messages multipart + attachment composer. Volume : `HERMES_SHARED_WORKDIR` (déf
 download stricte, polish multi-upload.
 *Sortie :* une mission peut recevoir et produire des documents.
 
+**Phase 4 bis — Runtime distant + control-plane dans le chat.** ✅ **SLICE IMPLÉMENTÉE** — 30-07-2026.
+Transport `direct` \| `ssh` persisté (migrations `0008`/`0009`), tunnel `-L` par clé/agent (binaire
+`ssh`, ControlMaster) ou par mot de passe (`ssh2`), suggestion d'hôtes `~/.ssh/config`, miroir SFTP
+des artefacts (`remote_workdir`), codes d'erreur SSH métier, second secret chiffré. Côté chat :
+mention `@<slug>` dispatchée en mission `/runs`, route `POST /api/threads/:id/commands`,
+`/connector status`, coque `/chat` persistante et streaming inline `?stream=1`.
+*Sortie :* une Console locale peut piloter un Hermes situé sur une autre machine.
+*Reste ouvert :* vérification de clé d'hôte côté `ssh2`, sérialisation du tunnel, quotas de sortie,
+normalisation des noms rapatriés, collisions `UNIQUE(run_id, sequence)` sur les chemins de reprise,
+tests du tunnel et de la synchronisation distante.
+
 **Phase 5 — Livraison.** Mock runtime issu des fixtures, tests E2E, logs structurés, Docker Compose
-de production, Caddy.
+de production, Caddy — **et l'authentification (§17), qui devient le prérequis bloquant** : aucun
+Dockerfile ni compose n'existe encore, aucun harnais E2E n'est installé.
 *Sortie :* la v0.1 est montrable et installable chez un premier utilisateur.
 
 > Changement de séquencement : la Phase 1 de la v0.1 (config + chiffrement + healthcheck + adapter)
@@ -1183,6 +1374,20 @@ le runtime Hermes doit tourner **confiné en conteneur** selon les règles §18.
 avertir explicitement que l'agent exécute des commandes. Tant que ce point n'est pas traité, la v0.1
 reste utilisable par son auteur uniquement.
 
+> **État v0.9 — 6 critères sur 11 échouent.** Ne sont **pas** tenus : création de compte (§17, rien
+> d'implémenté) ; réconciliation des missions au redémarrage (le filet existe mais lève une
+> violation `UNIQUE(run_id, sequence)` avant d'atteindre `failRun` — le run reste `running`, et la
+> passe de réconciliation, mémoïsée sur `globalThis`, n'est jamais rejouée dans le process) ;
+> démarrage par Docker Compose (aucun `Dockerfile`, `compose.yml` ni `Caddyfile` dans le dépôt) ;
+> couverture E2E du parcours principal (aucun harnais installé — la suite unitaire est verte,
+> 95/95, mais ne couvre pas le parcours) ; avertissement d'exécution de commandes à la
+> création d'un agent (§18.1 règle 4 — présent uniquement dans `/settings/security`) ; production
+> d'artefacts de sortie dans le cas nominal (les chemins `out/` ne sont annoncés dans le prompt que
+> si la mission porte au moins une pièce jointe).
+>
+> Sont tenus : suivi des événements, rafraîchissement sans perte de run, résultat et téléchargement,
+> historique, survie des données au redémarrage, absence de CLI en usage normal.
+
 ---
 
 ## 30. Résumé exécutif
@@ -1199,9 +1404,13 @@ Un Slack-for-agents + Un Linear-for-agents + Un SaaS multi-tenant + Un multi-har
 + Auth multi-user + Compose prod installable (Phase 5)
 ```
 
-**Axe v0.7 en une phrase :** la Console est la couche d’exploitation agentique — missions
-honnêtes, fichiers partagés, agents configurables — générale et extensible, pas un wrapper CLI
-ni un clone de workspace/PM.
+**Axe v0.9 en une phrase :** la Console est la couche d’exploitation agentique — missions
+honnêtes, fichiers partagés, agents configurables, runtime joignable où qu’il soit — générale et
+extensible, pas un wrapper CLI ni un clone de workspace/PM.
+
+**Réserve v0.9 :** ce résumé décrit le produit tel qu’il est conçu, pas tel qu’il est déployable.
+Sans authentification (§17), sans Compose (§20) et avec un filet de réconciliation non fonctionnel
+(§29), la Console reste utilisable **par son auteur, en `127.0.0.1`, uniquement**.
 
 ---
 
