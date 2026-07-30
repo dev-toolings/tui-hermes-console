@@ -63,15 +63,33 @@ export function createSystemSshChannel(target: SshTarget): SshChannel {
   let master: ChildProcess | null = null;
   let stderr = "";
   let forwarded: { url: string; remote: string; port: number } | null = null;
+  let forwarding: Promise<string> | null = null;
 
+  /**
+   * Sérialisé : `openForward()` commence par `close()`, qui tue le ControlMaster
+   * partagé. Sans ce verrou, deux appels concurrents — le cas normal, la surface
+   * de suivi interrogeant le runtime pendant qu'une mission stream — se coupent
+   * mutuellement le tunnel.
+   */
   async function forward(remoteHost: string, remotePort: number): Promise<string> {
+    if (forwarding) return forwarding;
+
     const remote = `${remoteHost}:${remotePort}`;
     // Le master étant détaché, son process enfant n'est pas un indicateur de vie :
     // seul le port local qui répond encore l'est.
     if (forwarded && forwarded.remote === remote && (await isListening(forwarded.port))) {
       return forwarded.url;
     }
+    // Une autre requête a pu démarrer l'ouverture pendant le `await` ci-dessus.
+    if (forwarding) return forwarding;
 
+    forwarding = openForward(remote).finally(() => {
+      forwarding = null;
+    });
+    return forwarding;
+  }
+
+  async function openForward(remote: string): Promise<string> {
     close();
     mkdirSync(CONTROL_DIR, { recursive: true, mode: 0o700 });
     const localPort = await reserveLocalPort();

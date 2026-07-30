@@ -2,7 +2,8 @@ import { createReadStream, createWriteStream } from "node:fs";
 import net from "node:net";
 import { pipeline } from "node:stream/promises";
 import { Client, type SFTPWrapper } from "ssh2";
-import { mapForwardError, mapSshError } from "./errors";
+import { mapForwardError, mapSshError, sshHostKeyRejected } from "./errors";
+import { hostLookupKey, loadKnownHosts, verifyHostKey } from "./known-hosts";
 import type { SftpOps, SshChannel, SshTarget } from "./types";
 
 const CONNECT_TIMEOUT_MS = 12_000;
@@ -15,6 +16,7 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
   let connecting: Promise<Client> | null = null;
   let server: net.Server | null = null;
   let forwarded: { url: string; remote: string } | null = null;
+  let sftpHandle: SFTPWrapper | null = null;
 
   function connect(): Promise<Client> {
     if (client) return Promise.resolve(client);
@@ -23,6 +25,7 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
     connecting = new Promise<Client>((resolve, reject) => {
       const next = new Client();
       let settled = false;
+      let hostKeyError: Error | null = null;
 
       next.on("ready", () => {
         settled = true;
@@ -32,13 +35,15 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
       next.on("error", (error) => {
         if (settled) return;
         settled = true;
-        reject(mapSshError(error));
+        reject(hostKeyError ?? mapSshError(error));
       });
       next.on("close", () => {
         if (client === next) close();
         if (!settled) {
           settled = true;
-          reject(mapSshError(new Error("connexion SSH fermée")));
+          // Un refus de clé d'hôte ferme la connexion : sans ce report, l'échec
+          // remonterait en « connexion SSH fermée », message qui masque la cause.
+          reject(hostKeyError ?? mapSshError(new Error("connexion SSH fermée")));
         }
       });
 
@@ -50,6 +55,18 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
           password: target.password,
           readyTimeout: CONNECT_TIMEOUT_MS,
           keepaliveInterval: KEEPALIVE_MS,
+          // Sans ce verificateur, ssh2 accepte n'importe quelle cle d'hote et le
+          // mot de passe part au premier serveur qui repond. On refuse un hote
+          // inconnu, comme le fait `ssh -o BatchMode=yes` sur l'autre chemin.
+          hostVerifier: (key: Buffer, callback: (accepted: boolean) => void) => {
+            const verdict = verifyHostKey(
+              loadKnownHosts(),
+              hostLookupKey(target.host, target.port),
+              key.toString("base64"),
+            );
+            if (!verdict.ok) hostKeyError = sshHostKeyRejected(verdict.reason);
+            callback(verdict.ok);
+          },
         });
       } catch (error) {
         settled = true;
@@ -116,9 +133,17 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
 
   async function sftp(): Promise<SftpOps> {
     const conn = await connect();
-    const handle = await new Promise<SFTPWrapper>((resolve, reject) => {
-      conn.sftp((error, wrapper) => (error ? reject(mapSshError(error)) : resolve(wrapper)));
-    });
+    // Une session SFTP par appel épuisait `MaxSessions` (10 par défaut) au bout
+    // de quelques missions : on en garde une seule, rouverte si elle se ferme.
+    if (!sftpHandle) {
+      sftpHandle = await new Promise<SFTPWrapper>((resolve, reject) => {
+        conn.sftp((error, wrapper) => (error ? reject(mapSshError(error)) : resolve(wrapper)));
+      });
+      sftpHandle.once("close", () => {
+        sftpHandle = null;
+      });
+    }
+    const handle = sftpHandle;
 
     return {
       async mkdirp(remotePath: string) {
@@ -148,6 +173,7 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
 
   function close() {
     forwarded = null;
+    sftpHandle = null;
     server?.close();
     server = null;
     const conn = client;

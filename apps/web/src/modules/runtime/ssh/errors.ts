@@ -98,6 +98,18 @@ export function mapSystemSshStderr(stderr: string, remote: string): HermesRuntim
   );
 }
 
+/** Clé d'hôte refusée côté `ssh2` — même code produit que le chemin `agent`,
+ *  pour que l'utilisateur voie la même erreur quel que soit le mode d'auth. */
+export function sshHostKeyRejected(reason: "unknown_host" | "key_mismatch" | "revoked") {
+  const message =
+    reason === "key_mismatch"
+      ? "La clé d’hôte SSH ne correspond pas à celle enregistrée dans known_hosts. Connexion interrompue : quelqu’un peut intercepter le trafic."
+      : reason === "revoked"
+        ? "La clé d’hôte SSH de ce serveur est marquée comme révoquée dans known_hosts."
+        : "Clé d’hôte inconnue. Connectez-vous une fois manuellement (`ssh <hôte>`) pour la valider avant d’utiliser le tunnel.";
+  return new HermesRuntimeError(message, 502, "SSH_HOST_KEY_UNKNOWN");
+}
+
 export function sshBinaryMissing() {
   return new HermesRuntimeError(
     "Binaire `ssh` introuvable sur cette machine. Installez OpenSSH ou basculez sur l’authentification par mot de passe.",
