@@ -1,4 +1,4 @@
-import { LockKeyholeIcon, ServerIcon, UserRoundIcon } from "lucide-react";
+import { LockKeyholeIcon, ServerIcon, TriangleAlertIcon } from "lucide-react";
 import { RuntimeConnectionForm } from "@/components/forms/runtime-connection-form";
 import { Card, CardSurface } from "@/components/ui/boardui";
 
@@ -18,8 +18,8 @@ export default function SetupPage() {
           </div>
 
           <ol className="my-10 space-y-5">
-            <Step number="01" icon={UserRoundIcon} title="Compte administrateur">
-              Créez l’autorité locale de la Console.
+            <Step number="01" icon={TriangleAlertIcon} title="Accès non protégé">
+              L’authentification n’est pas encore livrée. Gardez la Console sur 127.0.0.1.
             </Step>
             <Step number="02" icon={ServerIcon} title="Runtime Hermes">
               Connectez une installation locale, privée ou distante.
@@ -39,27 +39,26 @@ export default function SetupPage() {
             <p className="font-mono text-[0.6875rem] font-semibold text-primary">CONFIGURATION 01</p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight">Préparer la Console</h1>
             <p className="mt-2 max-w-2xl text-[0.8125rem] leading-6 text-muted-foreground">
-              Cette première passe définit l’administrateur et la frontière réseau. Elle ne modifie
-              jamais une installation Hermes existante.
+              Cette première passe définit la frontière réseau. Elle ne modifie jamais une
+              installation Hermes existante.
             </p>
 
             <Card className="mt-6">
               <CardSurface>
-                <h2 className="text-sm font-semibold">Compte administrateur</h2>
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <Field label="Nom">
-                    <input placeholder="Administrateur" className={input} />
-                  </Field>
-                  <Field label="Adresse e-mail">
-                    <input type="email" placeholder="admin@example.com" className={input} />
-                  </Field>
-                  <Field label="Mot de passe">
-                    <input type="password" autoComplete="new-password" className={input} />
-                  </Field>
-                  <Field label="Confirmation">
-                    <input type="password" autoComplete="new-password" className={input} />
-                  </Field>
-                </div>
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-destructive">
+                  <TriangleAlertIcon className="size-4 shrink-0" aria-hidden />
+                  La Console n’a pas encore d’authentification
+                </h2>
+                <p className="mt-3 text-[0.8125rem] leading-6 text-muted-foreground">
+                  Il n’existe ni compte administrateur, ni session : <strong>toutes les pages et
+                  toutes les routes API sont accessibles sans identification</strong>. Créer une
+                  mission revient à exécuter des commandes sous le compte du runtime Hermes.
+                </p>
+                <p className="mt-3 text-[0.8125rem] leading-6 text-muted-foreground">
+                  N’exposez cette Console ni sur Internet ni sur un réseau local partagé. Servez-la
+                  sur <code className="font-mono text-[0.75rem]">127.0.0.1</code>, ou placez une
+                  authentification en amont dans un reverse-proxy.
+                </p>
               </CardSurface>
             </Card>
 
@@ -101,14 +100,3 @@ function Step({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="text-[0.75rem] font-medium">{label}</span>
-      <span className="mt-2 block">{children}</span>
-    </label>
-  );
-}
-
-const input =
-  "min-h-10 w-full rounded-[10px] border border-input bg-card px-3 text-[0.8125rem] shadow-board-xs outline-none focus:border-ring focus:ring-2 focus:ring-ring/20";
