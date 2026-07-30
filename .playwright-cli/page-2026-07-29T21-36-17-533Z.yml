@@ -1,0 +1,30 @@
+- complementary:
+  - link "H Hermes Console Runtime operations" [ref=e1]
+  - button "Replier la navigation" [ref=e2]
+  - button "Recherche rapide ⌘K" [ref=e3]
+  - navigation:
+    - link "Aperçu" [ref=e4]
+    - link "Agents" [ref=e5]
+    - link "Missions" [ref=e6]
+    - link "Artefacts" [ref=e7]
+  - link "Runtime Hermes" [ref=e8]
+  - link "Paramètres" [ref=e9]
+  - link "Aide" [ref=e10]
+  - link "Runtime… Vérification" [ref=e11]
+- banner:
+  - navigation "Fil d’Ariane"
+    - link "Paramètres" [ref=e12]
+  - heading "Modèles" [level=1]
+- main:
+  - navigation "Sections des paramètres"
+    - link "Vue d’ensemble" [ref=e13]
+    - link "Apparence" [ref=e14]
+    - link "Runtime Hermes" [ref=e15]
+    - link "Modèles" [ref=e16]
+    - link "Notifications" [ref=e17]
+    - link "Conservation" [ref=e18]
+    - link "Sécurité" [ref=e19]
+  - heading "Modèles" [level=2]
+  - button "Actualiser les modèles Hermes" [ref=e20 disabled]
+- button "Choisir la disposition" [ref=e21]
+- button "Open Next.js Dev Tools" [ref=e22]

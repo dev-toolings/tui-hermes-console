@@ -1,0 +1,51 @@
+{
+  "status": "ok",
+  "readiness": {
+    "status": "ok",
+    "checks": {
+      "state_db": {
+        "status": "ok"
+      },
+      "config": {
+        "status": "ok"
+      },
+      "model": {
+        "status": "ok"
+      },
+      "disk": {
+        "status": "ok",
+        "used_percent": 43.5,
+        "free_bytes": 251682312192
+      },
+      "gateway": {
+        "status": "ok",
+        "state": "running",
+        "connected_platforms": 1,
+        "platforms": 1
+      },
+      "background_queues": {
+        "status": "ok",
+        "active_api_runs": 0,
+        "process_completions": 0,
+        "active_delegations": 0
+      }
+    }
+  },
+  "platform": "hermes-agent",
+  "version": "0.19.0",
+  "gateway_state": "running",
+  "platforms": {
+    "api_server": {
+      "state": "connected",
+      "error_code": null,
+      "error_message": null,
+      "updated_at": "2026-07-29T10:57:24.217056+00:00"
+    }
+  },
+  "active_agents": 0,
+  "gateway_busy": false,
+  "gateway_drainable": true,
+  "exit_reason": null,
+  "updated_at": "2026-07-29T10:57:24.218883+00:00",
+  "pid": 804537
+}

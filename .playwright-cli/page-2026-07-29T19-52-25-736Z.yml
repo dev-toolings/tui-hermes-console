@@ -1,0 +1,20 @@
+- button "Fermer la navigation" [ref=e1]
+- complementary:
+  - link "H Hermes Console Runtime operations" [ref=e2]
+  - button "Fermer la navigation" [ref=e3]
+  - button "Recherche rapide ⌘K" [ref=e4]
+  - navigation:
+    - link "Aperçu" [ref=e5]
+    - link "Agents" [ref=e6]
+    - link "Missions" [ref=e7]
+    - link "Artefacts" [ref=e8]
+  - link "Runtime Hermes" [ref=e9]
+  - link "Paramètres" [ref=e10]
+  - link "Aide" [ref=e11]
+  - link "Runtime… Vérification" [ref=e12]
+- main:
+  - tab "Conversation" [ref=e13]
+  - tab "Détails" [ref=e14]
+  - main "Conversation avec Hermes"
+- button "Choisir la disposition" [ref=e15]
+- button "Open Next.js Dev Tools" [ref=e16]

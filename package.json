@@ -1,0 +1,19 @@
+{
+  "name": "tui-hermes-console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "bun run --filter web build",
+    "dev": "bun run --filter web dev",
+    "lint": "bun run --filter web lint",
+    "typecheck": "bun run --filter web typecheck",
+    "test": "bun run --filter web test",
+    "db:generate": "bun run --filter web db:generate",
+    "db:migrate": "bun run --filter web db:migrate"
+  }
+}

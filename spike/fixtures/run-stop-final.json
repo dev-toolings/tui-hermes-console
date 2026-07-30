@@ -1,0 +1,10 @@
+{
+  "object": "hermes.run",
+  "run_id": "run_7b1dd344519f4eca9b06798cc4a357ba",
+  "status": "cancelled",
+  "updated_at": 1785322811.9012642,
+  "created_at": 1785322808.8149986,
+  "session_id": "run_7b1dd344519f4eca9b06798cc4a357ba",
+  "model": "hermes-agent",
+  "last_event": "run.cancelled"
+}

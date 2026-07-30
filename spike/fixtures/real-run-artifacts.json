@@ -1,0 +1,12 @@
+{
+  "runDir": "/tmp/hermes-console-spike/runs/spike-1785324117689",
+  "outFiles": [
+    "total.txt"
+  ],
+  "artifacts": [
+    {
+      "filename": "total.txt",
+      "content": "20\n"
+    }
+  ]
+}

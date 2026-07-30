@@ -1,0 +1,12 @@
+{
+  "auto_started": false,
+  "chapters": null,
+  "filename": ".playwright-cli/hermes-transition-before.mp4",
+  "frames_captured": 0,
+  "frames_dir": ".playwright-cli/frames",
+  "playwright_compatible": false,
+  "requested_size": "1440x1000",
+  "source": "",
+  "started_at": "2026-07-29T19:31:20Z",
+  "stopped_at": "2026-07-29T19:31:36Z"
+}

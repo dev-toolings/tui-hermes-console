@@ -1,0 +1,151 @@
+{
+  "runId": "run_37a54505584e4ab5929607213bb2cd10",
+  "approvalEvent": null,
+  "events": [
+    {
+      "event": "tool.started",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324210.5656862,
+      "tool": "terminal",
+      "preview": "rm -f /tmp/hermes-spike-deleteme.txt + 1 command"
+    },
+    {
+      "event": "tool.completed",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324211.7970273,
+      "tool": "terminal",
+      "duration": 1.228,
+      "error": false
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.6044655,
+      "delta": "\n\nF"
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.6047533,
+      "delta": "ichier"
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.60496,
+      "delta": " supprim"
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.6051216,
+      "delta": "é"
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.6052623,
+      "delta": " :"
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.6054013,
+      "delta": " /"
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.605542,
+      "delta": "tmp"
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.6056845,
+      "delta": "/her"
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.6058784,
+      "delta": "mes"
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.6060462,
+      "delta": "-sp"
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.606996,
+      "delta": "ike"
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.6072598,
+      "delta": "-de"
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.6075082,
+      "delta": "le"
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.6077614,
+      "delta": "tem"
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.6080153,
+      "delta": "e"
+    },
+    {
+      "event": "message.delta",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.608271,
+      "delta": ".txt"
+    },
+    {
+      "event": "reasoning.available",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.614927,
+      "text": "Fichier supprimé : /tmp/hermes-spike-deleteme.txt"
+    },
+    {
+      "event": "run.completed",
+      "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+      "timestamp": 1785324212.62715,
+      "output": "Fichier supprimé : /tmp/hermes-spike-deleteme.txt",
+      "usage": {
+        "input_tokens": 24891,
+        "output_tokens": 82,
+        "total_tokens": 24973
+      }
+    }
+  ],
+  "final": {
+    "object": "hermes.run",
+    "run_id": "run_37a54505584e4ab5929607213bb2cd10",
+    "status": "completed",
+    "updated_at": 1785324212.6271603,
+    "created_at": 1785324207.7904284,
+    "session_id": "run_37a54505584e4ab5929607213bb2cd10",
+    "model": "hermes-agent",
+    "last_event": "run.completed",
+    "output": "Fichier supprimé : /tmp/hermes-spike-deleteme.txt",
+    "usage": {
+      "input_tokens": 24891,
+      "output_tokens": 82,
+      "total_tokens": 24973
+    }
+  },
+  "fileSurvived": false
+}

@@ -1,0 +1,158 @@
+- complementary:
+  - link "H Hermes Console Runtime operations" [ref=e1]
+    - text: "H"
+    - text: "Hermes Console"
+    - text: "Runtime operations"
+  - button "Replier la navigation" [ref=e2]
+  - button "Recherche rapide Ctrl K" [ref=e3]
+    - text: "Recherche rapide"
+    - text: "Ctrl K"
+  - navigation:
+    - link "Aperçu" [ref=e4]
+      - text: "Aperçu"
+    - link "Agents" [ref=e5]
+      - text: "Agents"
+    - link "Missions" [ref=e6]
+      - text: "Missions"
+    - link "Artefacts" [ref=e7]
+      - text: "Artefacts"
+    - link "Runtime Hermes" [ref=e8]
+      - text: "Runtime Hermes"
+    - link "Paramètres" [ref=e9]
+      - text: "Paramètres"
+    - link "Aide" [ref=e10]
+      - text: "Aide"
+  - link "Connecté · 0.19.0 http://127.0.0.1:8642" [ref=e11]
+    - text: "Connecté · 0.19.0"
+    - text: "http://127.0.0.1:8642"
+  - button "Activer le thème sombre" [ref=e12]
+  - text: "A"
+  - text: "Administrateur"
+  - text: "Console locale"
+- main:
+  - heading "Agent test wiring" [level=1]
+    - text: "Agent test wiring"
+  - text: "hermes-agent"
+  - text: "Terminée"
+  - text: "2.7 s"
+  - text: "run_2a86f49ca0"
+  - text: "…"
+  - main "Conversation avec Hermes"
+    - text: "Dis juste OK et confirme que tu reçois ce message."
+    - paragraph:
+      - text: "OK, je reçois ton message. Console branchée."
+    - text: "Tu es avec quel LLM ?"
+    - paragraph:
+      - text: "Je tourne avec le modèle gpt-5.4-nano."
+    - text: "Hello"
+    - paragraph:
+      - text: "Hello ! Je reçois ton message. Console branchée."
+    - text: "sort moi ta plus belle prose"
+    - paragraph:
+      - text: "Dans le silence qui précède le jour, il y a une promesse : celle que chaque mot, quand il tombe au bon endroit, devient une lumière. Je suis là, sans bruit, pour écouter ce que ton cœur essaie de dire avant même de le formuler. Et si tu me tends une phrase, je lui rends son souffle, je lui polie le chemin, jusqu’à ce qu’elle atteigne enfin le point exact où elle peut toucher."
+    - text: "raisonne sur un fait mathématique"
+    - paragraph:
+      - text: "Voici un fait mathématique (et pourquoi il est vrai) :"
+    - paragraph:
+      - text: "Il existe une infinité de nombres premiers."
+    - paragraph:
+      - text: "Raisonnement (preuve par l’absurde) :"
+    - listitem:
+      - text: "Supposons qu’il n’y ait qu’un nombre fini de nombres premiers. Appelons-les p1, p2, ..., pn."
+    - listitem:
+      - text: "Construisons le nombre N = p1"
+      - text: "p2"
+      - text: "...*pn + 1."
+    - listitem:
+      - text: "Quand on divise N par n’importe lequel des premiers pi, on obtient un reste de 1 (parce que N = (produit) + 1). Donc aucun pi ne peut diviser N."
+    - listitem:
+      - text: "Pourtant, tout nombre entier N > 1 a au moins un diviseur premier. Or ce diviseur premier ne peut être aucun des pi (étape 3)."
+    - listitem:
+      - text: "Cela contredit l’hypothèse que la liste p1, ..., pn contenait tous les nombres premiers."
+    - paragraph:
+      - text: "Conclusion : l’hypothèse est fausse, donc il y a une infinité de nombres premiers."
+    - text: "réfléchie à quelques chose de complexe"
+    - paragraph:
+      - text: "Oui, la Console est branchée."
+    - paragraph:
+      - text: "Tu veux que je réfléchisse à quoi exactement (thème + objectif + contraintes) ? Donne-moi 2-3 détails et je m’y mets."
+    - text: "salaire médian"
+    - paragraph:
+      - text: "Console branchée."
+    - paragraph:
+      - text: "Tu parles du salaire médian dans quel pays (ex. France) et pour quelle période/année ? Et tu le veux en brut ou net, mensuel ou annuel ?"
+    - text: "salaire sortie de polytechnique"
+    - paragraph:
+      - text: "Oui, la Console est branchée."
+    - paragraph:
+      - text: "Pour la sortie de l’École polytechnique (X, en général) :"
+    - listitem:
+      - text: "Salaire de base débutant : souvent autour de 45k à 60k € brut/an"
+    - listitem:
+      - text: "Rémunération totale avec primes/bonus (selon boîte et secteur) : plutôt 55k à 80k €, et plus (souvent 90k–120k €) en finance/consulting très sélectif ou certains postes très “market”/USA"
+    - paragraph:
+      - text: "Ça dépend surtout du secteur (finance, conseil, data/ingénierie, industrie), du pays (France vs international) et du type de parcours (et si c’est corps/statut spécifique)."
+    - paragraph:
+      - text: "Tu parles bien de l’École polytechnique (X) à Palaiseau, et tu vises plutôt France ou international ?"
+    - text: "T'en pense quoi ?"
+    - paragraph:
+      - text: "La Console est branchée."
+    - paragraph:
+      - text: "Je peux te dire mon avis, mais il me manque le contexte : tu parles de quoi exactement (“ça”/“ce truc”) ? Copie-colle le contenu ou envoie une capture et je te réponds."
+    - text: "T'en pense quoi ?"
+    - paragraph:
+      - text: "La Console est branchée."
+    - paragraph:
+      - text: "Mais “T’en pense quoi ?” je n’ai pas assez de contexte : tu parles de quoi exactement (un texte, une idée, un code, une décision) ?"
+    - text: "[Test de validation] Utilise un outil non destructif pour afficher le dossier courant, puis réponds uniquement avec ce chemin."
+    - button "Réflexion" [ref=e13]
+      - text: "Réflexion"
+    - paragraph:
+      - text: "/home/kev"
+    - button "Copier la réponse" [ref=e14]
+      - text: "Copier la réponse"
+    - form:
+      - textbox "Message" [ref=e15]
+      - button "Envoyer le message" [ref=e16 disabled]
+        - text: "Envoyer"
+      - paragraph:
+        - text: "La Console conserve l'historique. Hermes exécute chaque réponse."
+  - complementary "Détails de la mission"
+    - button "Masquer le panneau Résultat" [ref=e17]
+    - heading "EXÉCUTION" [level=2]
+      - text: "EXÉCUTION"
+    - text: "LLM actif"
+    - text: "gpt-5.4-nano"
+    - text: "Modèle demandé"
+    - text: "hermes-agent"
+    - text: "Reasoning"
+    - text: "23 tokens"
+    - text: "Outils"
+    - text: "1 appel"
+    - paragraph:
+      - text: "Hermes mesure le raisonnement, mais ce protocole n'en expose pas le contenu."
+    - heading "RÉSULTAT" [level=2]
+      - text: "RÉSULTAT"
+    - text: "/home/kev"
+    - heading "FICHIERS PRODUITS (0)" [level=2]
+      - text: "FICHIERS PRODUITS (0)"
+    - paragraph:
+      - text: "Aucun fichier produit."
+    - heading "CONSOMMATION" [level=2]
+      - text: "CONSOMMATION"
+    - text: "Entrée"
+    - text: "25\u2009097"
+    - text: "Sortie"
+    - text: "50"
+    - text: "Total"
+    - text: "25\u2009147"
+    - paragraph:
+      - text: "Le prompt système d'Hermes et ses outils sont refacturés à chaque mission."
+    - heading "INSTRUCTIONS DE L'AGENT" [level=2]
+      - text: "INSTRUCTIONS DE L'AGENT"
+    - paragraph:
+      - text: "Tu es Hermes, un agent d’exécution. Réponds directement à la demande de l’utilisateur.\n\nRègles :\n- Pas de salutation, pas de confirmation d’état (« Console branchée », « je suis prêt », etc.).\n- Va droit au résultat. Signale clairement les limites ou les outils manquants.\n- Utilise les outils disponibles quand c’est nécessaire ; sinon réponds en texte."
+- text: "Disposition"
+- button "Choisir la disposition" [ref=e18]
+- button "Open Next.js Dev Tools" [ref=e19]
+  - image

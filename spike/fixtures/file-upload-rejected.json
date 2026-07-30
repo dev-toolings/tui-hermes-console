@@ -1,0 +1,11 @@
+{
+  "status": 400,
+  "body": {
+    "error": {
+      "message": "Inline image inputs are supported, but uploaded files and document inputs are not supported on this endpoint.",
+      "type": "invalid_request_error",
+      "param": "messages[0].content",
+      "code": "unsupported_content_type"
+    }
+  }
+}

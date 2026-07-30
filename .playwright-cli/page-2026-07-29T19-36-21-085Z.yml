@@ -1,0 +1,29 @@
+- complementary:
+  - link "H Hermes Console Runtime operations" [ref=e1]
+  - button "Replier la navigation" [ref=e2]
+  - button "Recherche rapide Ctrl K" [ref=e3]
+  - navigation:
+    - link "Aperçu" [ref=e4]
+    - link "Agents" [ref=e5]
+    - link "Missions" [ref=e6]
+    - link "Artefacts" [ref=e7]
+    - link "Runtime Hermes" [ref=e8]
+    - link "Paramètres" [ref=e9]
+    - link "Aide" [ref=e10]
+  - link "Connecté · 0.19.0 http://127.0.0.1:8642" [ref=e11]
+- main:
+  - heading "Agent test wiring" [level=1]
+  - main "Conversation avec Hermes"
+    - button "Copier la réponse" [ref=e12]
+    - form:
+      - textbox "Message" [ref=e13]
+      - button "Envoyer le message" [ref=e14 disabled]
+  - complementary "Détails de la mission"
+    - button "Masquer le panneau Résultat" [ref=e15]
+    - heading "EXÉCUTION" [level=2]
+    - heading "RÉSULTAT" [level=2]
+    - heading "FICHIERS PRODUITS (0)" [level=2]
+    - heading "CONSOMMATION" [level=2]
+    - heading "INSTRUCTIONS DE L'AGENT" [level=2]
+- button "Choisir la disposition" [ref=e16]
+- button "Open Next.js Dev Tools" [ref=e17]

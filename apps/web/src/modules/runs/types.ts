@@ -1,0 +1,95 @@
+import type { MessageContent, Usage } from "@/db/schema";
+
+export type ProductRunStatus =
+  | "pending"
+  | "starting"
+  | "running"
+  | "awaiting_approval"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type ProductEventType =
+  | "agent.message"
+  | "agent.reasoning"
+  | "tool.call"
+  | "tool.result"
+  | "approval.requested"
+  | "run.completed"
+  | "run.error"
+  | "system.notice"
+  | "raw";
+
+export type ProductEventInput = {
+  sequence: number;
+  type: ProductEventType;
+  payload: Record<string, unknown>;
+  occurredAt: Date;
+};
+
+export type StoredProductEvent = ProductEventInput & {
+  cursor: number;
+  runId: string;
+};
+
+export type ThreadMessageDto = {
+  id: string;
+  role: "user" | "assistant";
+  content: MessageContent;
+  runId: string | null;
+  createdAt: string;
+};
+
+export type RunDto = {
+  id: string;
+  status: ProductRunStatus;
+  input: string;
+  output: string | null;
+  usage: Usage | null;
+  error: string | null;
+  hermesResponseId: string | null;
+  runtimeSession: {
+    id: string;
+    model: string | null;
+    reasoningTokens: number | null;
+    toolCallCount: number | null;
+  } | null;
+  createdAt: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  lastEventAt: string | null;
+};
+
+export type ArtifactDto = {
+  id: string;
+  runId: string;
+  direction: "input" | "output";
+  filename: string;
+  mimeType: string | null;
+  sizeBytes: number;
+  checksumSha256: string;
+  createdAt: string;
+};
+
+export type ThreadSource = "chat" | "mission";
+
+export type ThreadSnapshot = {
+  id: string;
+  title: string;
+  source: ThreadSource;
+  agentName: string;
+  instructions: string;
+  provider?: string | null;
+  model: string;
+  /** Provider résolu au moment de la lecture (settings / agent lié). */
+  effectiveProvider?: string | null;
+  /** Modèle résolu au moment de la lecture (settings / agent lié). */
+  effectiveModel: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ThreadMessageDto[];
+  runs: RunDto[];
+  events: StoredProductEvent[];
+  artifacts: ArtifactDto[];
+  cursor: number;
+};

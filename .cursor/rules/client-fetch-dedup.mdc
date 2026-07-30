@@ -1,0 +1,69 @@
+---
+description: Éviter les GET /api dupliqués côté client (cache + dédup in-flight)
+globs: apps/web/src/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Client fetch dedup — Hermes Console
+
+## Problème
+
+Plusieurs composants client qui `fetch` le **même GET `/api/*`** au mount → N requêtes identiques au refresh (ex. sidebar + form sur `/settings/runtime`).
+
+Autre piège : dispatcher un event de refresh (`hermes-runtime-changed`) **juste après le load initial** → re-fetch inutile.
+
+## Règle
+
+1. **Un seul loader par ressource GET** dans `apps/web/src/lib/**/**-client.ts`
+2. Pattern obligatoire :
+   - cache module-level (`cached`)
+   - dédup promise in-flight (`inflight`)
+   - `getXClient({ refresh?: boolean })`
+   - `invalidateXClient()` + event custom **uniquement après mutation**
+   - `setXClient(data)` après PUT/POST qui renvoie le DTO complet
+3. **Interdit** : `fetch("/api/...")` direct dans un `useEffect` si un autre composant/hook peut charger la même ressource
+4. **Shell global** (`useRuntimeStatus`, etc.) doit utiliser le même client que les pages settings
+
+## Loaders existants
+
+| Endpoint | Module |
+|---|---|
+| `GET /api/runtime` | `@/lib/runtime/public-client` |
+| `GET /api/runtime/models` | `@/lib/runtime/models-client` |
+
+## Audit routes (état actuel)
+
+| Route | GET client dupliqué ? | Notes |
+|---|---|---|
+| `/settings/runtime` | ✅ corrigé | `public-client` partagé sidebar + form |
+| `/settings/models` | ✅ prévenu | `models-client` |
+| `/`, `/settings`, `/settings/security`, `/support` | ⚠️ acceptable | RSC `getRuntimePublic()` (DB) + 1× client sidebar `/api/runtime` — pas le même canal |
+| `/settings/notifications`, `/settings/appearance` | ✅ OK | localStorage only |
+| `/settings/retention` | ✅ OK | RSC seulement |
+| `/runs/new` | ✅ OK | 1× `/api/agents` (RunForm seul) |
+| `/runs/[id]`, `/agents/*` | ✅ OK | 1 consommateur par ressource ; SSE/polling intentionnels |
+
+## Checklist avant merge
+
+- [ ] Nouveau `useEffect` + `fetch("/api/...")` → existe-t-il déjà un `*-client.ts` ?
+- [ ] Deux composants sur la même page lisent la même ressource → client partagé
+- [ ] Event `*-changed` dispatché au load initial → **non**
+- [ ] Mutation POST/PUT/DELETE → toast OK ; refresh via `invalidate*()` ou `set*()` sur réponse
+
+## Exemple
+
+```ts
+// lib/foo/client.ts
+let cached: FooDto | null = null;
+let inflight: Promise<FooDto> | null = null;
+
+export async function getFooClient(opts?: { refresh?: boolean }) {
+  if (!opts?.refresh && cached) return cached;
+  if (!opts?.refresh && inflight) return inflight;
+  inflight = fetch("/api/foo")
+    .then((r) => r.json())
+    .then((body) => (cached = body.foo))
+    .finally(() => { inflight = null; });
+  return inflight;
+}
+```

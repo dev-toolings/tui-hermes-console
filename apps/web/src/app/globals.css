@@ -1,0 +1,34 @@
+@import "@boardui/ui/styles";
+
+/*
+  react-hot-toast — isolate from BoardUI/Tailwind theme inheritance so the
+  default ToastBar (white card, green check / red X, drop shadow) matches
+  https://react-hot-toast.com
+*/
+[data-rht-toaster] {
+  color-scheme: light;
+}
+
+/*
+  Hermes ne redéfinit pas le thème BoardUI. Ces alias ne font que préserver
+  les rôles métier déjà utilisés dans les écrans de mission.
+*/
+@theme inline {
+  --color-success: var(--state-pos-fg);
+  --color-success-muted: var(--state-pos-soft);
+  --color-warning: var(--state-warn-fg);
+  --color-warning-muted: var(--state-warn-soft);
+  --color-ai-full: var(--ai-chat-bg-full);
+  --color-ai-secondary: var(--ai-chat-bg-secondary);
+  --color-ai-tertiary: var(--ai-chat-bg-tertiary);
+  --color-ai-primary: var(--ai-chat-bg-primary);
+  --color-ai-panel: var(--ai-chat-border-panel);
+  --color-ai-separator: var(--ai-chat-separator);
+  --color-ai-icon-secondary: var(--ai-chat-icon-secondary);
+  --color-ai-icon-tertiary: var(--ai-chat-icon-tertiary);
+
+  --shadow-board-xs: var(--shadow-xs);
+  --shadow-board-card: var(--shadow-card);
+  --shadow-board-elevated: var(--shadow-elevated);
+  --shadow-board-sidebar: var(--shadow-sidebar);
+}

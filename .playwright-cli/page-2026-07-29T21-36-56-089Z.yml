@@ -1,0 +1,119 @@
+- complementary:
+  - link "H Hermes Console Runtime operations" [ref=e1]
+    - text: "H"
+    - text: "Hermes Console"
+    - text: "Runtime operations"
+  - button "Replier la navigation" [ref=e2]
+  - button "Recherche rapide Ctrl K" [ref=e3]
+    - text: "Recherche rapide"
+    - text: "Ctrl K"
+  - navigation:
+    - link "Aperçu" [ref=e4]
+      - text: "Aperçu"
+    - link "Agents" [ref=e5]
+      - text: "Agents"
+    - link "Missions" [ref=e6]
+      - text: "Missions"
+    - link "Artefacts" [ref=e7]
+      - text: "Artefacts"
+  - link "Runtime Hermes" [ref=e8]
+    - text: "Runtime Hermes"
+  - link "Paramètres" [ref=e9]
+    - text: "Paramètres"
+  - link "Aide" [ref=e10]
+    - text: "Aide"
+  - link "Connecté · 0.19.0 http://127.0.0.1:8642" [ref=e11]
+    - text: "Connecté · 0.19.0"
+    - text: "http://127.0.0.1:8642"
+  - text: "A"
+  - text: "Administrateur"
+  - text: "Console locale"
+- banner:
+  - navigation "Fil d’Ariane"
+    - text: "H"
+    - text: "Hermes"
+    - link "Paramètres" [ref=e12]
+      - text: "Paramètres"
+    - text: "Runtime"
+  - heading "Runtime Hermes" [level=1]
+    - text: "Runtime Hermes"
+- main:
+  - navigation "Sections des paramètres"
+    - paragraph:
+      - text: "PARAMÈTRES"
+    - link "Vue d’ensemble" [ref=e13]
+      - text: "Vue d’ensemble"
+    - link "Apparence" [ref=e14]
+      - text: "Apparence"
+    - link "Runtime Hermes" [ref=e15]
+      - text: "Runtime Hermes"
+    - link "Modèles" [ref=e16]
+      - text: "Modèles"
+    - link "Notifications" [ref=e17]
+      - text: "Notifications"
+    - link "Conservation" [ref=e18]
+      - text: "Conservation"
+    - link "Sécurité" [ref=e19]
+      - text: "Sécurité"
+  - heading "Runtime Hermes" [level=2]
+    - text: "Runtime Hermes"
+  - paragraph:
+    - text: "Une même Console peut joindre Hermes sur la machine locale, un réseau privé ou un VPS. Le navigateur ne reçoit jamais les secrets du runtime."
+  - text: "Connecté"
+  - text: " · 0.19.0"
+  - form:
+    - text: "Mode de connexion"
+    - paragraph:
+      - text: "Accès direct = la Console (process Next) appelle l’URL ci-dessous. Local, VPN ou VPS : même flux. Le navigateur ne parle jamais à Hermes."
+    - button "Accès direct Hermes local, réseau privé, VPN ou VPS joignable." [ref=e20]
+      - text: "Accès direct"
+      - text: "Hermes local, réseau privé, VPN ou VPS joignable."
+    - button "Relay sortant Hermes derrière un NAT ou un pare-feu entrant." [ref=e21]
+      - text: "Relay sortant"
+      - text: "Hermes derrière un NAT ou un pare-feu entrant."
+    - text: "URL Edge ou API Hermes"
+    - text: "Local : http://127.0.0.1:8642 — VPN/VPS : https://hermes.ton-domaine ou l’IP joignable depuis cette machine."
+    - textbox "URL Edge ou API Hermes Local : http://127.0.0.1:8642 — VPN/VPS : https://hermes.ton-domaine ou l’IP joignable depuis cette machine." [ref=e22]
+      - text: "http://127.0.0.1:8642"
+    - text: "Token d’accès"
+    - text: "Déjà enregistré (chiffré). Laissez vide pour le garder — Enregistrer ne le redemande pas."
+    - textbox "Token d’accès Déjà enregistré (chiffré). Laissez vide pour le garder — Enregistrer ne le redemande pas." [ref=e23]
+    - text: "Niveau de gestion"
+    - text: "Externe"
+    - text: "Connexion et missions uniquement"
+    - text: "Connecté"
+    - text: "Catalogue et configuration distante"
+    - text: "Géré"
+    - text: "Credentials et redémarrage local"
+    - text: "Une installation commence toujours au niveau « Externe ». La déconnexion ne supprime ni Hermes, ni ses profils, ni ses données."
+    - paragraph:
+      - text: "Tester"
+      - text: " = vrai GET /health + /v1/capabilities vers l’URL saisie (token conservé réutilisé)."
+      - text: "Enregistrer"
+      - text: " = persiste URL/token en base, sans appeler Hermes."
+    - button "Tester" [ref=e24]
+      - text: "Tester"
+    - button "Enregistrer" [ref=e25]
+      - text: "Enregistrer"
+  - paragraph:
+    - text: "Cycle de vie du runtime"
+  - paragraph:
+    - text: "Redémarre le service Hermes local, puis attend le retour de `/health` et des capacités avant d’annoncer le succès."
+  - button "Redémarrer Hermes" [ref=e26]
+    - text: "Redémarrer Hermes"
+  - paragraph:
+    - text: "Console décide"
+  - paragraph:
+    - text: "Authentification, autorisations, historique et politiques restent dans l’application."
+  - paragraph:
+    - text: "Edge accède"
+  - paragraph:
+    - text: "La frontière réseau limite les routes, signe les appels et expose la santé du runtime."
+  - paragraph:
+    - text: "Hermes exécute"
+  - paragraph:
+    - text: "Hermes conserve ses modèles, outils et capacités d’agent sans modification de sa CLI."
+- text: "Disposition"
+- button "Choisir la disposition" [ref=e27]
+- button "Open Next.js Dev Tools" [ref=e28]
+  - image

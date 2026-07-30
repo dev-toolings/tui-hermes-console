@@ -1,0 +1,113 @@
+- complementary:
+  - link "H Hermes Console Runtime operations" [ref=e1]
+    - text: "H"
+    - text: "Hermes Console"
+    - text: "Runtime operations"
+  - button "Replier la navigation" [ref=e2]
+  - button "Recherche rapide Ctrl K" [ref=e3]
+    - text: "Recherche rapide"
+    - text: "Ctrl K"
+  - navigation:
+    - link "Aperçu" [ref=e4]
+      - text: "Aperçu"
+    - link "Agents" [ref=e5]
+      - text: "Agents"
+    - link "Missions" [ref=e6]
+      - text: "Missions"
+    - link "Artefacts" [ref=e7]
+      - text: "Artefacts"
+  - link "Runtime Hermes" [ref=e8]
+    - text: "Runtime Hermes"
+  - link "Paramètres" [ref=e9]
+    - text: "Paramètres"
+  - link "Aide" [ref=e10]
+    - text: "Aide"
+  - link "Connecté · 0.19.0 http://127.0.0.1:8642" [ref=e11]
+    - text: "Connecté · 0.19.0"
+    - text: "http://127.0.0.1:8642"
+  - text: "A"
+  - text: "Administrateur"
+  - text: "Console locale"
+- banner:
+  - navigation "Fil d’Ariane"
+    - text: "H"
+    - text: "Hermes"
+    - link "Paramètres" [ref=e12]
+      - text: "Paramètres"
+    - text: "Modèles"
+  - heading "Modèles" [level=1]
+    - text: "Modèles"
+- main:
+  - navigation "Sections des paramètres"
+    - paragraph:
+      - text: "PARAMÈTRES"
+    - link "Vue d’ensemble" [ref=e13]
+      - text: "Vue d’ensemble"
+    - link "Apparence" [ref=e14]
+      - text: "Apparence"
+    - link "Runtime Hermes" [ref=e15]
+      - text: "Runtime Hermes"
+    - link "Modèles" [ref=e16]
+      - text: "Modèles"
+    - link "Notifications" [ref=e17]
+      - text: "Notifications"
+    - link "Conservation" [ref=e18]
+      - text: "Conservation"
+    - link "Sécurité" [ref=e19]
+      - text: "Sécurité"
+  - heading "Modèles" [level=2]
+    - text: "Modèles"
+  - paragraph:
+    - text: "Provider LLM, clé API et modèle par défaut pour les prochaines missions."
+  - paragraph:
+    - text: "Modèle LLM par défaut"
+  - text: "3"
+  - text: " providers connectés"
+  - text: "25"
+  - text: " modèles"
+  - paragraph:
+    - text: "Catalogue lu directement depuis Hermes. Le choix s’applique aux nouvelles conversations et chaque mission transmet explicitement son modèle au runtime."
+  - button "Actualiser les modèles Hermes" [ref=e20]
+    - text: "Actualiser"
+  - text: "Provider"
+  - combobox "Provider" [ref=e21]
+    - text: "openai-api"
+    - text: "13 modèles"
+  - text: "Modèle actif pour les prochains fils"
+  - combobox "Modèle actif pour les prochains fils" [ref=e22]
+    - text: "gpt-5.6-luna"
+  - text: "Valeur Hermes actuelle : "
+  - text: "gpt-5.4-nano"
+  - paragraph:
+    - text: "CAPACITÉS ANNONCÉES"
+  - text: "Connecté"
+  - text: "Reasoning"
+  - text: "Fast"
+  - paragraph:
+    - text: "La Console ne modifie pas `.env` : Hermes autorise la sélection par mission, mais pas l’écriture distante de sa configuration."
+  - paragraph:
+    - text: "Clé API "
+    - text: "openai-api"
+  - text: "Credential détecté"
+  - paragraph:
+    - text: "La clé est transmise au CLI local par entrée sécurisée, puis stockée dans le pool Hermes. Elle n’est jamais enregistrée dans la base Console ou le navigateur."
+  - textbox "Clé API openai-api" [ref=e23]
+  - button "Mettre à jour la clé" [ref=e24 disabled]
+    - text: "Mettre à jour la clé"
+  - paragraph:
+    - text: "Les credentials injectés par `.env` restent inchangés. Seule une précédente clé ajoutée par cette Console est remplacée."
+  - paragraph:
+    - text: "OpenAI Codex — abonnement ChatGPT"
+  - text: "OAuth"
+  - paragraph:
+    - text: "Identité distincte de la clé OpenAI API. L’autorisation est enregistrée par Hermes, jamais dans la base ni dans le navigateur de la Console."
+  - button "Connecter mon abonnement" [ref=e25]
+    - text: "Connecter mon abonnement"
+  - paragraph:
+    - text: "Les conversations existantes gardent leur modèle pour rester reproductibles."
+  - button "Définir par défaut" [ref=e26 disabled]
+    - text: "Définir par défaut"
+- text: "Disposition"
+- button "Choisir la disposition" [ref=e27]
+- button "Open Next.js Dev Tools" [ref=e28]
+  - image

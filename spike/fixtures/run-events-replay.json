@@ -1,0 +1,5 @@
+{
+  "frames": [],
+  "status": 404,
+  "error": "{\"error\": {\"message\": \"Run not found: run_46356fbf9cdc401789073f64f338dae9\", \"type\": \"invalid_request_error\", \"param\": null, \"code\": \"run_not_found\"}}"
+}

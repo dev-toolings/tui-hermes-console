@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "body": {
+    "object": "hermes.run",
+    "run_id": "run_46356fbf9cdc401789073f64f338dae9",
+    "status": "completed",
+    "updated_at": 1785322807.801514,
+    "created_at": 1785322807.665169,
+    "session_id": "run_46356fbf9cdc401789073f64f338dae9",
+    "model": "hermes-agent",
+    "last_event": "run.completed",
+    "output": "Spike OK. Trois fruits : pomme, banane, cerise.",
+    "usage": {
+      "input_tokens": 100,
+      "output_tokens": 20,
+      "total_tokens": 120
+    }
+  }
+}

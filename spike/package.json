@@ -1,0 +1,12 @@
+{
+  "name": "hermes-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fake-llm": "bun run fake-llm.ts",
+    "probe": "bun run probe.ts"
+  },
+  "dependencies": {
+    "hono": "^4.6.14"
+  }
+}

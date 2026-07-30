@@ -1,0 +1,40 @@
+{
+  "tool.started": {
+    "event": "tool.started",
+    "run_id": "run_03d76f8cfc8e4880bb12e66620534248",
+    "timestamp": 1785324127.2199,
+    "tool": "read_file",
+    "preview": "notes.txt L1-2000"
+  },
+  "tool.completed": {
+    "event": "tool.completed",
+    "run_id": "run_03d76f8cfc8e4880bb12e66620534248",
+    "timestamp": 1785324127.4575021,
+    "tool": "read_file",
+    "duration": 0.237,
+    "error": false
+  },
+  "message.delta": {
+    "event": "message.delta",
+    "run_id": "run_03d76f8cfc8e4880bb12e66620534248",
+    "timestamp": 1785324131.3107357,
+    "delta": "\n\n20"
+  },
+  "reasoning.available": {
+    "event": "reasoning.available",
+    "run_id": "run_03d76f8cfc8e4880bb12e66620534248",
+    "timestamp": 1785324131.4707055,
+    "text": "20\n[SPIKE-AGENT]"
+  },
+  "run.completed": {
+    "event": "run.completed",
+    "run_id": "run_03d76f8cfc8e4880bb12e66620534248",
+    "timestamp": 1785324131.480282,
+    "output": "20\n[SPIKE-AGENT]",
+    "usage": {
+      "input_tokens": 38387,
+      "output_tokens": 350,
+      "total_tokens": 38737
+    }
+  }
+}

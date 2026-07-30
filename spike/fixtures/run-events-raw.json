@@ -1,0 +1,29 @@
+{
+  "frames": [
+    {
+      "raw": "data: {\"event\": \"message.delta\", \"run_id\": \"run_46356fbf9cdc401789073f64f338dae9\", \"timestamp\": 1785322807.7901864, \"delta\": \"Spike OK. Tr\"}",
+      "data": "{\"event\": \"message.delta\", \"run_id\": \"run_46356fbf9cdc401789073f64f338dae9\", \"timestamp\": 1785322807.7901864, \"delta\": \"Spike OK. Tr\"}"
+    },
+    {
+      "raw": "data: {\"event\": \"message.delta\", \"run_id\": \"run_46356fbf9cdc401789073f64f338dae9\", \"timestamp\": 1785322807.7905948, \"delta\": \"ois fruits :\"}",
+      "data": "{\"event\": \"message.delta\", \"run_id\": \"run_46356fbf9cdc401789073f64f338dae9\", \"timestamp\": 1785322807.7905948, \"delta\": \"ois fruits :\"}"
+    },
+    {
+      "raw": "data: {\"event\": \"message.delta\", \"run_id\": \"run_46356fbf9cdc401789073f64f338dae9\", \"timestamp\": 1785322807.7909257, \"delta\": \" pomme, bana\"}",
+      "data": "{\"event\": \"message.delta\", \"run_id\": \"run_46356fbf9cdc401789073f64f338dae9\", \"timestamp\": 1785322807.7909257, \"delta\": \" pomme, bana\"}"
+    },
+    {
+      "raw": "data: {\"event\": \"message.delta\", \"run_id\": \"run_46356fbf9cdc401789073f64f338dae9\", \"timestamp\": 1785322807.791485, \"delta\": \"ne, cerise.\"}",
+      "data": "{\"event\": \"message.delta\", \"run_id\": \"run_46356fbf9cdc401789073f64f338dae9\", \"timestamp\": 1785322807.791485, \"delta\": \"ne, cerise.\"}"
+    },
+    {
+      "raw": "data: {\"event\": \"reasoning.available\", \"run_id\": \"run_46356fbf9cdc401789073f64f338dae9\", \"timestamp\": 1785322807.7932026, \"text\": \"Spike OK. Trois fruits : pomme, banane, cerise.\"}",
+      "data": "{\"event\": \"reasoning.available\", \"run_id\": \"run_46356fbf9cdc401789073f64f338dae9\", \"timestamp\": 1785322807.7932026, \"text\": \"Spike OK. Trois fruits : pomme, banane, cerise.\"}"
+    },
+    {
+      "raw": "data: {\"event\": \"run.completed\", \"run_id\": \"run_46356fbf9cdc401789073f64f338dae9\", \"timestamp\": 1785322807.8015053, \"output\": \"Spike OK. Trois fruits : pomme, banane, cerise.\", \"usage\": {\"input_tokens\": 100, \"output_tokens\": 20, \"total_tokens\": 120}}",
+      "data": "{\"event\": \"run.completed\", \"run_id\": \"run_46356fbf9cdc401789073f64f338dae9\", \"timestamp\": 1785322807.8015053, \"output\": \"Spike OK. Trois fruits : pomme, banane, cerise.\", \"usage\": {\"input_tokens\": 100, \"output_tokens\": 20, \"total_tokens\": 120}}"
+    }
+  ],
+  "status": 200
+}

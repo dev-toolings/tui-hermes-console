@@ -1,0 +1,106 @@
+{
+  "at": "2026-07-29T11:00:15.942Z",
+  "base": "http://127.0.0.1:8642",
+  "results": [
+    {
+      "name": "GET /health (no auth)",
+      "ok": true,
+      "note": "version=0.19.0"
+    },
+    {
+      "name": "GET /v1/capabilities",
+      "ok": true,
+      "note": "runtime.mode=server_agent tool_execution=server"
+    },
+    {
+      "name": "GET /health/detailed",
+      "ok": true,
+      "note": "status=ok"
+    },
+    {
+      "name": "GET /v1/models",
+      "ok": true,
+      "note": "1 model(s)"
+    },
+    {
+      "name": "no token -> rejected",
+      "ok": true,
+      "note": "HTTP 401"
+    },
+    {
+      "name": "bad token -> rejected",
+      "ok": true,
+      "note": "HTTP 401"
+    },
+    {
+      "name": "POST /v1/runs",
+      "ok": true,
+      "note": "HTTP 202 run_id=run_46356fbf9cdc401789073f64f338dae9"
+    },
+    {
+      "name": "per-run `instructions` accepted (agents can be local objects)",
+      "ok": true,
+      "note": "no Hermes profile creation was needed"
+    },
+    {
+      "name": "GET /v1/runs/:id/events (SSE)",
+      "ok": true,
+      "note": "6 frames in 136ms; types: none"
+    },
+    {
+      "name": "SSE frames carry an `id:` (Last-Event-ID resume)",
+      "ok": false,
+      "note": "NO id field -> Console must assign its own sequence"
+    },
+    {
+      "name": "GET /v1/runs/:id (reconciliation source)",
+      "ok": true,
+      "note": "status=completed output=\"Spike OK. Trois fruits : pomme, banane, cerise.\""
+    },
+    {
+      "name": "agent honoured per-run instructions",
+      "ok": false,
+      "note": "marker NOT found (fake LLM ignores prompt — expected)"
+    },
+    {
+      "name": "SSE replay after completion",
+      "ok": false,
+      "note": "0 frames replayed (buffer TTL applies)"
+    },
+    {
+      "name": "run observable while active",
+      "ok": true,
+      "note": "mid-flight status=running"
+    },
+    {
+      "name": "POST /v1/runs/:id/stop",
+      "ok": true,
+      "note": "HTTP 200 -> {\"run_id\":\"run_7b1dd344519f4eca9b06798cc4a357ba\",\"status\":\"stopping\"}"
+    },
+    {
+      "name": "cancel settles to terminal state",
+      "ok": true,
+      "note": "final status=cancelled"
+    },
+    {
+      "name": "unknown run -> 404",
+      "ok": true,
+      "note": "HTTP 404"
+    },
+    {
+      "name": "file attachment via API",
+      "ok": true,
+      "note": "HTTP 400 — {\"error\":{\"message\":\"Inline image inputs are supported, but uploaded files and document inputs are not supported on this endpoint.\",\"type\":\"invalid_request_erro"
+    },
+    {
+      "name": "POST /v1/runs with `resources`",
+      "ok": true,
+      "note": "HTTP 202 — {\"run_id\":\"run_87449790ce5e43dcb62b7d535b4f7973\",\"status\":\"started\"}"
+    },
+    {
+      "name": "GET /api/sessions",
+      "ok": true,
+      "note": "HTTP 200, 0 session(s)"
+    }
+  ]
+}

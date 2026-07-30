@@ -1,0 +1,16 @@
+{
+  "object": "hermes.run",
+  "run_id": "run_03d76f8cfc8e4880bb12e66620534248",
+  "status": "completed",
+  "updated_at": 1785324131.4802914,
+  "created_at": 1785324117.6959844,
+  "session_id": "run_03d76f8cfc8e4880bb12e66620534248",
+  "model": "hermes-agent",
+  "last_event": "run.completed",
+  "output": "20\n[SPIKE-AGENT]",
+  "usage": {
+    "input_tokens": 38387,
+    "output_tokens": 350,
+    "total_tokens": 38737
+  }
+}
