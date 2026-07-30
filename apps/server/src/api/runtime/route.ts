@@ -3,9 +3,6 @@ import { apiErrorResponse } from "@/modules/api/errors";
 import { assertSameOriginMutation } from "@/modules/api/same-origin";
 import { getRuntimePublic, saveRuntimeConfig } from "@/modules/runtime/config";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 const sshSchema = z.object({
   host: z.string().trim().min(1).max(255),
   port: z.number().int().min(1).max(65_535).optional(),

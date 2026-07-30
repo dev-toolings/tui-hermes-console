@@ -3,9 +3,6 @@ import { apiErrorResponse } from "@/modules/api/errors";
 import { assertSameOriginMutation } from "@/modules/api/same-origin";
 import { probeAndPersistRuntime } from "@/modules/runtime/config";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 const testRuntimeSchema = z
   .object({
     baseUrl: z.string().trim().url().max(500).optional(),

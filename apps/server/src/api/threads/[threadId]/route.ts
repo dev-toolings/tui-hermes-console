@@ -5,9 +5,6 @@ import { getThreadSnapshot } from "@/modules/runs/repository";
 import { resolveHermesRuntimeConfig } from "@/modules/runtime/config";
 import { getHermesSession } from "@/modules/runtime/hermes-adapter";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 export async function GET(
   _request: Request,
   context: { params: Promise<{ threadId: string }> },

@@ -21,9 +21,6 @@ import {
   type HermesModelCatalog,
 } from "@/modules/runtime/hermes-adapter";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 const updateModelSchema = z.object({
   provider: z.string().trim().min(1).max(80),
   model: z.string().trim().min(1).max(200),

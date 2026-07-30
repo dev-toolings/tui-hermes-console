@@ -2,9 +2,6 @@ import { apiErrorResponse } from "@/modules/api/errors";
 import { createProductEventStream } from "@/modules/runs/product-event-sse";
 import { getThreadSnapshot } from "@/modules/runs/repository";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 export async function GET(
   request: Request,
   context: { params: Promise<{ threadId: string }> },

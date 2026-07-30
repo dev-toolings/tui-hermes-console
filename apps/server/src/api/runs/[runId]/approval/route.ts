@@ -1,9 +1,6 @@
 import { apiErrorResponse } from "@/modules/api/errors";
 import { respondRunApproval } from "@/modules/runs/respond-approval";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 export async function POST(
   request: Request,
   context: { params: Promise<{ runId: string }> },

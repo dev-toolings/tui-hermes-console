@@ -2,9 +2,6 @@ import { apiErrorResponse } from "@/modules/api/errors";
 import { isConnectorType, testConnector } from "@/modules/connectors/repository";
 import type { ConnectorType } from "@/db/schema";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 export async function POST(
   _request: Request,
   context: { params: Promise<{ type: string }> },

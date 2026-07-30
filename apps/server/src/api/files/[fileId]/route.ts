@@ -5,9 +5,6 @@ import { apiErrorResponse } from "@/modules/api/errors";
 import { getArtifact } from "@/modules/artifacts/repository";
 import { assertSameOriginMutation } from "@/modules/api/same-origin";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 export async function GET(
   request: Request,
   context: { params: Promise<{ fileId: string }> },

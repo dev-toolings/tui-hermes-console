@@ -1,9 +1,6 @@
 import { apiErrorResponse } from "@/modules/api/errors";
 import { cancelRun } from "@/modules/runs/cancel-run";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 export async function POST(
   _request: Request,
   context: { params: Promise<{ runId: string }> },

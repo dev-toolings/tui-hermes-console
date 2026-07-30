@@ -5,9 +5,6 @@ import { apiErrorResponse } from "@/modules/api/errors";
 import { resolveHermesRuntimeConfig } from "@/modules/runtime/config";
 import { HermesRuntimeError } from "@/modules/runtime/hermes-adapter";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 type AuthStatus = "starting" | "pending" | "connected" | "failed" | "cancelled";
 type AuthSession = {
   id: string;

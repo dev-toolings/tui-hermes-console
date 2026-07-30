@@ -7,9 +7,6 @@ import {
 } from "@/modules/connectors/repository";
 import type { ConnectorType } from "@/db/schema";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 const putConnectorSchema = z.object({
   label: z.string().trim().min(1).max(120).optional(),
   email: z.string().trim().email().max(320),

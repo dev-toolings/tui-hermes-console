@@ -2,9 +2,6 @@ import { z } from "zod";
 import { apiErrorResponse } from "@/modules/api/errors";
 import { deleteAgent, getAgent, updateAgent } from "@/modules/agents/repository";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 const patchAgentSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   description: z.string().trim().max(500).optional().nullable(),

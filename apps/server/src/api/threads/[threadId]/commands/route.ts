@@ -2,9 +2,6 @@ import { z } from "zod";
 import { apiErrorResponse } from "@/modules/api/errors";
 import { executeSessionCommand } from "@/modules/session/execute-command";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 const bodySchema = z.object({
   message: z.string().trim().min(1).max(20_000),
 });

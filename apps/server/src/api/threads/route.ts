@@ -6,9 +6,6 @@ import { createThreadWithRun, listThreads } from "@/modules/runs/repository";
 import { startRun } from "@/modules/runs/runner";
 import type { ThreadSource } from "@/db/schema";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 const FREE_CHAT_INSTRUCTIONS = `Tu es un assistant conversationnel. Réponds directement à la demande.
 
 Règles :

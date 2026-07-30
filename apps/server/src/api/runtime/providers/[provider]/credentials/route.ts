@@ -12,9 +12,6 @@ import {
   replaceConsoleManagedApiKey,
 } from "@/modules/runtime/local-management";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 const apiKeySchema = z.object({
   apiKey: z.string().trim().min(8).max(4_096),
 });

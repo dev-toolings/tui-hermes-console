@@ -2,9 +2,6 @@ import { getDatabase } from "@/db/client";
 import { runs } from "@/db/schema";
 import { getRuntimePublic } from "@/modules/runtime/config";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 export async function GET() {
   const checks: Record<string, { ok: boolean; detail?: string }> = {};
 

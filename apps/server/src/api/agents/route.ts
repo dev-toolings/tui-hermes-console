@@ -2,9 +2,6 @@ import { z } from "zod";
 import { apiErrorResponse } from "@/modules/api/errors";
 import { createAgent, listAgents } from "@/modules/agents/repository";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 const createAgentSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(500).optional().nullable(),

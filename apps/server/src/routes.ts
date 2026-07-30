@@ -19,16 +19,19 @@ import * as files from "@/api/files/route";
 import * as fileDetail from "@/api/files/[fileId]/route";
 import * as healthz from "@/api/healthz/route";
 import * as readyz from "@/api/readyz/route";
+import * as runActivity from "@/api/runs/activity/route";
 import * as runApproval from "@/api/runs/[runId]/approval/route";
 import * as runCancel from "@/api/runs/[runId]/cancel/route";
 import * as runRetry from "@/api/runs/[runId]/retry/route";
 import * as runtime from "@/api/runtime/route";
 import * as runtimeModels from "@/api/runtime/models/route";
+import * as runtimeProbe from "@/api/runtime/probe/route";
 import * as providerCredentials from "@/api/runtime/providers/[provider]/credentials/route";
 import * as codexAuth from "@/api/runtime/providers/openai-codex/auth/route";
 import * as runtimeRestart from "@/api/runtime/restart/route";
 import * as sshHosts from "@/api/runtime/ssh-hosts/route";
 import * as runtimeTest from "@/api/runtime/test/route";
+import * as settingsStorage from "@/api/settings/storage/route";
 import * as threads from "@/api/threads/route";
 import * as threadDetail from "@/api/threads/[threadId]/route";
 import * as threadCommands from "@/api/threads/[threadId]/commands/route";
@@ -51,12 +54,17 @@ export const ROUTES: Array<{ path: string; module: RouteModule }> = [
   { path: "/api/files", module: files },
   { path: "/api/files/:fileId", module: fileDetail },
 
+  // Avant `/:runId/…` : « activity » matcherait le motif paramétré.
+  { path: "/api/runs/activity", module: runActivity },
   { path: "/api/runs/:runId/approval", module: runApproval },
   { path: "/api/runs/:runId/cancel", module: runCancel },
   { path: "/api/runs/:runId/retry", module: runRetry },
 
+  { path: "/api/settings/storage", module: settingsStorage },
+
   { path: "/api/runtime", module: runtime },
   { path: "/api/runtime/models", module: runtimeModels },
+  { path: "/api/runtime/probe", module: runtimeProbe },
   { path: "/api/runtime/restart", module: runtimeRestart },
   { path: "/api/runtime/ssh-hosts", module: sshHosts },
   { path: "/api/runtime/test", module: runtimeTest },

@@ -6,9 +6,6 @@ import { createRunForThread } from "@/modules/runs/repository";
 import { createProductEventStream } from "@/modules/runs/product-event-sse";
 import { startRun } from "@/modules/runs/runner";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 const messageSchema = z.object({
   message: z.string().trim().min(1).max(100_000),
 });

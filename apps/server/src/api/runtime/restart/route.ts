@@ -11,9 +11,6 @@ import {
   restartLocalHermesGateway,
 } from "@/modules/runtime/local-management";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 const restartSchema = z.object({
   confirm: z.literal(true),
 });
