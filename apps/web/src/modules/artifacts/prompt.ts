@@ -11,22 +11,22 @@ export function augmentPromptWithArtifacts(input: {
   runId: string;
   remoteRoot?: string | null;
 }): string {
-  if (input.inputArtifacts.length === 0) return input.prompt;
-
   const remote = input.remoteRoot ? remoteRunPaths(input.remoteRoot, input.runId) : null;
   const outDir = remote ? remote.output : runOutputDir(input.runId);
   const separator = remote ? "/" : path.sep;
-  const inputPaths = remote
-    ? input.inputArtifacts.map((item) => `${remote.input}/${item.filename}`)
-    : input.inputArtifacts.map((item) => item.absolutePath);
 
-  const lines = [
-    input.prompt.trim(),
-    "",
-    "Fichiers d’entrée disponibles (chemins absolus) :",
-    ...inputPaths.map((item) => `- ${item}`),
-    "",
-    `Écris tout fichier produit dans : ${outDir}${separator}`,
-  ];
+  const lines = [input.prompt.trim()];
+
+  if (input.inputArtifacts.length > 0) {
+    const inputPaths = remote
+      ? input.inputArtifacts.map((item) => `${remote.input}/${item.filename}`)
+      : input.inputArtifacts.map((item) => item.absolutePath);
+    lines.push("", "Fichiers d’entrée disponibles (chemins absolus) :", ...inputPaths.map((item) => `- ${item}`));
+  }
+
+  // La consigne d'écriture est indépendante des pièces jointes : sans elle, une
+  // mission sans fichier d'entrée — le cas le plus fréquent — n'apprend jamais
+  // où écrire, et `scanOutputArtifacts()` ne trouve rien à enregistrer.
+  lines.push("", `Écris tout fichier produit dans : ${outDir}${separator}`);
   return lines.join("\n");
 }

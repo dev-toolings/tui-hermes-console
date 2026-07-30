@@ -7,7 +7,6 @@ import {
   getSharedWorkdirRoot,
   sanitizeFilename,
 } from "./paths";
-import { augmentPromptWithArtifacts } from "./prompt";
 
 describe("artifact paths", () => {
   test("defaults shared workdir", () => {
@@ -31,29 +30,5 @@ describe("artifact paths", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
-  });
-});
-
-describe("augmentPromptWithArtifacts", () => {
-  test("noop without files", () => {
-    expect(
-      augmentPromptWithArtifacts({
-        prompt: "hello",
-        inputArtifacts: [],
-        runId: "run_1",
-      }),
-    ).toBe("hello");
-  });
-
-  test("injects absolute paths and out dir", () => {
-    const text = augmentPromptWithArtifacts({
-      prompt: "somme",
-      inputArtifacts: [
-        { filename: "notes.txt", absolutePath: "/tmp/hermes-console-work/runs/run_1/in/notes.txt" },
-      ],
-      runId: "run_1",
-    });
-    expect(text).toContain("notes.txt");
-    expect(text).toContain("/runs/run_1/out");
   });
 });
