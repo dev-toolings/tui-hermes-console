@@ -30,8 +30,11 @@ export function WorkspacePanel({ onCollapse }: { onCollapse: () => void }) {
   const inputs = details?.inputArtifacts ?? [];
   const usage = details?.usage ?? null;
 
+  // Même traitement que la sidebar de sessions : cette colonne vit dans le
+  // panneau `inset`, elle en prend le fond pour ne pas masquer l'arête
+  // arrondie du panneau, et se sépare du transcript par un simple filet.
   return (
-    <aside className="flex h-full w-full flex-col border-l border-border/70 bg-[var(--oc-sidebar-bg,#efeae2)] dark:bg-sidebar">
+    <aside className="flex h-full w-full flex-col border-l border-border bg-[var(--oc-sidebar-bg,#efeae2)] dark:bg-background">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border/60 px-3">
         <p className="min-w-0 flex-1 truncate text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase">
           Espace de travail

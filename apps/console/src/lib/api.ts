@@ -33,7 +33,47 @@ export class ApiError extends Error {
   }
 }
 
+/** Mesuré : le sidecar met ~1,1 s à écouter (binaire de 65 Mo + Postgres). */
+const BOOT_DEADLINE_MS = 20_000;
+const BOOT_POLL_MS = 100;
+
+let serverReady: Promise<void> | null = null;
+
+/**
+ * Attend que l'API réponde, une seule fois pour toute la session.
+ *
+ * Tauri ouvre désormais la fenêtre sans attendre le sidecar : la coque s'affiche
+ * tout de suite au lieu de laisser l'écran vide une seconde. En contrepartie les
+ * `loader` peuvent partir avant que le serveur n'écoute — c'est ce qui affichait
+ * « /api/agents a répondu HTTP 500 » alors que rien n'était cassé, seulement trop
+ * tôt. Ce garde absorbe cette fenêtre de démarrage.
+ *
+ * La promesse est mémoïsée : les `loader` parallèles partagent une seule sonde,
+ * et une fois le serveur vu vivant le coût retombe à zéro. Passé l'échéance on
+ * laisse simplement la vraie requête partir : mieux vaut son message d'erreur
+ * que d'attendre indéfiniment.
+ */
+export function awaitServerReady() {
+  serverReady ??= (async () => {
+    const deadline = Date.now() + BOOT_DEADLINE_MS;
+    for (;;) {
+      try {
+        // En dev le proxy Vite répond 500 quand l'amont est injoignable ; en
+        // production le `fetch` rejette. `response.ok` couvre les deux.
+        const response = await fetch("/api/healthz", { cache: "no-store" });
+        if (response.ok) return;
+      } catch {
+        // Sidecar pas encore à l'écoute — ce n'est pas une panne.
+      }
+      if (Date.now() >= deadline) return;
+      await new Promise((resolve) => setTimeout(resolve, BOOT_POLL_MS));
+    }
+  })();
+  return serverReady;
+}
+
 async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
+  await awaitServerReady();
   const response = await fetch(path, { cache: "no-store", ...init });
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as

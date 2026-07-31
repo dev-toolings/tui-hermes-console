@@ -5,16 +5,18 @@ import {
   MessagePrimitive,
   useAuiState,
   type EnrichedPartState,
-  type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
 import { DotMatrix } from "@boardui/ui";
-import { BrainIcon, ChevronDownIcon, LoaderIcon, WrenchIcon } from "lucide-react";
+import { BrainIcon, ChevronDownIcon, LoaderIcon } from "lucide-react";
 import { XuluxMessageError } from "@/components/xulux-chat/message-error";
 import { XuluxAssistantActionBar } from "@/components/xulux-chat/assistant-action-bar";
 import { XuluxBranchPicker } from "@/components/xulux-chat/branch-picker";
 import { cn } from "@/lib/cn";
 import { XuluxMarkdownText } from "@/components/xulux-chat/markdown-text";
 import { hermesMessageGroupBy } from "./message-grouping";
+import { HermesToolPart } from "./hermes-tool-ui";
+import { HermesToolGroup } from "./tool-group";
+import { HERMES_WIDGETS, HermesWidgetFallback } from "./generative-ui";
 import { lookupRunMessageMeta, useRunThreadMeta } from "./run-thread-meta";
 
 export function HermesAssistantMessage() {
@@ -100,13 +102,12 @@ function HermesMessageParts() {
             );
           case "group-tool":
             return (
-              <div
-                className="space-y-1 py-1"
-                role="group"
-                aria-label={`Appels d’outils (${part.indices.length})`}
+              <HermesToolGroup
+                indices={part.indices}
+                running={part.status.type === "running"}
               >
                 {children}
-              </div>
+              </HermesToolGroup>
             );
           case "text":
             return <XuluxMarkdownText />;
@@ -114,8 +115,15 @@ function HermesMessageParts() {
             return <ReasoningPart text={part.text} />;
           case "tool-call": {
             const toolPart = part as Extract<EnrichedPartState, { type: "tool-call" }>;
-            return toolPart.toolUI ?? <HermesToolFallback {...toolPart} />;
+            return toolPart.toolUI ?? <HermesToolPart {...toolPart} />;
           }
+          case "generative-ui":
+            return (
+              <MessagePrimitive.GenerativeUI
+                components={HERMES_WIDGETS}
+                Fallback={HermesWidgetFallback}
+              />
+            );
           case "indicator":
             return <PendingIndicator />;
           default:
@@ -132,44 +140,6 @@ function PendingIndicator() {
       <DotMatrix state="thinking" aria-hidden className="text-muted-foreground" />
       <span className="ai-chat-shimmer-text inline-block">Hermes prépare la mission…</span>
     </p>
-  );
-}
-
-function HermesToolFallback({
-  toolName,
-  args,
-  argsText,
-  result,
-  status,
-}: ToolCallMessagePartProps) {
-  const running = status.type === "running";
-  const failed =
-    result != null &&
-    typeof result === "object" &&
-    "error" in result &&
-    (result as { error?: boolean }).error === true;
-  const tool = String((args as Record<string, unknown>).tool ?? toolName);
-
-  return (
-    <div
-      className={cn(
-        "my-1 w-full max-w-md rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm",
-        failed ? "border-destructive/40" : "border-border",
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <WrenchIcon className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate font-mono text-xs">{tool}</span>
-        {running ? (
-          <LoaderIcon className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
-        ) : null}
-      </div>
-      {argsText ? (
-        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-xs text-muted-foreground">
-          {argsText}
-        </pre>
-      ) : null}
-    </div>
   );
 }
 

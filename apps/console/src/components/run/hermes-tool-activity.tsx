@@ -1,6 +1,6 @@
 "use client";
 
-import { HermesToolCard } from "./hermes-tool-ui";
+import { HermesToolRow } from "./hermes-tool-ui";
 import { useHermesRun, type HermesToolActivity } from "./hermes-run-store";
 
 const VISIBLE = 5;
@@ -14,7 +14,7 @@ export function HermesToolActivityList() {
 
   return (
     <div
-      className="w-[341px] max-w-full"
+      className="w-full"
       aria-live="polite"
       data-testid="hermes-tool-activity"
     >
@@ -30,7 +30,7 @@ export function HermesToolActivityList() {
 
 function ActivityRow({ tool }: { tool: HermesToolActivity }) {
   return (
-    <HermesToolCard
+    <HermesToolRow
       tool={tool.name}
       target={tool.target}
       running={tool.status === "running"}

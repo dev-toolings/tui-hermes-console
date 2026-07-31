@@ -801,7 +801,7 @@ function buildAssistantContent(
       content.push({
         type: "tool-call",
         toolCallId,
-        toolName: "hermes_tool",
+        toolName: String(event.payload.tool ?? "outil"),
         args: {
           tool: String(event.payload.tool ?? "outil"),
           preview: event.payload.preview ?? null,

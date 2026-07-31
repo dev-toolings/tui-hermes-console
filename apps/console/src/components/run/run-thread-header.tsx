@@ -2,7 +2,7 @@
 
 import { XuluxTooltipIconButton } from "@/components/xulux-chat/tooltip-icon-button";
 import { useRunPageChromeActions } from "@/components/run/run-page-chrome";
-import { useBui } from "@boardui/ui/shell/primitives";
+import { useSidebar } from "@boardui/ui";
 import { MenuIcon, PanelRightIcon } from "lucide-react";
 import type { FC, ReactNode } from "react";
 
@@ -11,7 +11,7 @@ export const RunThreadHeader: FC<{
   trailing?: ReactNode;
   loading?: boolean;
 }> = ({ title, trailing, loading = false }) => {
-  const { setMobileOpen } = useBui();
+  const { setOpenMobile } = useSidebar();
   const { openDetails } = useRunPageChromeActions();
   const showContent = !loading && Boolean(title) && title !== "…";
 
@@ -19,7 +19,7 @@ export const RunThreadHeader: FC<{
     <header className="flex h-12 shrink-0 items-center gap-2 px-4">
       <button
         type="button"
-        onClick={() => setMobileOpen(true)}
+        onClick={() => setOpenMobile(true)}
         aria-label="Ouvrir la navigation"
         className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-current transition-colors hover:bg-muted md:hidden"
       >

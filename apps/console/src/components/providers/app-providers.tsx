@@ -2,6 +2,7 @@
 
 import { useEffect, type ReactNode } from "react";
 import toast, { Toaster } from "react-hot-toast";
+import { TooltipProvider } from "@boardui/ui";
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -39,7 +40,13 @@ const HOT_TOAST_OPTIONS = {
 
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
-    <>
+    /*
+      Racine Radix des tooltips : le rail replié en icônes rend un `Tooltip`
+      par entrée (`SidebarMenuButton tooltip=…`), et Radix exige un Provider
+      au-dessus. À l'échelle de l'app plutôt que du shell, pour couvrir aussi
+      les surfaces immersives.
+    */
+    <TooltipProvider>
       <Toaster
         position="top-center"
         reverseOrder={false}
@@ -48,7 +55,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       />
       <MutationToastBridge />
       {children}
-    </>
+    </TooltipProvider>
   );
 }
 

@@ -58,7 +58,11 @@ export function CardSurface({
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-xl bg-card p-4 shadow-board-card", className)}>{children}</div>
+    // Même correctif que le `Card` de @boardui/ui : en sombre la couleur de
+    // carte documentée est #171717 (`--surface`), pas #262626 (`--card`, qui
+    // sert aux contrôles). Sans ça les 20 écrans BoardUI resteraient un cran
+    // plus clairs que l'Aperçu.
+    <div className={cn("rounded-xl bg-card p-4 shadow-board-card dark:bg-surface", className)}>{children}</div>
   );
 }
 

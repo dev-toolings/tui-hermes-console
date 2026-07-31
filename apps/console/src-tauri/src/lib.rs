@@ -1,20 +1,10 @@
 use std::collections::HashMap;
 use std::fs;
-use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
 
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
-
-/// Port du sidecar. Boucle locale uniquement : il détient les secrets runtime
-/// déchiffrés et ne doit jamais être joignable depuis le réseau.
-const SERVER_ADDR: &str = "127.0.0.1:3170";
-
-/// Au-delà, on ouvre quand même la fenêtre : le SPA affichera l'erreur de son
-/// côté, ce qui vaut mieux qu'une application qui ne s'ouvre jamais.
-const SERVER_WAIT: Duration = Duration::from_secs(20);
 
 /// Nom du fichier de configuration, dans le répertoire de config de l'app.
 const CONFIG_FILE: &str = "console.env";
@@ -144,28 +134,6 @@ fn spawn_console_server(
     Ok(())
 }
 
-/// Attend que le sidecar accepte les connexions.
-///
-/// Sans cette attente, la fenêtre s'ouvrait dès le démarrage du process Rust et
-/// le SPA lançait ses `loader` avant que le serveur n'écoute : en développement,
-/// le proxy Vite ne pouvait pas joindre l'amont et répondait 500. L'écran
-/// affichait « /api/agents a répondu HTTP 500 » alors que rien n'était cassé —
-/// seulement trop tôt.
-fn wait_for_server() -> bool {
-    let Ok(addr) = SERVER_ADDR.parse::<SocketAddr>() else {
-        return false;
-    };
-    let deadline = Instant::now() + SERVER_WAIT;
-
-    while Instant::now() < deadline {
-        if TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok() {
-            return true;
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-    false
-}
-
 fn open_main_window(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
         .title("Hermes Console")
@@ -216,20 +184,18 @@ pub fn run() {
                 eprintln!("[tauri] démarrage du serveur Console impossible : {error}");
             }
 
-            // La fenêtre n'est créée qu'ici : le WebView charge dès sa création,
-            // et il ne doit pas partir avant que l'API réponde.
-            let handle = handle.clone();
-            tauri::async_runtime::spawn_blocking(move || {
-                if !wait_for_server() {
-                    eprintln!(
-                        "[tauri] serveur injoignable sur {SERVER_ADDR} après {}s — ouverture quand même",
-                        SERVER_WAIT.as_secs()
-                    );
-                }
-                if let Err(error) = open_main_window(&handle) {
-                    eprintln!("[tauri] impossible d'ouvrir la fenêtre : {error}");
-                }
-            });
+            // La fenêtre s'ouvre tout de suite, sans attendre le sidecar.
+            //
+            // Elle attendait auparavant que 127.0.0.1:3170 accepte une connexion,
+            // parce que les `loader` du SPA partaient trop tôt et affichaient
+            // « /api/agents a répondu HTTP 500 ». Mesuré : ce sont ~1,1 s d'écran
+            // entièrement vide, avant même qu'une fenêtre n'existe — l'inverse de
+            // ce qu'on attend d'une application native. C'est désormais le SPA qui
+            // absorbe le démarrage, dans `awaitServerReady` (`src/lib/api.ts`) :
+            // la coque s'affiche immédiatement, le contenu se remplit ensuite.
+            if let Err(error) = open_main_window(handle) {
+                eprintln!("[tauri] impossible d'ouvrir la fenêtre : {error}");
+            }
 
             Ok(())
         })

@@ -36,5 +36,19 @@ export default defineConfig({
     outDir: "dist",
     // Tauri embarque le bundle : pas de sourcemaps en release.
     sourcemap: !!process.env.TAURI_DEBUG,
+    //
+    // Pas de `manualChunks` ici, et c'est délibéré.
+    //
+    // Le découpage vient uniquement des `import()` des écrans lourds
+    // (route-tree.tsx et screens/dashboard.tsx) ; Rollup en déduit seul les
+    // chunks `run-screen`, `activity-chart` et `missions-data-table`, et
+    // l'entrée tombe de 484 à 185 ko gzip.
+    //
+    // Ajouter un `manualChunks` par-dessus a l'effet inverse de celui qu'on
+    // attend : forcer `recharts` et `assistant-ui` dans des chunks nommés les
+    // fait remonter en `modulepreload` dans index.html, donc chargés sur
+    // *toutes* les routes — mesuré, 865 ko rapatriés sur `/agents`, qui n'en
+    // utilise aucun. Si le sujet revient, vérifier `dist/index.html` : il ne
+    // doit contenir aucun `rel="modulepreload"`.
   },
 });

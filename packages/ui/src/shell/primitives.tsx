@@ -32,8 +32,13 @@ export function useBui() {
 
 const LAYOUT_CHANGE_EVENT = "boardui-layout-change"
 
-function getLayoutSnapshot(storageKey: string): LayoutVariant {
-  return window.localStorage.getItem(storageKey) === "inset" ? "inset" : "boardui"
+function getLayoutSnapshot(
+  storageKey: string,
+  fallback: LayoutVariant
+): LayoutVariant {
+  const stored = window.localStorage.getItem(storageKey)
+  if (stored === "inset" || stored === "boardui") return stored
+  return fallback
 }
 
 function subscribeToLayout(onStoreChange: () => void) {
@@ -49,12 +54,15 @@ function subscribeToLayout(onStoreChange: () => void) {
 export function BuiSidebarProvider({
   children,
   forcedLayout,
+  defaultLayout = "boardui",
   storageKey,
   autoCollapseOnTabletPortrait = false,
 }: {
   children: React.ReactNode
   /** Pin the shell to a single layout and hide the layout switcher (e.g. the SaaS app locks to "inset" / Sidebar 08). */
   forcedLayout?: LayoutVariant
+  /** Layout used until the user picks one — the stored choice still wins. */
+  defaultLayout?: LayoutVariant
   /** localStorage key the layout choice persists under — must stay distinct per app. */
   storageKey: string
   /** Collapse the rail on entering tablet portrait (768–1023px) — opt-in, the SaaS shell wants it, classic doesn't. */
@@ -95,8 +103,8 @@ export function BuiSidebarProvider({
 
   const storedLayout = React.useSyncExternalStore(
     subscribeToLayout,
-    () => getLayoutSnapshot(storageKey),
-    (): LayoutVariant => "boardui"
+    () => getLayoutSnapshot(storageKey, defaultLayout),
+    (): LayoutVariant => defaultLayout
   )
   const layout = forcedLayout ?? storedLayout
   const setLayout = React.useCallback(

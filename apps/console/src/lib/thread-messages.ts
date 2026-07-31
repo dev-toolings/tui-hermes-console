@@ -1,4 +1,5 @@
 import type { ThreadMessageLike } from "@assistant-ui/react";
+import { extractUiSpec } from "@/lib/generative-ui";
 import type { MessageContent } from "@console/core/types/domain";
 import type { ProductRunStatus, ThreadSnapshot } from "@console/core/modules/runs/types";
 
@@ -61,7 +62,11 @@ export function buildPartsFromEvents(events: EventLike[]): Part[] {
       parts.push({
         type: "tool-call",
         toolCallId,
-        toolName: "hermes_tool",
+        // Le vrai nom de l'outil, pas le nom de synthèse `hermes_tool` : c'est
+        // lui qui permet à un `makeAssistantToolUI` dédié de prendre la main
+        // sur le rendu générique. Les messages déjà en base gardent l'ancien
+        // nom et restent rendus par `HermesToolCallUI`.
+        toolName: String(ev.payload.tool ?? "outil"),
         args: {
           tool: String(ev.payload.tool ?? "outil"),
           preview: ev.payload.preview == null ? null : String(ev.payload.preview),
@@ -78,6 +83,11 @@ export function buildPartsFromEvents(events: EventLike[]): Part[] {
             }
           : {}),
       });
+
+      // Un outil qui renvoie un spec d'interface le voit rendu juste après son
+      // appel, comme un résultat à part entière — pas replié dans le groupe.
+      const spec = result ? extractUiSpec(result.payload.result) : null;
+      if (spec) parts.push({ type: "generative-ui", spec });
     }
   }
 
@@ -106,16 +116,23 @@ export function buildMessages(prompt: string, events: EventLike[]): ThreadMessag
 }
 
 export function contentToParts(content: MessageContent): Part[] {
-  return content.map((part) => {
-    if (part.type === "text") return part;
-    if (part.type === "reasoning") return part;
-    return {
+  return content.flatMap((part): Part[] => {
+    if (part.type === "text") return [part];
+    if (part.type === "reasoning") return [part];
+
+    const call: Part = {
       type: "tool-call" as const,
       toolCallId: part.toolCallId,
       toolName: part.toolName,
       args: part.args as never,
       ...(part.result !== undefined ? { result: part.result } : {}),
     };
+
+    // Même règle que sur le flux live : un spec porté par le résultat est
+    // rendu, qu'il vienne du stream ou de la base.
+    const output = (part.result as { output?: unknown } | undefined)?.output;
+    const spec = extractUiSpec(output);
+    return spec ? [call, { type: "generative-ui", spec }] : [call];
   });
 }
 
@@ -137,13 +154,41 @@ function assistantStatusForRun(
   return { type: "complete", reason: "stop" };
 }
 
+/**
+ * Messages déjà convertis, indexés par l’objet source.
+ *
+ * `applyProductEventToSnapshot` ne recopie jamais `snapshot.messages` : il ne
+ * touche qu’`events`, `runs` et `cursor`. Un message déjà converti reste donc
+ * valable tant que le statut de son run n’a pas bougé.
+ *
+ * Ça compte parce que les `ThreadMessageLike` sont comparés par identité en
+ * aval : reconstruire les N messages à chaque événement SSE — mesuré, 100 % des
+ * identités recréées à chaque fois — faisait re-rendre le fil entier, et
+ * reparser tout son markdown, pour un seul message qui changeait vraiment.
+ *
+ * `WeakMap` plutôt qu’un cache par `id` : la clé est l’objet lui-même, donc pas
+ * d’invalidation à écrire ni de fuite quand la conversation est déchargée.
+ */
+const convertedMessages = new WeakMap<
+  object,
+  { status: ProductRunStatus; error: string | null; built: ThreadMessageLike }
+>();
+
 /** Snapshot live multi-turn + éventuelle queue d’événements du run en cours. */
 export function buildThreadMessagesFromSnapshot(snapshot: ThreadSnapshot): ThreadMessageLike[] {
   const runsById = new Map(snapshot.runs.map((run) => [run.id, run]));
 
   const result: ThreadMessageLike[] = snapshot.messages.map((message) => {
     const run = message.runId ? runsById.get(message.runId) : undefined;
-    return {
+    const status = run?.status ?? "completed";
+    const error = run?.error ?? null;
+
+    const cached = convertedMessages.get(message);
+    if (cached && cached.status === status && cached.error === error) {
+      return cached.built;
+    }
+
+    const built: ThreadMessageLike = {
       id:
         message.role === "assistant" && message.runId
           ? `assistant_${message.runId}`
@@ -153,13 +198,12 @@ export function buildThreadMessagesFromSnapshot(snapshot: ThreadSnapshot): Threa
       createdAt: new Date(message.createdAt),
       ...(message.role === "assistant"
         ? {
-            status: assistantStatusForRun(
-              run?.status ?? "completed",
-              run?.error ?? null,
-            ),
+            status: assistantStatusForRun(status, error),
           }
         : {}),
     };
+    convertedMessages.set(message, { status, error, built });
+    return built;
   });
 
   const latestRun = snapshot.runs.at(-1);

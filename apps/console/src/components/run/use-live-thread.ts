@@ -8,6 +8,7 @@ import type {
   ThreadSnapshot,
 } from "@console/core/modules/runs/types";
 import type { ConnectorType } from "@console/core/types/domain";
+import { awaitServerReady } from "@/lib/api";
 import { buildThreadMessagesFromSnapshot } from "@/lib/thread-messages";
 import { consumeProductEventStream } from "@/lib/consume-product-event-stream";
 import { isSessionCommandMessage } from "@console/core/modules/session/commands";
@@ -25,7 +26,19 @@ const ACTIVE_STATUSES: ProductRunStatus[] = [
   "running",
   "awaiting_approval",
 ];
-const RECONNECT_POLL_MS = 500;
+/**
+ * Filet de rattrapage, pas la voie normale.
+ *
+ * Le flux SSE de `sendMessage` porte déjà les événements du run lancé ici. Ce
+ * timer ne couvre que ce qu'il ne voit pas : un run démarré ailleurs (autre
+ * fenêtre, autre appareil) ou un stream coupé en route.
+ *
+ * Il tournait à 500 ms *en parallèle* du SSE, et chaque tour refetche le
+ * snapshot complet — 563 Ko sur la conversation de test. Soit ~1,1 Mo/s et deux
+ * réconciliations par seconde pendant toute la durée du run, pour des données
+ * que le stream venait de livrer.
+ */
+const RECONNECT_POLL_MS = 3000;
 const SNAPSHOT_CACHE_LIMIT = 20;
 
 type CachedSnapshot = { thread: ThreadSnapshot; gaps: ConnectorType[] };
@@ -83,6 +96,8 @@ export function useLiveThread(threadId: string) {
   const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
   const snapshotRef = useRef<ThreadSnapshot | null>(cached?.thread ?? null);
+  /** Un flux SSE est attaché : le filet de rattrapage n'a rien à rattraper. */
+  const streamingRef = useRef(false);
 
   const applySnapshot = useCallback((next: ThreadSnapshot) => {
     snapshotRef.current = next;
@@ -300,6 +315,7 @@ export function useLiveThread(threadId: string) {
         accepted = true;
 
         let createdRunId: string | null = null;
+        streamingRef.current = true;
         await consumeProductEventStream(response, {
           onMeta: ({ runId }) => {
             createdRunId = runId;
@@ -335,6 +351,9 @@ export function useLiveThread(threadId: string) {
         }
         if (reason instanceof Error) throw reason;
         throw new Error(toMessage(reason));
+      } finally {
+        // Y compris si le stream a cassé : le filet reprend la main.
+        streamingRef.current = false;
       }
     },
     [applySnapshot, pushLocalExchange, refresh, router, threadId],
@@ -356,7 +375,7 @@ export function useLiveThread(threadId: string) {
     let disposed = false;
     let refreshing = false;
     const reconcile = async () => {
-      if (disposed || refreshing) return;
+      if (disposed || refreshing || streamingRef.current) return;
       refreshing = true;
       try {
         const { thread: server } = await fetchThreadSnapshot(threadId);
@@ -492,6 +511,10 @@ async function readApiError(response: Response) {
 }
 
 async function fetchThreadSnapshot(threadId: string) {
+  // Une conversation peut être la toute première route affichée (lien profond,
+  // dernier onglet restauré) : comme les `loader`, elle doit laisser au sidecar
+  // le temps d'écouter plutôt que d'échouer sur un serveur qui démarre encore.
+  await awaitServerReady();
   const response = await fetch(`/api/threads/${encodeURIComponent(threadId)}`, {
     cache: "no-store",
   });

@@ -91,10 +91,68 @@ setup: install env workdir db-check db-migrate ## Setup complet (install + env +
 
 ##@ Développement
 
+# Le sidecar Tauri (`make tauri-dev`) écoute lui aussi sur $(PORT), et il
+# survit à l'app qui l'a lancé. Tant qu'il traîne, `bun --watch` meurt en
+# EADDRINUSE — mais l'erreur défile au milieu des logs de Vite, et le SPA
+# continue de parler à l'ANCIEN binaire compilé sans que rien ne le signale.
+#
+# On récupère donc le port, mais seulement quand c'est sans risque :
+#   - processus de ce dépôt ET orphelin (PPID 1) -> on l'arrête, il ne sert
+#     plus personne ;
+#   - processus de ce dépôt avec un parent vivant -> l'app desktop tourne
+#     vraiment, on ne la casse pas dans son dos ;
+#   - tout le reste -> on n'a pas lancé ce processus, on n'y touche pas.
+.PHONY: port-free
+port-free:
+	@pid=$$(lsof -nP -iTCP:$(PORT) -sTCP:LISTEN -t 2>/dev/null | head -1); \
+	[ -n "$$pid" ] || exit 0; \
+	cmd=$$(ps -o command= -p "$$pid" 2>/dev/null); \
+	ppid=$$(ps -o ppid= -p "$$pid" 2>/dev/null | tr -d ' '); \
+	cwd=$$(lsof -a -p "$$pid" -d cwd -Fn 2>/dev/null | sed -n 's|^n||p' | head -1); \
+	ours=no; \
+	case "$$cmd" in $(CURDIR)/*) ours=yes;; esac; \
+	case "$$cwd" in $(CURDIR)|$(CURDIR)/*) ours=yes;; esac; \
+	if [ "$$ours" != yes ]; then \
+	  printf "$(RED)✗$(RESET) %s\n" "port $(PORT) occupé par un processus étranger (PID $$pid) :" >&2; \
+	  printf "    %s\n" "$$cmd" >&2; \
+	  printf "    %s\n" "il n'a pas été lancé depuis ce dépôt — à toi de trancher : kill $$pid" >&2; \
+	  exit 1; \
+	fi; \
+	if [ "$$ppid" != "1" ]; then \
+	  printf "$(RED)✗$(RESET) %s\n" "port $(PORT) tenu par un processus VIVANT de ce dépôt (PID $$pid, parent $$ppid) :" >&2; \
+	  printf "    %s\n" "$$cmd" >&2; \
+	  printf "    %s\n" "app desktop ou autre 'make dev' en cours — ferme-le, ou : make dev PORT=3171" >&2; \
+	  exit 1; \
+	fi; \
+	printf "$(YELLOW)!$(RESET) %s\n" "port $(PORT) tenu par un processus orphelin de ce dépôt (PID $$pid) — arrêt"; \
+	printf "    %s\n" "$$cmd"; \
+	kill "$$pid" 2>/dev/null || true; \
+	for _ in 1 2 3 4 5 6 7 8 9 10; do \
+	  lsof -nP -iTCP:$(PORT) -sTCP:LISTEN -t >/dev/null 2>&1 || break; sleep 0.3; \
+	done; \
+	if lsof -nP -iTCP:$(PORT) -sTCP:LISTEN -t >/dev/null 2>&1; then kill -9 "$$pid" 2>/dev/null || true; sleep 0.5; fi; \
+	if lsof -nP -iTCP:$(PORT) -sTCP:LISTEN -t >/dev/null 2>&1; then \
+	  printf "$(RED)✗$(RESET) %s\n" "port $(PORT) toujours occupé" >&2; exit 1; \
+	fi; \
+	printf "$(GREEN)✓$(RESET) %s\n" "port $(PORT) libéré"
+
 .PHONY: dev
-dev: ## Lance l'API (3170) et le SPA Vite (1420)
+dev: port-free ## Lance l'API (3170) et le SPA Vite (1420)
 	$(call say,Starting API on :$(PORT) and SPA on http://localhost:1420)
 	@CONSOLE_SERVER_PORT=$(PORT) $(PKG) run dev
+
+.PHONY: api
+api: port-free ## Lance l'API seule (3170), sans le SPA
+	$(call say,Starting API on :$(PORT))
+	@CONSOLE_SERVER_PORT=$(PORT) $(PKG) run dev:server
+
+.PHONY: spa
+spa: ## Lance le SPA Vite seul (1420), proxie /api vers l'API
+	$(call say,Starting SPA on http://localhost:1420 — API expected on :$(PORT))
+	@CONSOLE_SERVER_PORT=$(PORT) $(PKG) run dev:console
+
+.PHONY: stop
+stop: port-free ## Libère le port de l'API (processus orphelin resté en place)
 
 .PHONY: build
 build: ## Build de production du SPA

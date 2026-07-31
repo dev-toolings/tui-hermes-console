@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Icône de Hermes Console — l'Homme de Vitruve de Léonard de Vinci.
+
+  Source de vérité : `cargo tauri icon icons/icon.svg` régénère tous les
+  formats (icns, ico, png) à partir de ce fichier. Le PNG à côté en est un
+  export, pas l'original.
+
+  Trois contraintes ont dicté le dessin :
+
+  1. Ça doit tenir à 16 px dans le Dock. Le trait de Léonard, ses annotations
+     en miroir et ses hachures disparaissent à cette taille — ne restent que le
+     cercle, le carré et la silhouette. C'est donc sur eux que tout repose, et
+     la sanguine sur parchemin cède au bleu accent du produit (#3080ff, celui
+     du logo « H » et des boutons primaires) sur le fond sombre #121212.
+
+  2. La superposition des deux poses est le sujet. Quatre bras et quatre
+     jambes : c'est ce qui distingue le Vitruve de n'importe quelle silhouette
+     humaine, et ce qui survit le mieux à la réduction.
+
+  3. Grille macOS Big Sur : le squircle occupe 824 px sur une toile de 1024,
+     soit 100 px de marge — sinon l'icône dépasse ses voisines dans le Dock.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="field" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e1f22"/>
+      <stop offset="1" stop-color="#0a0a0b"/>
+    </linearGradient>
+
+    <!-- Halo derrière la figure : décolle le sujet du fond sans ombre portée,
+         que macOS applique déjà lui-même. -->
+    <radialGradient id="halo" cx="0.5" cy="0.46" r="0.5">
+      <stop offset="0" stop-color="#3080ff" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#3080ff" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="limb" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#eaf1ff"/>
+      <stop offset="1" stop-color="#a9c8ff"/>
+    </linearGradient>
+
+    <clipPath id="squircle">
+      <rect x="100" y="100" width="824" height="824" rx="185" ry="185"/>
+    </clipPath>
+  </defs>
+
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="url(#field)"/>
+
+  <g clip-path="url(#squircle)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#halo)"/>
+
+    <!--
+      Espace de dessin de 1000×1000, cadré sur la boîte réelle du sujet
+      (x 115..885, y 160..930, centre 500/545) et ramené à 640 px au centre
+      de la toile : translate(97.5, 59.1) scale(0.83).
+    -->
+    <g transform="translate(97.5 59.1) scale(0.83)"
+       fill="none" stroke-linecap="round" stroke-linejoin="round">
+
+      <!-- La géométrie : le carré des bras à l'horizontale, le cercle centré
+           sur le nombril que touchent les membres écartés. -->
+      <rect x="175" y="245" width="650" height="650"
+            stroke="#2f6fe0" stroke-opacity="0.5" stroke-width="9"/>
+      <circle cx="500" cy="545" r="385"
+              stroke="#3080ff" stroke-opacity="0.8" stroke-width="10"/>
+
+      <!-- Seconde pose : membres écartés, en retrait pour donner la
+           profondeur qu'a la superposition chez Léonard.
+
+           Les mains levées visent le haut du cercle et non l'angle du carré :
+           la construction exacte les place au niveau du sommet du crâne, donc
+           à quelques pixels du coin — à 32 px les deux traits fusionnent et on
+           ne lit plus qu'une croix. La lisibilité l'emporte ici. -->
+      <g stroke="url(#limb)" stroke-opacity="0.6" stroke-width="15">
+        <path d="M 480 386 Q 398 300 330 200"/>
+        <path d="M 520 386 Q 602 300 670 200"/>
+        <path d="M 482 604 Q 390 740 307 878"/>
+        <path d="M 518 604 Q 610 740 693 878"/>
+      </g>
+
+      <!-- Pose principale : bras à l'horizontale, jambes jointes. -->
+      <g stroke="url(#limb)" stroke-width="19">
+        <path d="M 476 394 Q 328 392 180 406"/>
+        <path d="M 524 394 Q 672 392 820 406"/>
+        <path d="M 486 600 Q 476 760 466 893"/>
+        <path d="M 514 600 Q 524 760 534 893"/>
+      </g>
+
+      <!-- Tronc, cou et tête, pleins : à petite taille c'est la masse qui
+           fait lire une silhouette humaine, pas le contour. -->
+      <path d="M 500 322 L 500 380" stroke="url(#limb)" stroke-width="30"/>
+      <path d="M 468 382 C 468 375 532 375 532 382 L 520 598
+               C 520 607 480 607 480 598 Z" fill="url(#limb)"/>
+      <circle cx="500" cy="292" r="45" fill="url(#limb)"/>
+    </g>
+  </g>
+</svg>

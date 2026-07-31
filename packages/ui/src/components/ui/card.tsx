@@ -12,7 +12,17 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        // Géométrie du registre shadcn (new-york-v4), mesurée sur
+        // ui.shadcn.com/view/new-york-v4/dashboard-01 : bord 1px + shadow-sm
+        // (et non un ring), py/gap/px à 24px, footer sans fond ni filet.
+        // `bg-card dark:bg-surface` et non `bg-card` seul : en clair `--card`
+        // vaut #ffffff, ce qu'attend le registre (carte blanche sur panneau
+        // blanc, séparée par le filet). En sombre BoardUI réaffecte `--card` à
+        // #262626 — « buttons, inputs, chips only » dit son propre commentaire
+        // de tokens — alors que la couleur de carte documentée est #171717,
+        // celle du rail. C'est aussi le rapport qu'on mesure sur le bloc :
+        // carte = couleur du rail, un cran au-dessus du panneau.
+        "group/card flex flex-col gap-(--card-spacing) rounded-xl border bg-card py-(--card-spacing) text-sm text-card-foreground shadow-sm dark:bg-surface [--card-spacing:--spacing(6)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(4)] *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
         className
       )}
       {...props}
@@ -25,7 +35,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-xl px-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-(--card-spacing)",
+        "group/card-header @container/card-header grid auto-rows-min grid-rows-[auto_auto] items-start gap-2 px-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] [.border-b]:pb-(--card-spacing)",
         className
       )}
       {...props}
@@ -38,7 +48,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-title"
       className={cn(
-        "font-heading text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
+        "font-heading leading-none font-semibold group-data-[size=sm]/card:text-sm",
         className
       )}
       {...props}
@@ -84,7 +94,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "flex items-center rounded-b-xl border-t bg-muted/50 p-(--card-spacing)",
+        "flex items-center px-(--card-spacing) [.border-t]:pt-(--card-spacing)",
         className
       )}
       {...props}

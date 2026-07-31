@@ -29,6 +29,7 @@ import {
 } from "@boardui/ui";
 import { cn } from "@/lib/cn";
 import { RUN_STATUS, type RunStatus } from "@console/core/lib/run-status";
+import { ChromeIconButton } from "@/components/shell/chrome-icon-button";
 import { ChatModelsSettingsButton } from "@/components/chat/chat-models-settings-button";
 import { WorkspacePanel } from "@/components/chat/workspace-panel";
 import {
@@ -208,7 +209,6 @@ export function ChatSurfaceFrame({ children }: { children: ReactNode }) {
       draft={draft}
       nowMs={nowMs}
       collapsed={sidebarCollapsed}
-      onCollapse={() => setSidebarCollapsed(true)}
       onNavigate={() => setMobileOpen(false)}
       onDeleted={handleDeleted}
     />
@@ -217,10 +217,31 @@ export function ChatSurfaceFrame({ children }: { children: ReactNode }) {
   return (
     <ChatSurfaceContext.Provider value={surface}>
       <div className="oc-chat-shell flex h-full min-h-0 w-full bg-[var(--oc-shell-bg,#f4f1ea)] text-foreground dark:bg-background">
+        {/*
+          Cette colonne vit DANS le panneau `inset`, elle doit donc en porter
+          la couleur. En `dark:bg-sidebar` elle valait #171717 — exactement le
+          champ sur lequel le panneau flotte : l'arête arrondie du panneau,
+          pourtant bien découpée, se retrouvait avec la même teinte des deux
+          côtés et disparaissait, et le rail de la Console fusionnait avec la
+          liste de sessions. En prenant le fond du panneau, la silhouette
+          arrondie réapparaît comme sur les autres routes.
+
+          Le filet vers le transcript reste en `border-border` : `border-seam`
+          (#404040) ne sert qu'à rattraper un bord posé SUR une surface haute,
+          où `--border` se confond avec le fond. Ici on est sur `--background`
+          (#121212), où `--border` (#262626) se voit déjà — le seam y tranchait
+          bien trop.
+        */}
         <div
           className={cn(
-            "hidden h-full shrink-0 border-r border-border/70 bg-[var(--oc-sidebar-bg,#efeae2)] transition-[width] duration-200 dark:bg-sidebar md:flex",
-            sidebarCollapsed ? "w-0 overflow-hidden border-0" : "w-[17.5rem]",
+            "hidden h-full shrink-0 bg-[var(--oc-sidebar-bg,#efeae2)] transition-[width] duration-200 md:flex dark:bg-background",
+            // Le filet est porté par la branche dépliée : en surcharge
+            // (`border-r` + `border-0`) les deux règles ont la même
+            // spécificité et c'est l'ordre de la feuille générée qui tranche —
+            // il restait 1px collé au bord du panneau une fois replié.
+            sidebarCollapsed
+              ? "w-0 overflow-hidden"
+              : "w-[17.5rem] border-r border-border",
           )}
         >
           {!sidebarCollapsed ? sidebar : null}
@@ -334,22 +355,20 @@ function ChatPaneHeader({
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/60 bg-background/80 px-3 backdrop-blur-sm">
-      <button
-        type="button"
-        className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted md:hidden"
+      <ChromeIconButton
+        className="md:hidden"
         aria-label="Open sessions"
         onClick={openMobileSidebar}
       >
         <MenuIcon className="size-4" />
-      </button>
-      <button
-        type="button"
-        className="hidden size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted md:inline-flex"
+      </ChromeIconButton>
+      <ChromeIconButton
+        className="hidden md:inline-flex"
         aria-label={sidebarCollapsed ? "Show sessions" : "Hide sessions"}
         onClick={toggleSidebar}
       >
         <PanelLeftIcon className="size-4" />
-      </button>
+      </ChromeIconButton>
 
       <button
         type="button"
@@ -368,9 +387,8 @@ function ChatPaneHeader({
         ) : null}
         {trailing}
         {sessionId ? (
-          <button
-            type="button"
-            className="hidden size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted xl:inline-flex"
+          <ChromeIconButton
+            className="hidden xl:inline-flex"
             aria-label={
               workspaceOpen ? "Masquer l’espace de travail" : "Afficher l’espace de travail"
             }
@@ -378,7 +396,7 @@ function ChatPaneHeader({
             onClick={toggleWorkspace}
           >
             <PanelRightIcon className="size-4" />
-          </button>
+          </ChromeIconButton>
         ) : null}
         <ChatModelsSettingsButton />
       </div>
@@ -473,7 +491,6 @@ function OpenClawSessionSidebar({
   draft,
   nowMs,
   collapsed,
-  onCollapse,
   onNavigate,
   onDeleted,
 }: {
@@ -483,7 +500,6 @@ function OpenClawSessionSidebar({
   draft: boolean;
   nowMs: number;
   collapsed: boolean;
-  onCollapse: () => void;
   onNavigate: () => void;
   onDeleted: (threadId: string) => Promise<void>;
 }) {
@@ -538,14 +554,11 @@ function OpenClawSessionSidebar({
           <p className="truncate text-sm font-semibold tracking-tight">Hermes</p>
           <p className="truncate text-[0.625rem] text-muted-foreground">Control · Chat</p>
         </div>
-        <button
-          type="button"
-          className="hidden size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted md:inline-flex"
-          aria-label="Collapse sidebar"
-          onClick={onCollapse}
-        >
-          <PanelLeftIcon className="size-3.5" />
-        </button>
+        {/*
+          Pas de second bouton de repli ici : celui de l'en-tête du transcript
+          fait déjà l'aller-retour, et il reste atteignable une fois la colonne
+          repliée à 0 — ce qui n'était pas le cas de celui-ci.
+        */}
       </div>
 
       <div className="px-2 pb-2">

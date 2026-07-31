@@ -35,7 +35,7 @@ describe("thread-messages", () => {
       {
         type: "tool-call",
         toolCallId: "c1",
-        toolName: "hermes_tool",
+        toolName: "read_file",
         args: { tool: "read_file", preview: "a.ts", arguments: null },
         result: {
           durationMs: 12,
@@ -196,5 +196,74 @@ describe("thread-messages", () => {
       status: { type: "complete", reason: "stop" },
     });
     expect(persisted.at(-1)?.id).toBe(terminal.at(-1)?.id);
+  });
+
+  test("réutilise l'objet des messages figés, en reconstruit un dont le run a changé", () => {
+    const message = {
+      id: "msg_a",
+      role: "assistant" as const,
+      content: [{ type: "text" as const, text: "ok" }],
+      runId: "run_1",
+      createdAt: "2026-01-01T00:00:01.000Z",
+    };
+    const run = {
+      id: "run_1",
+      status: "running" as const,
+      input: "hi",
+      output: null,
+      usage: null,
+      error: null,
+      hermesResponseId: null,
+      runtimeSession: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      endedAt: null,
+      lastEventAt: null,
+    };
+    const snapshot = {
+      id: "thr_1",
+      title: "t",
+      source: "chat" as const,
+      agentName: "a",
+      instructions: "i",
+      model: "m",
+      effectiveModel: "m",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      messages: [message],
+      runs: [run],
+      events: [],
+      artifacts: [],
+      cursor: 0,
+    } satisfies ThreadSnapshot;
+
+    const first = buildThreadMessagesFromSnapshot(snapshot);
+
+    // Ce que fait `applyProductEventToSnapshot` : nouveau snapshot, nouveaux
+    // `events`/`cursor`, mais le même objet message. Il doit ressortir à
+    // l'identique — c'est ce qui empêche assistant-ui de re-rendre tout le fil.
+    const afterEvent = buildThreadMessagesFromSnapshot({
+      ...snapshot,
+      cursor: 1,
+      events: [
+        {
+          runId: "run_1",
+          sequence: 1,
+          type: "agent.message",
+          payload: { text: "ok" },
+          cursor: 1,
+          occurredAt: new Date("2026-01-01T00:00:01.000Z"),
+        },
+      ],
+    });
+    expect(afterEvent[0]).toBe(first[0]);
+
+    // En revanche, un changement de statut du run doit bien se voir.
+    const afterCompletion = buildThreadMessagesFromSnapshot({
+      ...snapshot,
+      runs: [{ ...run, status: "completed", endedAt: "2026-01-01T00:00:02.000Z" }],
+    });
+    expect(afterCompletion[0]).not.toBe(first[0]);
+    expect(afterCompletion[0]?.status).toEqual({ type: "complete", reason: "stop" });
   });
 });

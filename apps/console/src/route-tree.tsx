@@ -6,6 +6,7 @@
  * chemin (`id` seul) : elles enveloppent leurs enfants sans consommer de
  * segment d'URL, exactement comme les `layout.tsx` qu'elles remplacent.
  */
+import { lazy, Suspense } from "react";
 import {
   createRootRoute,
   createRoute,
@@ -17,10 +18,39 @@ import {
 import { AppProviders } from "@/components/providers/app-providers";
 import { ConsoleShell } from "@/components/shell/console-shell";
 import { SettingsNav } from "@/components/settings/settings-nav";
-import { ChatPane, ChatSurfaceFrame } from "@/components/chat/openclaw-shell";
-import { OpenClawChatHome } from "@/components/chat/openclaw-chat-home";
-import { OpenClawNewSessionDraft } from "@/components/chat/openclaw-new-draft";
-import { RunScreen } from "@/components/run/run-screen";
+/**
+ * Écrans de conversation, chargés à la demande.
+ *
+ * Ils tirent `assistant-ui` et son rendu markdown — 156 ko gzip, le plus gros
+ * poste du bundle — alors qu'aucun d'eux n'est la route d'accueil. Les
+ * différer sort ce poids du démarrage sans rien coûter à l'usage : le chunk
+ * arrive pendant que la route se monte.
+ *
+ * `lazy` ne sait charger qu'un export par défaut, d'où le `.then` répété sur
+ * chaque export nommé — un helper générique perdait le typage des props. La
+ * frontière `Suspense` est unique, dans la coque Console.
+ */
+const ChatPane = lazy(() =>
+  import("@/components/chat/openclaw-shell").then((m) => ({ default: m.ChatPane })),
+);
+const ChatSurfaceFrame = lazy(() =>
+  import("@/components/chat/openclaw-shell").then((m) => ({
+    default: m.ChatSurfaceFrame,
+  })),
+);
+const OpenClawChatHome = lazy(() =>
+  import("@/components/chat/openclaw-chat-home").then((m) => ({
+    default: m.OpenClawChatHome,
+  })),
+);
+const OpenClawNewSessionDraft = lazy(() =>
+  import("@/components/chat/openclaw-new-draft").then((m) => ({
+    default: m.OpenClawNewSessionDraft,
+  })),
+);
+const RunScreen = lazy(() =>
+  import("@/components/run/run-screen").then((m) => ({ default: m.RunScreen })),
+);
 import { RunForm } from "@/components/forms/run-form";
 import { AgentForm } from "@/components/forms/agent-form";
 import { AgentDetailClient } from "@/components/agents/agent-detail-client";
@@ -74,9 +104,14 @@ const setupRoute = createRoute({
 const consoleLayout = createRoute({
   getParentRoute: () => rootRoute,
   id: "console",
+  // Frontière unique pour tous les écrans différés : le rail et l'en-tête
+  // restent affichés pendant que le chunk d'un écran arrive, au lieu de
+  // blanchir la fenêtre entière.
   component: () => (
     <ConsoleShell>
-      <Outlet />
+      <Suspense fallback={<Pending />}>
+        <Outlet />
+      </Suspense>
     </ConsoleShell>
   ),
 });
@@ -286,7 +321,7 @@ const settingsLayout = createRoute({
   getParentRoute: () => consoleLayout,
   id: "settings",
   component: () => (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 p-4 lg:flex-row lg:gap-8 lg:p-6">
+    <div className="flex w-full flex-1 flex-col gap-4 p-4 lg:flex-row lg:gap-8 lg:p-6">
       <SettingsNav className="lg:w-52 lg:shrink-0" />
       <div className="min-w-0 flex-1">
         <Outlet />

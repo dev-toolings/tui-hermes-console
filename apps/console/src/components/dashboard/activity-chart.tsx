@@ -1,11 +1,22 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
 import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   ToggleGroup,
   ToggleGroupItem,
   type ChartConfig,
@@ -13,9 +24,9 @@ import {
 import type { RunActivityPoint } from "@console/core/modules/runs/types";
 
 const RANGES = [
-  { value: "7", label: "7 j" },
-  { value: "14", label: "14 j" },
-  { value: "30", label: "30 j" },
+  { value: "30", label: "30 derniers jours" },
+  { value: "14", label: "14 derniers jours" },
+  { value: "7", label: "7 derniers jours" },
 ] as const;
 
 const chartConfig = {
@@ -31,9 +42,10 @@ function formatDay(value: string) {
 }
 
 /**
- * Missions par jour. Reprend la disposition de `chart-area-interactive`
- * (dashboard-01) mais sur les primitives BoardUI et des données réelles :
- * aucun `data.json` de démonstration.
+ * Missions par jour, dans la disposition de `chart-area-interactive`
+ * (dashboard-01) — mais sur les primitives BoardUI et des données réelles :
+ * aucun `data.json` de démonstration. L'API ne sert que 30 points, d'où des
+ * plages 30 / 14 / 7 jours au lieu des 3 mois du bloc.
  */
 export function ActivityChart({ data }: { data: RunActivityPoint[] }) {
   const [range, setRange] = useState<string>("30");
@@ -51,36 +63,53 @@ export function ActivityChart({ data }: { data: RunActivityPoint[] }) {
   const hasFailures = useMemo(() => points.some((point) => point.failed > 0), [points]);
 
   return (
-    <div className="flex min-h-0 flex-col">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-seam px-4 py-3.5">
-        <div className="min-w-0">
-          <h2 className="text-[0.9375rem] font-semibold tracking-tight">Activité des missions</h2>
-          <p className="mt-0.5 text-[0.75rem] text-muted-foreground">
-            {total === 0
-              ? "Aucune mission sur la période"
-              : `${total} mission${total > 1 ? "s" : ""} sur ${range} jours`}
-          </p>
-        </div>
-        <ToggleGroup
-          type="single"
-          size="sm"
-          value={range}
-          // `onValueChange` renvoie "" quand on déselectionne : garder la
-          // valeur courante évite un graphique vide au second clic.
-          onValueChange={(value) => value && setRange(value)}
-          aria-label="Période affichée"
-        >
-          {RANGES.map((item) => (
-            <ToggleGroupItem key={item.value} value={item.value}>
-              {item.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      </div>
+    <Card className="@container/card">
+      <CardHeader>
+        <CardTitle>Activité des missions</CardTitle>
+        <CardDescription>
+          {total === 0
+            ? "Aucune mission sur la période"
+            : `${total} mission${total > 1 ? "s" : ""} sur ${range} jours`}
+        </CardDescription>
+        <CardAction>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={range}
+            // `onValueChange` renvoie "" quand on déselectionne : garder la
+            // valeur courante évite un graphique vide au second clic.
+            onValueChange={(value) => value && setRange(value)}
+            aria-label="Période affichée"
+            className="hidden *:data-[slot=toggle-group-item]:px-4! @[767px]/card:flex"
+          >
+            {RANGES.map((item) => (
+              <ToggleGroupItem key={item.value} value={item.value}>
+                {item.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          <Select value={range} onValueChange={(value) => value && setRange(value)}>
+            <SelectTrigger
+              size="sm"
+              aria-label="Période affichée"
+              className="flex w-44 **:data-[slot=select-value]:block **:data-[slot=select-value]:truncate @[767px]/card:hidden"
+            >
+              <SelectValue placeholder="30 derniers jours" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl">
+              {RANGES.map((item) => (
+                <SelectItem key={item.value} value={item.value} className="rounded-lg">
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardAction>
+      </CardHeader>
 
-      <div className="px-2 pt-4 pb-2">
-        <ChartContainer config={chartConfig} className="aspect-auto h-[220px] w-full">
-          <AreaChart data={points} margin={{ left: 4, right: 8, top: 4 }}>
+      <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
+        <ChartContainer config={chartConfig} className="aspect-auto h-[250px] w-full">
+          <AreaChart data={points}>
             <defs>
               <linearGradient id="fill-completed" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="var(--color-completed)" stopOpacity={0.7} />
@@ -97,17 +126,13 @@ export function ActivityChart({ data }: { data: RunActivityPoint[] }) {
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              minTickGap={24}
+              minTickGap={32}
               tickFormatter={formatDay}
             />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              width={28}
-              // Des missions se comptent à l'unité : une graduation à 2,5
-              // n'aurait aucun sens.
-              allowDecimals={false}
-            />
+            {/*
+              Pas d'axe Y : le bloc n'en a pas, et la valeur exacte reste
+              lisible dans l'infobulle.
+            */}
             <ChartTooltip
               cursor={false}
               content={
@@ -135,7 +160,7 @@ export function ActivityChart({ data }: { data: RunActivityPoint[] }) {
             ) : null}
           </AreaChart>
         </ChartContainer>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -1008,6 +1008,43 @@ html.theme-transitioning *::after {
   }
 }
 
+/*
+  Collapsible (Radix) height transitions — tool groups and tool rows in the
+  thread. Radix measures the panel and exposes it as
+  `--radix-collapsible-content-height`; the fallback keeps the animation from
+  collapsing to zero on the first frame, before that measurement lands.
+*/
+@theme {
+  --animate-collapsible-down: ai-chat-collapsible-down 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-collapsible-up: ai-chat-collapsible-up 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+}
+@keyframes ai-chat-collapsible-down {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height, auto);
+    opacity: 1;
+  }
+}
+@keyframes ai-chat-collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height, auto);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-collapsible-down,
+  .animate-collapsible-up {
+    animation: none;
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                 scrollbars                                 */
 /* -------------------------------------------------------------------------- */
