@@ -5,15 +5,18 @@ import { useRunPageChromeActions } from "@/components/run/run-page-chrome";
 import { useSidebar } from "@boardui/ui";
 import { MenuIcon, PanelRightIcon } from "lucide-react";
 import type { FC, ReactNode } from "react";
+import type { ThreadPhase } from "./use-live-thread";
 
 export const RunThreadHeader: FC<{
   title: string;
   trailing?: ReactNode;
-  loading?: boolean;
-}> = ({ title, trailing, loading = false }) => {
+  phase?: ThreadPhase;
+}> = ({ title, trailing, phase = "ready" }) => {
   const { setOpenMobile } = useSidebar();
   const { openDetails } = useRunPageChromeActions();
-  const showContent = !loading && Boolean(title) && title !== "…";
+  // Le titre appartient à l'en-tête dès qu'il est connu, même si le transcript
+  // arrive encore : c'est tout l'intérêt de la phase `warm`.
+  const showContent = phase !== "cold" && Boolean(title);
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 px-4">

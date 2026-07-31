@@ -15,6 +15,7 @@ export type ProductEventType =
   | "tool.call"
   | "tool.result"
   | "approval.requested"
+  | "approval.responded"
   | "run.completed"
   | "run.error"
   | "system.notice"

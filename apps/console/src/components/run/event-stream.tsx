@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   AssistantRuntimeProvider,
   useExternalStoreRuntime,
@@ -12,6 +12,7 @@ import { buildMessages } from "@/lib/thread-messages";
 import { HermesThread } from "@/components/assistant-ui/thread";
 import { XuluxThread } from "@/components/xulux-chat/thread";
 import { HermesToolCallUI } from "./hermes-tool-ui";
+import type { ThreadPhase } from "./use-live-thread";
 
 /** @deprecated Prefer `buildMessages` from `@/lib/thread-messages`. */
 export { buildMessages } from "@/lib/thread-messages";
@@ -25,9 +26,10 @@ export function EventStream({
   runError,
   onNew,
   onCancel,
-  loading = false,
+  phase = "ready",
   layout = "default",
   modelLabel,
+  beforeComposer,
 }: {
   prompt?: string;
   events?: RunEvent[];
@@ -37,9 +39,11 @@ export function EventStream({
   runError?: string | null;
   onNew?: (message: string, files?: File[]) => Promise<void>;
   onCancel?: () => Promise<void>;
-  loading?: boolean;
+  phase?: ThreadPhase;
   layout?: "default" | "xulux";
   modelLabel?: string;
+  /** Rendu au ras du composer — la demande d'autorisation, aujourd'hui. */
+  beforeComposer?: ReactNode;
 }) {
   const messages = useMemo(() => {
     if (externalMessages) return externalMessages;
@@ -88,12 +92,13 @@ export function EventStream({
     layout === "xulux" ? (
       <XuluxThread
         showComposer={Boolean(onNew)}
-        loading={loading}
+        phase={phase}
         openingExisting={layout === "xulux"}
         modelLabel={modelLabel}
+        beforeComposer={beforeComposer}
       />
     ) : (
-      <HermesThread showComposer={Boolean(onNew)} loading={loading} />
+      <HermesThread showComposer={Boolean(onNew)} loading={phase !== "ready"} />
     );
 
   return (

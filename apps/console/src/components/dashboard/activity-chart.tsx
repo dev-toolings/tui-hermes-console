@@ -133,6 +133,14 @@ export function ActivityChart({ data }: { data: RunActivityPoint[] }) {
               Pas d'axe Y : le bloc n'en a pas, et la valeur exacte reste
               lisible dans l'infobulle.
             */}
+            {/*
+              `monotone`, surtout pas le `natural` du bloc d'origine : une
+              spline naturelle prend son élan avant un pic isolé et rebondit
+              après, donc elle descend sous zéro entre deux jours à zéro. Sur
+              nos volumes — quelques missions étalées sur 30 jours — l'artefact
+              est permanent. `monotone` reste plat entre deux points égaux et ne
+              dépasse jamais leur min/max.
+            */}
             <ChartTooltip
               cursor={false}
               content={
@@ -144,7 +152,7 @@ export function ActivityChart({ data }: { data: RunActivityPoint[] }) {
             />
             <Area
               dataKey="completed"
-              type="natural"
+              type="monotone"
               stackId="missions"
               stroke="var(--color-completed)"
               fill="url(#fill-completed)"
@@ -152,7 +160,7 @@ export function ActivityChart({ data }: { data: RunActivityPoint[] }) {
             {hasFailures ? (
               <Area
                 dataKey="failed"
-                type="natural"
+                type="monotone"
                 stackId="missions"
                 stroke="var(--color-failed)"
                 fill="url(#fill-failed)"

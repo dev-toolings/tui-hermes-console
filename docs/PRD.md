@@ -21,7 +21,7 @@
 > | 6 | Miroir SFTP/scp des artefacts : push `in/` avant le run, pull `out/` à la complétion | `remote_workdir` |
 > | 7 | 11 codes d'erreur SSH métier (`SSH_AGENT_NO_KEY`, `SSH_FORWARDING_DISABLED`, `SSH_HOST_KEY_UNKNOWN`…) | messages actionnables |
 > | 8 | Garde-fous tunnel : gestion locale Hermes refusée, URL distante `https` refusée | `SSH_REMOTE_URL_UNSUPPORTED` |
-> | 9 | Mention `@<slug> <instruction>` → mission `/runs` dédiée (`agentRef` sur `POST /api/threads`) | composer chat et brouillon |
+> | 9 | Mention `@<slug> <instruction>` → mission `/runs` dédiée (`agentRef` sur `POST /api/threads`) | brouillon `/chat/new` **uniquement** |
 > | 10 | `POST /api/threads/:threadId/commands` + `/help`, `/commands`, `/connector status` | control-plane des missions |
 > | 11 | Invariant « aucun agent dans une session `/chat` » (`AGENT_IN_CHAT`, double garde client + serveur) | `/agent*` refusé en chat |
 > | 12 | Coque `/chat` persistante : layout dédié, cache LRU de 20 snapshots, prefetch au survol | `/chat`, `/chat/new`, `/chat/:id` |
@@ -39,7 +39,9 @@
 > `ssh2` connecté sans vérification de clé d'hôte, contrairement au chemin `agent` qui, lui, mappe
 > `SSH_HOST_KEY_UNKNOWN` ; `forward()` sans sérialisation et canal unique fermé dès que l'empreinte
 > change — une mission en cours peut perdre son tunnel ; sessions SFTP `ssh2` jamais fermées ; noms
-> rapatriés de `out/` distant non passés par `sanitizeFilename` / `assertWithinDir` ; reprise,
+> rapatriés de `out/` distant non passés par `sanitizeFilename` / `assertWithinDir` ; composer de
+> `/chat/:id` dont le placeholder annonce « @ to mention » alors que `useAgentMention` n'y est pas
+> branché (seul `/chat/new` l'utilise) ; reprise,
 > annulation hors process et clôture d'orphelin en collision `UNIQUE(run_id, sequence)` ; aucun
 > quota sur les sorties ; aucun test du cycle de vie du tunnel ni de la synchronisation distante.
 
@@ -441,7 +443,7 @@ Actions : télécharger un artefact, copier le résultat, relancer, nouvelle mis
 | `/agents/[agentId]` | Configuration, nouvelle mission, missions récentes, édition, archivage |
 | `/runs` | Historique global paginé |
 | `/runs/[runId]` | Écran principal : suivi, approbations, résultat, artefacts, vue brute |
-| `/chat` · `/chat/new` · `/chat/[sessionId]` | Surface conversationnelle : coque persistante, sidebar sessions, mention `@agent` |
+| `/chat` · `/chat/new` · `/chat/[sessionId]` | Surface conversationnelle : coque persistante, sidebar sessions ; mention `@agent` sur `/chat/new` seulement |
 | `/runs/new` | Formulaire de mission |
 | `/artifacts` | Artefacts d'entrée et de sortie (base) |
 | `/settings` | Préférences Console et modèle LLM par défaut synchronisé depuis Hermes |
@@ -451,6 +453,14 @@ Actions : télécharger un artefact, copier le résultat, relancer, nouvelle mis
 **Correction v0.9 :** les routes `/chat/session*` et `/chat/sessions*` annoncées par l'amendement
 v0.8 n'existent pas — ce sont des redirections 307 (`next.config.ts`) vers `/chat*`. `/runs/*` n'est
 pas redirigé : c'est une surface de premier plan, et la mention `@agent` y navigue explicitement.
+
+**Précision — l'agent se choisit à la création, jamais après.** `threads.agent_id` est fixé par
+`POST /api/threads` et n'est plus modifiable ensuite : il n'existe pas de `PATCH /api/threads/:id`,
+et `POST /api/threads/:id/messages` ne valide que `{ message }` — le run suivant réutilise le
+snapshot (`agent_name`, `instructions`, `provider`, `model`) figé sur le thread. Conséquence sur
+`/chat/[sessionId]` : **aucun sélecteur d'agent, aucune mention, et `/agent show|create|edit|switch`
+répond un refus** (`source === "chat"`, `execute-command.ts`). Pour travailler avec un agent, la
+session doit naître mission — via `@<slug>` sur `/chat/new`, ou via **Missions → Nouvelle mission**.
 
 **Exigence :** l'écran `/runs/[runId]` doit proposer une **vue « événements bruts »** dès la v0.1.
 Sans elle, l'utilisateur technique trouvera la Console inférieure au CLI et retournera au terminal.

@@ -21,6 +21,7 @@ import {
   applyToolOutputs,
   completeRun,
   failRun,
+  getRunCancelTarget,
   getRunContext,
   markRunAwaitingApproval,
   markRunStarted,
@@ -278,11 +279,29 @@ async function consumeAgentStream(
   await flushBuffered();
 
   if (!terminal && !controller.signal.aborted) {
+    if (await isAwaitingApproval(runId)) {
+      // La mission attend un humain : le flux peut tomber (tunnel, veille,
+      // socket fermée par Hermes) sans que rien ne soit perdu. `respondRunApproval`
+      // se rebranchera au moment de la réponse — PRD §9.4, la perte du temps réel
+      // ne transforme pas un run en échec.
+      console.warn("[runner] flux fermé pendant une demande d’autorisation", { runId });
+      return;
+    }
     const event = toProductEvents([
       normalizer.error("Le flux Hermes s’est fermé sans événement terminal."),
     ])[0]!;
     await persistEvents(threadId, runId, [event]);
     await failRun(runId, String(event.payload.message));
+  }
+}
+
+/** Le statut vit en base : le flux, lui, a pu mourir entre-temps. */
+async function isAwaitingApproval(runId: string) {
+  try {
+    const run = await getRunCancelTarget(runId);
+    return run?.status === "awaiting_approval";
+  } catch {
+    return false;
   }
 }
 
@@ -350,6 +369,22 @@ async function handleAgentRunError(
       : error instanceof Error
         ? error.message
         : "Erreur inconnue pendant l’exécution.";
+
+  // Même règle qu'à la fermeture propre du flux : une mission qui attend une
+  // autorisation ne meurt pas d'une socket coupée pendant que l'humain lit.
+  if (await isAwaitingApproval(runId)) {
+    console.warn("[runner] flux interrompu pendant une demande d’autorisation", {
+      runId,
+      message,
+    });
+    await persistEventsBestEffort(
+      context.threadId,
+      runId,
+      toProductEvents(normalizer.flush()),
+    );
+    return;
+  }
+
   const event = toProductEvents([normalizer.error(message)])[0]!;
   await persistEventsBestEffort(context.threadId, runId, [
     ...toProductEvents(normalizer.flush()),

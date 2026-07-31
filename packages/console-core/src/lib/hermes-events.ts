@@ -7,6 +7,8 @@
  * emet `message.delta`.
  */
 
+import { APPROVAL_CHOICES, type ApprovalChoice } from "./thread-snapshot-mutations";
+
 /** Evenement brut du runtime. Le type est DANS le JSON ; il n'y a ni `event:` ni `id:` SSE. */
 export type HermesEvent = {
   event: string;
@@ -22,6 +24,7 @@ export type RunEventType =
   | "tool.call"
   | "tool.result"
   | "approval.requested"
+  | "approval.responded"
   | "run.error"
   | "run.completed"
   | "system.notice"
@@ -145,6 +148,25 @@ export class HermesEventNormalizer {
             command: ev.command ?? null,
             choices: Array.isArray(ev.choices) ? ev.choices : [],
             description: ev.description ?? null,
+          }),
+        ];
+      }
+
+      // MESURE : le runtime confirme la decision par `approval.responded`
+      // { choice, resolved }. Il tombait dans le fourre-tout `raw`, donc
+      // invisible — alors que c'est la seule trace de qui a autorise quoi.
+      case "approval.responded": {
+        const choice = typeof ev.choice === "string" ? ev.choice : null;
+        // Un choix hors vocabulaire n'est pas une decision qu'on sait raconter :
+        // on le laisse en brut plutot que d'inventer un libelle.
+        if (!choice || !APPROVAL_CHOICES.includes(choice as ApprovalChoice)) {
+          return [...this.flush(), this.next("raw", at, { ...ev })];
+        }
+        return [
+          ...this.flush(),
+          this.next("approval.responded", at, {
+            choice,
+            resolved: typeof ev.resolved === "number" ? ev.resolved : null,
           }),
         ];
       }

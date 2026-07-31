@@ -17,6 +17,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { approvalDecisionLabel } from "@/lib/approval-request";
+import type { ApprovalChoice } from "@console/core/lib/thread-snapshot-mutations";
 import { prettyToolArgs, prettyToolOutput, summarizeToolResult } from "@/lib/tool-summary";
 
 const ANIMATION_DURATION = 200;
@@ -56,6 +58,7 @@ export function HermesToolPart({
   const payload =
     result != null && typeof result === "object" ? (result as HermesToolResult) : null;
   const running = status.type === "running" || !payload;
+  const approval = (argsRecord.approval ?? null) as { choice?: string } | null;
 
   return (
     <HermesToolRow
@@ -67,6 +70,7 @@ export function HermesToolPart({
       durationMs={payload?.durationMs ?? null}
       hasResultPayload={payload?.hasResultPayload ?? null}
       output={payload?.output}
+      approvalChoice={(approval?.choice ?? null) as ApprovalChoice | null}
     />
   );
 }
@@ -80,6 +84,7 @@ export function HermesToolRow({
   durationMs,
   hasResultPayload,
   output,
+  approvalChoice = null,
 }: {
   tool: string;
   target: string;
@@ -89,6 +94,8 @@ export function HermesToolRow({
   durationMs: number | null;
   hasResultPayload: boolean | null;
   output?: unknown;
+  /** Décision humaine qui a débloqué — ou bloqué — cet appel. */
+  approvalChoice?: ApprovalChoice | null;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -134,6 +141,20 @@ export function HermesToolRow({
       >
         {[target, summary].filter(Boolean).join(" · ")}
       </span>
+      {/* La décision reste lisible après coup : c'est la seule trace de qui a
+          autorisé quoi, l'événement du runtime n'étant affiché nulle part ailleurs. */}
+      {approvalChoice ? (
+        <span
+          className={cn(
+            "shrink-0 rounded-full px-1.5 py-0.5 text-[0.6875rem] font-medium",
+            approvalChoice === "deny"
+              ? "bg-destructive/10 text-destructive"
+              : "bg-warn-700/10 text-warn-700",
+          )}
+        >
+          {approvalDecisionLabel(approvalChoice)}
+        </span>
+      ) : null}
       <span
         className={cn(
           "shrink-0 tabular text-[0.75rem]",

@@ -74,6 +74,40 @@ describe("thread-snapshot-mutations", () => {
     expect(latestOpenApproval(next.events, "run_1")?.command).toBe("rm -f /tmp/x");
   });
 
+  test("la décision de l’humain ferme la demande, sans attendre le statut du run", () => {
+    const base = {
+      cursor: 2,
+      runId: "run_1",
+      sequence: 2,
+      payload: { command: "curl | python3", choices: ["once", "deny"], description: null },
+      occurredAt: new Date("2026-01-01T00:00:02.000Z"),
+    };
+    const requested = { ...base, type: "approval.requested" as const };
+    const responded = {
+      cursor: 3,
+      runId: "run_1",
+      sequence: 3,
+      type: "approval.responded" as const,
+      payload: { choice: "once", resolved: 1 },
+      occurredAt: new Date("2026-01-01T00:00:03.000Z"),
+    };
+
+    expect(latestOpenApproval([requested], "run_1")?.command).toBe("curl | python3");
+    expect(latestOpenApproval([requested, responded], "run_1")).toBeNull();
+  });
+
+  test("une demande d’un autre run n’ouvre rien ici", () => {
+    const requested = {
+      cursor: 2,
+      runId: "run_2",
+      sequence: 2,
+      type: "approval.requested" as const,
+      payload: { command: "rm -rf /", choices: ["deny"], description: null },
+      occurredAt: new Date("2026-01-01T00:00:02.000Z"),
+    };
+    expect(latestOpenApproval([requested], "run_1")).toBeNull();
+  });
+
   test("détecte terminal", () => {
     expect(
       isTerminalProductEvent({

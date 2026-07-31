@@ -448,7 +448,9 @@ function SidebarMenu({ className, ...props }: React.ComponentProps<"ul">) {
     <ul
       data-slot="sidebar-menu"
       data-sidebar="menu"
-      className={cn("flex w-full min-w-0 flex-col gap-0", className)}
+      // `gap-1` et pas `gap-0` : sans écart, les fonds de deux entrées
+      // voisines (survol, actif) se touchent et se lisent comme un seul bloc.
+      className={cn("flex w-full min-w-0 flex-col gap-1", className)}
       {...props}
     />
   )

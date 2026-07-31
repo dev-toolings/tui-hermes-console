@@ -15,8 +15,16 @@ import {
   SheetTitle,
 } from "@boardui/ui";
 import { ResultPanelContent, type RunExecutionDetails } from "./result-panel";
+import type { ThreadPhase } from "./use-live-thread";
 
 export type RunPageDetails = {
+  /**
+   * Sans elle, le panneau workspace ne peut pas distinguer « la mission n'a
+   * produit aucun fichier » de « on ne sait pas encore » : les deux arrivent
+   * ici sous la forme d'un tableau vide, et il affichait « Aucun fichier
+   * produit » avant même d'avoir interrogé le serveur.
+   */
+  phase?: ThreadPhase;
   execution: RunExecutionDetails | null;
   instructions: string;
   output: string | null;

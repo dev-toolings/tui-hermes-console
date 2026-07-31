@@ -41,3 +41,31 @@ export function buildRunExecutionDetails(
 export function displayRunHeaderModel(snapshot: ThreadSnapshot, run: RunDto) {
   return actualRunModel(snapshot, run) ?? resolvedConsoleModel(snapshot);
 }
+
+/**
+ * Tokens cumulés de la conversation — tous les runs du fil, entrée et sortie.
+ *
+ * `null` tant qu'aucun run n'a rapporté d'usage : un thread qui démarre n'a pas
+ * consommé zéro token, il n'a pas encore de mesure. La distinction compte pour
+ * l'anneau de contexte, qui doit rester absent plutôt que d'afficher 0 %.
+ */
+export function threadTotalTokens(snapshot: ThreadSnapshot | null): number | null {
+  const usages = (snapshot?.runs ?? []).map((run) => run.usage).filter((usage) => usage != null);
+  if (usages.length === 0) return null;
+  return usages.reduce((total, usage) => total + (usage.totalTokens ?? 0), 0);
+}
+
+/**
+ * L'identifiant de modèle à confronter à la table des fenêtres.
+ *
+ * Le modèle *effectivement* utilisé par le runtime prime : c'est sa fenêtre qui
+ * s'applique, pas celle du modèle demandé. Sans préfixe fournisseur, que
+ * `resolvedConsoleModel` ajoute pour l'affichage mais qui n'est pas un id.
+ */
+export function threadContextModel(snapshot: ThreadSnapshot | null): string | null {
+  if (!snapshot) return null;
+  const lastRunModel = [...snapshot.runs]
+    .reverse()
+    .find((run) => run.runtimeSession?.model)?.runtimeSession?.model;
+  return lastRunModel ?? snapshot.effectiveModel ?? null;
+}

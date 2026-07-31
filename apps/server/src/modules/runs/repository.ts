@@ -773,14 +773,34 @@ function toRunDto(run: typeof runs.$inferSelect): RunDto {
   };
 }
 
-function buildAssistantContent(
+/**
+ * Le message assistant tel qu'il sera relu — c'est lui, pas le flux, que l'écran
+ * affiche une fois la mission terminée. Exporté pour être testé sans base.
+ */
+export function buildAssistantContent(
   events: Array<{ type: string; payload: Record<string, unknown> }>,
   output: string,
 ): MessageContent {
   const content: MessageContent = [];
   const toolParts = new Map<string, number>();
+  /**
+   * L'appel d'outil en cours quand une décision d'autorisation tombe. Hermes ne
+   * met aucun `toolCallId` dans `approval.request` : le seul lien est l'ordre du
+   * flux. Sans ce report, la décision resterait visible pendant le run live puis
+   * disparaîtrait au rechargement — la trace doit survivre à la persistance.
+   */
+  let lastToolCallId: string | null = null;
 
   for (const event of events) {
+    if (event.type === "approval.responded") {
+      const index = lastToolCallId == null ? null : toolParts.get(lastToolCallId);
+      const part = index == null ? null : content[index];
+      const choice = event.payload.choice;
+      if (part?.type === "tool-call" && typeof choice === "string") {
+        part.args = { ...part.args, approval: { choice } };
+      }
+    }
+
     if (event.type === "agent.message") {
       const text = String(event.payload.text ?? "");
       const last = content.at(-1);
@@ -798,6 +818,7 @@ function buildAssistantContent(
     if (event.type === "tool.call") {
       const toolCallId = String(event.payload.toolCallId ?? makeId("call"));
       toolParts.set(toolCallId, content.length);
+      lastToolCallId = toolCallId;
       content.push({
         type: "tool-call",
         toolCallId,

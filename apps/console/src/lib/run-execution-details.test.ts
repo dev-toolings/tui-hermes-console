@@ -4,6 +4,8 @@ import {
   buildRunExecutionDetails,
   displayRunHeaderModel,
   resolvedConsoleModel,
+  threadContextModel,
+  threadTotalTokens,
 } from "./run-execution-details";
 import type { RunDto, ThreadSnapshot } from "@console/core/modules/runs/types";
 
@@ -44,5 +46,54 @@ describe("run-execution-details", () => {
     const details = buildRunExecutionDetails(snapshot, run);
     expect(details.activeModel).toBe("openai-api / gpt-5.6-luna");
     expect(details.activeLabel).toBe("LLM actif");
+  });
+});
+
+describe("threadTotalTokens", () => {
+  const withRuns = (runs: unknown[]) => ({ ...snapshot, runs }) as unknown as ThreadSnapshot;
+
+  test("additionne tous les runs du fil", () => {
+    const total = threadTotalTokens(
+      withRuns([
+        { usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+        { usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 } },
+      ]),
+    );
+    expect(total).toBe(135);
+  });
+
+  test("ignore les runs sans usage sans perdre les autres", () => {
+    expect(
+      threadTotalTokens(
+        withRuns([{ usage: null }, { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } }]),
+      ),
+    ).toBe(2);
+  });
+
+  test("aucune mesure n’est `null`, pas zéro", () => {
+    expect(threadTotalTokens(withRuns([{ usage: null }]))).toBeNull();
+    expect(threadTotalTokens(withRuns([]))).toBeNull();
+    expect(threadTotalTokens(null)).toBeNull();
+  });
+});
+
+describe("threadContextModel", () => {
+  test("le modèle réellement servi par le runtime prime, sans préfixe fournisseur", () => {
+    const value = threadContextModel({
+      ...snapshot,
+      runs: [
+        { runtimeSession: { model: "claude-sonnet-5" } },
+        { runtimeSession: null },
+      ],
+    } as unknown as ThreadSnapshot);
+    expect(value).toBe("claude-sonnet-5");
+  });
+
+  test("repli sur le modèle effectif de la Console", () => {
+    const value = threadContextModel({
+      ...snapshot,
+      runs: [{ runtimeSession: null }],
+    } as unknown as ThreadSnapshot);
+    expect(value).toBe("gpt-5.6-luna");
   });
 });

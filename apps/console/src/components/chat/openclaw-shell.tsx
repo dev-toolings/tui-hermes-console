@@ -16,7 +16,6 @@ import {
   MenuIcon,
   MoreHorizontalIcon,
   PanelLeftIcon,
-  PanelRightIcon,
   PlusIcon,
   Trash2Icon,
   XIcon,
@@ -31,10 +30,10 @@ import { cn } from "@/lib/cn";
 import { RUN_STATUS, type RunStatus } from "@console/core/lib/run-status";
 import { ChromeIconButton } from "@/components/shell/chrome-icon-button";
 import { ChatModelsSettingsButton } from "@/components/chat/chat-models-settings-button";
-import { WorkspacePanel } from "@/components/chat/workspace-panel";
 import {
   dropThreadSnapshotCache,
   prefetchThreadSnapshot,
+  type ThreadPhase,
 } from "@/components/run/use-live-thread";
 
 export type ChatSessionRow = {
@@ -45,24 +44,58 @@ export type ChatSessionRow = {
   latestRun: { status: RunStatus } | null;
 };
 
+/**
+ * Dernière liste de sessions connue, conservée le temps de l'onglet.
+ *
+ * Sans elle, un rechargement de page repart de zéro et repeint six lignes de
+ * squelette pour une liste qui, neuf fois sur dix, est identique à celle qu'on
+ * avait sous les yeux. On la réaffiche donc immédiatement et on revalide en
+ * fond : le sondage de 8 s corrige tout écart.
+ */
+const SESSIONS_STORAGE_KEY = "hermes-console:chat-sessions";
+
+function readStoredSessions(): ChatSessionRow[] | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(SESSIONS_STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? (parsed as ChatSessionRow[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSessions(sessions: ChatSessionRow[]) {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions.slice(0, 40)));
+  } catch {
+    // Quota plein : on retombe simplement sur le squelette au prochain refresh.
+  }
+}
+
 function useChatSessions() {
-  const [sessions, setSessions] = useState<ChatSessionRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [stored] = useState(readStoredSessions);
+  const [sessions, setSessions] = useState<ChatSessionRow[]>(stored ?? []);
+  const [loading, setLoading] = useState(!stored);
 
   const refresh = useCallback(async () => {
     const response = await fetch("/api/threads?source=chat", { cache: "no-store" });
     const body = (await response.json()) as { threads?: ChatSessionRow[] };
     if (!response.ok) throw new Error("Impossible de charger les sessions.");
-    setSessions(body.threads ?? []);
+    const threads = body.threads ?? [];
+    setSessions(threads);
+    writeStoredSessions(threads);
   }, []);
 
   useEffect(() => {
     let disposed = false;
     const load = () => {
       void refresh()
-        .catch(() => {
-          if (!disposed) setSessions([]);
-        })
+        // La liste précédente n'est pas effacée sur un échec de sondage : une
+        // coupure d'une seconde vidait l'historique à l'écran, ce qui se lit
+        // comme « vous n'avez plus de sessions ».
+        .catch(() => undefined)
         .finally(() => {
           if (!disposed) setLoading(false);
         });
@@ -120,8 +153,6 @@ type ChatSurfaceContextValue = {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
   openMobileSidebar: () => void;
-  workspaceOpen: boolean;
-  toggleWorkspace: () => void;
 };
 
 const ChatSurfaceContext = createContext<ChatSurfaceContextValue | null>(null);
@@ -154,7 +185,6 @@ export function ChatSurfaceFrame({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { sessions, loading, refresh } = useChatSessions();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [workspaceOpen, setWorkspaceOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -195,10 +225,8 @@ export function ChatSurfaceFrame({ children }: { children: ReactNode }) {
       sidebarCollapsed,
       toggleSidebar: () => setSidebarCollapsed((value) => !value),
       openMobileSidebar: () => setMobileOpen(true),
-      workspaceOpen,
-      toggleWorkspace: () => setWorkspaceOpen((value) => !value),
     }),
-    [refresh, sessionId, sessions, sidebarCollapsed, workspaceOpen],
+    [refresh, sessionId, sessions, sidebarCollapsed],
   );
 
   const sidebar = (
@@ -247,22 +275,15 @@ export function ChatSurfaceFrame({ children }: { children: ReactNode }) {
           {!sidebarCollapsed ? sidebar : null}
         </div>
 
+        {/*
+          Deux colonnes, plus trois. La troisième portait l'espace de travail —
+          hôte d'exécution, `in/`, `out/`, tokens — sur 16 rem permanentes, et
+          seulement au-dessus de 1280 px : la même information disparaissait
+          purement et simplement sur un écran plus étroit. Elle vit désormais
+          sous le composer (`ComposerMetaBar`), là où se porte le regard au
+          moment d'agir, et son détail dans la feuille « Détails de la mission ».
+        */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
-
-        {/* Masqué sous 1280 px : à trois colonnes, le transcript deviendrait
-            illisible bien avant la contrainte 320 px du PRODUCT.md. */}
-        {sessionId ? (
-          <div
-            className={cn(
-              "hidden h-full shrink-0 transition-[width] duration-200 xl:flex",
-              workspaceOpen ? "w-[16rem]" : "w-0 overflow-hidden",
-            )}
-          >
-            {workspaceOpen ? (
-              <WorkspacePanel onCollapse={() => setWorkspaceOpen(false)} />
-            ) : null}
-          </div>
-        ) : null}
 
         {mobileOpen ? (
           <div className="fixed inset-0 z-50 md:hidden">
@@ -300,27 +321,20 @@ export function ChatSurfaceFrame({ children }: { children: ReactNode }) {
  */
 export function ChatPane({
   title,
-  modelLabel,
-  loading = false,
+  phase = "ready",
   trailing,
   alerts,
   children,
 }: {
   title: string;
-  modelLabel?: string;
-  loading?: boolean;
+  phase?: ThreadPhase;
   trailing?: ReactNode;
   alerts?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <>
-      <ChatPaneHeader
-        title={title}
-        modelLabel={modelLabel}
-        loading={loading}
-        trailing={trailing}
-      />
+      <ChatPaneHeader title={title} phase={phase} trailing={trailing} />
       {alerts}
       <main className="min-h-0 flex-1 overflow-hidden bg-background">{children}</main>
     </>
@@ -329,29 +343,25 @@ export function ChatPane({
 
 function ChatPaneHeader({
   title,
-  modelLabel,
-  loading,
+  phase,
   trailing,
 }: {
   title: string;
-  modelLabel?: string;
-  loading: boolean;
+  phase: ThreadPhase;
   trailing?: ReactNode;
 }) {
-  const {
-    sessionId,
-    sessions,
-    sidebarCollapsed,
-    toggleSidebar,
-    openMobileSidebar,
-    workspaceOpen,
-    toggleWorkspace,
-  } = useChatSurface();
+  const { sessionId, sessions, sidebarCollapsed, toggleSidebar, openMobileSidebar } =
+    useChatSurface();
 
-  // Le titre du thread arrive après un fetch : afficher celui déjà connu de la
-  // sidebar évite un « … » clignotant à l'ouverture d'une session.
-  const cached = sessionId ? sessions.find((item) => item.id === sessionId)?.title : undefined;
-  const label = loading ? (cached ?? title) : title;
+  /*
+    Trois sources pour le titre, dans cet ordre : le snapshot, puis ce que la
+    sidebar sait déjà de cette session, puis rien. « Rien » se rend en
+    squelette — jamais en « … », qui s'affiche comme un titre à part entière et
+    reste sur l'écran plusieurs centaines de millisecondes.
+  */
+  const known =
+    title || (sessionId ? sessions.find((item) => item.id === sessionId)?.title : undefined);
+  const cold = phase === "cold";
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/60 bg-background/80 px-3 backdrop-blur-sm">
@@ -370,34 +380,37 @@ function ChatPaneHeader({
         <PanelLeftIcon className="size-4" />
       </ChromeIconButton>
 
-      <button
-        type="button"
-        className="min-w-0 flex-1 truncate text-left text-sm font-medium hover:opacity-80"
-        title="Rename (soon)"
-        onClick={() => undefined}
-      >
-        {label}
-      </button>
+      {known ? (
+        <button
+          type="button"
+          className="min-w-0 flex-1 truncate text-left text-sm font-medium hover:opacity-80"
+          title="Rename (soon)"
+          onClick={() => undefined}
+        >
+          {known}
+        </button>
+      ) : (
+        <span
+          aria-hidden
+          className="h-4 min-w-0 max-w-xs flex-1 animate-pulse rounded bg-muted"
+        />
+      )}
 
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
-        {modelLabel ? (
-          <span className="hidden h-7 max-w-[10rem] items-center truncate rounded-full border border-border px-2.5 text-xs font-medium text-muted-foreground sm:inline-flex">
-            {modelLabel}
-          </span>
-        ) : null}
-        {trailing}
-        {sessionId ? (
-          <ChromeIconButton
-            className="hidden xl:inline-flex"
-            aria-label={
-              workspaceOpen ? "Masquer l’espace de travail" : "Afficher l’espace de travail"
-            }
-            aria-pressed={workspaceOpen}
-            onClick={toggleWorkspace}
-          >
-            <PanelRightIcon className="size-4" />
-          </ChromeIconButton>
-        ) : null}
+        {/*
+          Le modèle n'est plus répété ici : il vit sous le composer, avec le
+          reste du contexte d'exécution. L'en-tête ne garde que ce qui décrit
+          la conversation elle-même — son titre et l'état de son dernier run.
+
+          En `cold`, `trailing` est vide par construction (aucun run connu) :
+          la pastille garde sa place pour que l'arrivée du vrai statut ne
+          décale pas les boutons de droite.
+        */}
+        {cold && !trailing ? (
+          <span aria-hidden className="h-7 w-24 animate-pulse rounded-full bg-muted" />
+        ) : (
+          trailing
+        )}
         <ChatModelsSettingsButton />
       </div>
     </header>
@@ -607,10 +620,18 @@ function OpenClawSessionSidebar({
         ) : null}
 
         {loading ? (
-          <ul className="flex flex-col gap-0.5">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <li key={index} className="px-2.5 py-2">
-                <div className="h-3.5 animate-pulse rounded bg-muted" />
+          // Même gabarit que `SessionRow` — h-8, même gouttière, même retrait —
+          // pour que le passage du squelette aux lignes ne déplace rien.
+          <ul aria-hidden className="flex flex-col gap-0.5">
+            <li className="px-2.5 pt-1 pb-1">
+              <div className="h-2.5 w-14 animate-pulse rounded bg-muted" />
+            </li>
+            {[80, 64, 72, 56, 68, 60].map((width, index) => (
+              <li key={index} className="flex h-8 items-center px-2.5">
+                <div
+                  className="h-3.5 animate-pulse rounded bg-muted"
+                  style={{ width: `${width}%` }}
+                />
               </li>
             ))}
           </ul>

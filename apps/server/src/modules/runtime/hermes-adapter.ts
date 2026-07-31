@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { hermesModelOptionsForEffort } from "@console/core/lib/runtime/reasoning-effort";
+import type { ApprovalChoice } from "@console/core/lib/thread-snapshot-mutations";
 import { parseHermesAgentEvents } from "./sse";
 
 const capabilitiesSchema = z
@@ -781,9 +782,16 @@ export async function stopHermesAgentRun(input: {
   }
 }
 
-/** POST /v1/runs/:id/approval — réponse à waiting_for_approval. */
+/**
+ * POST /v1/runs/:id/approval — réponse à waiting_for_approval.
+ *
+ * Hermes valide `choice` (once | session | always | deny) ; `approved` est
+ * conservé parce que le spike l'envoyait aux côtés du choix et qu'il ne coûte
+ * rien à un runtime qui l'ignore.
+ */
 export async function respondHermesApproval(input: {
   hermesRunId: string;
+  choice: ApprovalChoice;
   approved: boolean;
   baseUrl: string;
   token: string;
@@ -798,7 +806,7 @@ export async function respondHermesApproval(input: {
           ...authHeaders(input.token),
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ approved: input.approved }),
+        body: JSON.stringify({ choice: input.choice, approved: input.approved }),
         cache: "no-store",
       },
     );

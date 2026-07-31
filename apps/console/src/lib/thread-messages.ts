@@ -25,10 +25,29 @@ type Part = Extract<ThreadMessageLike["content"], readonly unknown[]>[number];
 export function buildPartsFromEvents(events: EventLike[]): Part[] {
   const parts: Part[] = [];
   const pendingResults = new Map<string, EventLike>();
+  /**
+   * La décision d'autorisation, rattachée à l'appel d'outil qu'elle débloque.
+   *
+   * Hermes ne met aucun `toolCallId` dans `approval.request` : le seul lien est
+   * l'ordre du flux — la demande arrive juste après l'appel qu'elle concerne.
+   * Une décision sans appel ouvert avant elle est donc ignorée, plutôt que
+   * collée au hasard sur un autre outil.
+   */
+  const approvalsByToolCall = new Map<string, string>();
+  let lastToolCallId: string | null = null;
 
   for (const ev of events) {
+    if (ev.type === "tool.call") {
+      lastToolCallId = String(ev.payload.toolCallId ?? "");
+      continue;
+    }
     if (ev.type === "tool.result") {
       pendingResults.set(String(ev.payload.toolCallId ?? ""), ev);
+      continue;
+    }
+    if (ev.type === "approval.responded" && lastToolCallId) {
+      const choice = ev.payload.choice;
+      if (typeof choice === "string") approvalsByToolCall.set(lastToolCallId, choice);
     }
   }
 
@@ -59,6 +78,7 @@ export function buildPartsFromEvents(events: EventLike[]): Part[] {
     if (ev.type === "tool.call") {
       const toolCallId = String(ev.payload.toolCallId ?? "");
       const result = pendingResults.get(toolCallId);
+      const approval = approvalsByToolCall.get(toolCallId);
       parts.push({
         type: "tool-call",
         toolCallId,
@@ -71,6 +91,9 @@ export function buildPartsFromEvents(events: EventLike[]): Part[] {
           tool: String(ev.payload.tool ?? "outil"),
           preview: ev.payload.preview == null ? null : String(ev.payload.preview),
           arguments: (ev.payload.arguments ?? null) as never,
+          // Absente tant que personne n'a tranché : la clé ne doit pas
+          // apparaître avec une valeur nulle, qui se lirait comme un refus.
+          ...(approval ? { approval: { choice: approval } } : {}),
         },
         ...(result
           ? {

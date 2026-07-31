@@ -17,6 +17,7 @@ import {
   applyProductEventToSnapshot,
   isTerminalProductEvent,
   latestOpenApproval,
+  type ApprovalChoice,
   type ApprovalRequest,
 } from "@console/core/lib/thread-snapshot-mutations";
 
@@ -42,6 +43,21 @@ const RECONNECT_POLL_MS = 3000;
 const SNAPSHOT_CACHE_LIMIT = 20;
 
 type CachedSnapshot = { thread: ThreadSnapshot; gaps: ConnectorType[] };
+
+/**
+ * Ce que l'écran sait de la conversation, et donc ce qu'il a le droit d'afficher.
+ *
+ * - `cold` : rien. Aucune donnée serveur — l'écran doit montrer des squelettes,
+ *   et surtout pas de valeur devinée (un statut « en attente » inventé se lit
+ *   comme une information vraie).
+ * - `warm` : l'en-tête est connu (titre, modèle, statut, tokens) mais pas le
+ *   transcript. Le chrome s'affiche directement, seul le fil reste en squelette.
+ * - `ready` : snapshot complet en main. Tout est affichable, l'envoi est permis.
+ *
+ * La revalidation de fond n'a pas d'état à elle : elle est invisible par
+ * construction — c'est exactement ce qu'on veut éviter de faire clignoter.
+ */
+export type ThreadPhase = "cold" | "warm" | "ready";
 
 /**
  * Cache mémoire des conversations déjà ouvertes. Changer de session remonte le
@@ -70,6 +86,78 @@ function writeSnapshotCache(threadId: string, value: Partial<CachedSnapshot>) {
 
 export function dropThreadSnapshotCache(threadId: string) {
   snapshotCache.delete(threadId);
+  dropStoredChrome(threadId);
+}
+
+/**
+ * En-têtes de conversations conservés d'un rechargement à l'autre.
+ *
+ * Le cache mémoire ci-dessus meurt avec la page : une navigation interne est
+ * instantanée, mais F5 repayait le squelette complet — c'est le « flash au
+ * refresh ». On garde donc en `sessionStorage` de quoi repeindre le chrome
+ * (titre, modèle, statut, tokens, artefacts) sans attendre le réseau.
+ *
+ * `sessionStorage` et pas `localStorage` : le besoin est de survivre à un
+ * rechargement d'onglet, pas de ressusciter un statut vieux de trois jours au
+ * prochain démarrage de l'application.
+ *
+ * Le transcript n'y va pas. C'est lui le poids — 563 Ko sur la conversation de
+ * test — et c'est aussi la seule partie dont un squelette est honnête : on ne
+ * peut pas deviner des messages, alors qu'on peut légitimement réafficher le
+ * titre qu'on avait sous les yeux une seconde plus tôt.
+ */
+const CHROME_STORAGE_KEY = "hermes-console:thread-chrome";
+const CHROME_STORAGE_LIMIT = 12;
+/** Au-delà, l'entrée est abandonnée plutôt que de saturer le quota d'onglet. */
+const CHROME_ENTRY_MAX_CHARS = 32_000;
+
+function readChromeStore(): Record<string, CachedSnapshot> {
+  if (typeof sessionStorage === "undefined") return {};
+  try {
+    const raw = sessionStorage.getItem(CHROME_STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, CachedSnapshot>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function readStoredChrome(threadId: string): CachedSnapshot | null {
+  const entry = readChromeStore()[threadId];
+  return entry?.thread?.id ? { thread: entry.thread, gaps: entry.gaps ?? [] } : null;
+}
+
+function writeStoredChrome(threadId: string, { thread, gaps }: CachedSnapshot) {
+  if (typeof sessionStorage === "undefined") return;
+  const entry = JSON.stringify({ thread: { ...thread, messages: [], events: [] }, gaps });
+  if (entry.length > CHROME_ENTRY_MAX_CHARS) return;
+
+  const store = readChromeStore();
+  delete store[threadId]; // ré-insérer place l'entrée en queue : l'ordre fait le LRU
+  store[threadId] = JSON.parse(entry) as CachedSnapshot;
+  const keys = Object.keys(store);
+  for (const key of keys.slice(0, Math.max(0, keys.length - CHROME_STORAGE_LIMIT))) {
+    delete store[key];
+  }
+  try {
+    sessionStorage.setItem(CHROME_STORAGE_KEY, JSON.stringify(store));
+  } catch {
+    // Quota plein : le squelette reste, c'est le comportement d'avant.
+  }
+}
+
+function dropStoredChrome(threadId: string) {
+  if (typeof sessionStorage === "undefined") return;
+  const store = readChromeStore();
+  if (!(threadId in store)) return;
+  delete store[threadId];
+  try {
+    sessionStorage.setItem(CHROME_STORAGE_KEY, JSON.stringify(store));
+  } catch {
+    // idem
+  }
 }
 
 /** Réchauffe le cache avant le clic (survol d'une session dans la sidebar). */
@@ -89,15 +177,39 @@ type ApiErrorBody = {
 
 export function useLiveThread(threadId: string) {
   const router = useRouter();
-  const [cached] = useState(() => readSnapshotCache(threadId));
+  /**
+   * Deux origines possibles au premier rendu, et elles n'autorisent pas la même
+   * chose : le cache mémoire porte un snapshot complet (navigation interne), le
+   * `sessionStorage` seulement l'en-tête (rechargement de page).
+   */
+  const [cached] = useState(() => {
+    const memory = readSnapshotCache(threadId);
+    if (memory) return { ...memory, complete: true };
+    const stored = readStoredChrome(threadId);
+    return stored ? { ...stored, complete: false } : null;
+  });
   const [snapshot, setSnapshot] = useState<ThreadSnapshot | null>(cached?.thread ?? null);
   const [connectorGaps, setConnectorGaps] = useState<ConnectorType[]>(cached?.gaps ?? []);
   const [commandMessages, setCommandMessages] = useState<ThreadMessageLike[]>([]);
+  const [complete, setComplete] = useState(cached?.complete ?? false);
   const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
   const snapshotRef = useRef<ThreadSnapshot | null>(cached?.thread ?? null);
   /** Un flux SSE est attaché : le filet de rattrapage n'a rien à rattraper. */
   const streamingRef = useRef(false);
+  /** Le premier chargement complet. Résolue, elle ne coûte plus rien. */
+  const firstFetchRef = useRef<Promise<unknown> | null>(null);
+  /**
+   * Miroir de `complete`, lisible depuis les callbacks sans les recréer.
+   * En `warm` le snapshot existe mais n'a pas de transcript : y greffer un
+   * message optimiste le ferait écraser par le premier fetch complet.
+   */
+  const completeRef = useRef(cached?.complete ?? false);
+
+  const markComplete = useCallback(() => {
+    completeRef.current = true;
+    setComplete(true);
+  }, []);
 
   const applySnapshot = useCallback((next: ThreadSnapshot) => {
     snapshotRef.current = next;
@@ -122,18 +234,24 @@ export function useLiveThread(threadId: string) {
       applySnapshot(thread);
     }
     applyConnectorGaps(gaps);
+    markComplete();
+    writeStoredChrome(threadId, { thread, gaps });
     setError(null);
     return thread;
-  }, [applyConnectorGaps, applySnapshot, threadId]);
+  }, [applyConnectorGaps, applySnapshot, markComplete, threadId]);
 
   useEffect(() => {
     let disposed = false;
-    void fetchThreadSnapshot(threadId)
+    const settled = fetchThreadSnapshot(threadId)
       .then(({ thread, gaps }) => {
         if (!disposed) {
           applySnapshot(thread);
           applyConnectorGaps(gaps);
+          markComplete();
         }
+        // Écrit même si le composant est démonté : le prochain rechargement
+        // repartira de cet en-tête plutôt que d'un squelette.
+        writeStoredChrome(threadId, { thread, gaps });
       })
       .catch((reason) => {
         if (!disposed) setError(toMessage(reason));
@@ -141,10 +259,13 @@ export function useLiveThread(threadId: string) {
       .finally(() => {
         if (!disposed) setLoading(false);
       });
+    // Le composer est utilisable dès le premier pixel : `sendMessage` s'appuie
+    // sur cette promesse pour attendre le snapshot au lieu de refuser l'envoi.
+    firstFetchRef.current = settled;
     return () => {
       disposed = true;
     };
-  }, [applyConnectorGaps, applySnapshot, threadId]);
+  }, [applyConnectorGaps, applySnapshot, markComplete, threadId]);
 
   /** Échange affiché côté client seulement — rien n'est persisté ni exécuté. */
   const pushLocalExchange = useCallback((userText: string, systemText: string) => {
@@ -242,6 +363,15 @@ export function useLiveThread(threadId: string) {
         }
       }
 
+      /*
+        On peut taper avant que la conversation soit là — c'est même le cas
+        courant sur un lien profond. Plutôt que de refuser l'envoi, on attend
+        le premier chargement : l'utilisateur a rédigé pendant la latence, il
+        n'a pas à la repayer.
+      */
+      if (!completeRef.current) {
+        await firstFetchRef.current?.catch(() => undefined);
+      }
       const current = snapshotRef.current;
       if (!current) {
         throw new Error("Conversation non chargée.");
@@ -450,14 +580,14 @@ export function useLiveThread(threadId: string) {
   }, [refresh]);
 
   const respondApproval = useCallback(
-    async (approved: boolean) => {
+    async (choice: ApprovalChoice) => {
       const run = snapshotRef.current?.runs.at(-1);
       if (!run || run.status !== "awaiting_approval") return;
 
       const response = await fetch(`/api/runs/${encodeURIComponent(run.id)}/approval`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approved }),
+        body: JSON.stringify({ choice }),
       });
       if (!response.ok) {
         const message = await readApiError(response);
@@ -480,9 +610,18 @@ export function useLiveThread(threadId: string) {
   );
 
   const messages = useMemo(() => {
-    const base = snapshot ? buildThreadMessagesFromSnapshot(snapshot) : [];
+    /*
+      Seul un snapshot complet produit un transcript. L'en-tête restauré depuis
+      `sessionStorage` porte les runs mais ni messages ni événements : le
+      constructeur en tirait un message assistant vide — une barre d'actions et
+      une heure suspendues dans le vide, là où le squelette est la bonne
+      réponse. Un transcript ne se devine pas ; un titre, si.
+    */
+    const base = snapshot && complete ? buildThreadMessagesFromSnapshot(snapshot) : [];
     return commandMessages.length ? [...base, ...commandMessages] : base;
-  }, [commandMessages, snapshot]);
+  }, [commandMessages, complete, snapshot]);
+
+  const phase: ThreadPhase = complete ? "ready" : snapshot ? "warm" : "cold";
 
   return {
     snapshot,
@@ -491,6 +630,7 @@ export function useLiveThread(threadId: string) {
     connectorGaps,
     isRunning,
     approval,
+    phase,
     loading,
     error,
     refresh,

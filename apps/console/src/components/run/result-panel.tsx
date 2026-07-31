@@ -24,6 +24,13 @@ export type ResultPanelProps = {
   output: string | null;
   usage: { inputTokens: number; outputTokens: number; totalTokens: number } | null;
   artifacts: { id?: string; filename: string; content: string; sizeBytes?: number; downloadUrl?: string }[];
+  /**
+   * Pièces jointes fournies à la mission. Elles étaient rendues par le panneau
+   * workspace du chat, sous `in/` ; celui-ci ayant disparu au profit de la
+   * ligne de méta, c'est ici qu'elles se déplient — sinon le compteur `in/`
+   * pointerait vers un écran qui ne les montre pas.
+   */
+  inputArtifacts?: { id?: string; filename: string; sizeBytes?: number; downloadUrl?: string }[];
   error: string | null;
   className?: string;
 };
@@ -104,6 +111,7 @@ export function ResultPanelContent({
   instructions,
   usage,
   artifacts,
+  inputArtifacts = [],
   error,
 }: Omit<ResultPanelProps, "width" | "collapsed" | "resizing" | "onToggleCollapsed" | "className" | "output">) {
   return (
@@ -173,6 +181,29 @@ export function ResultPanelContent({
           <p className="rounded-2xl bg-neg-soft px-3 py-2 text-neg-700">{error}</p>
         </Section>
       ) : null}
+
+      <Section title={`Fichiers fournis (${inputArtifacts.length})`}>
+        {inputArtifacts.length === 0 ? (
+          <p className="text-muted-foreground">Aucune pièce jointe.</p>
+        ) : (
+          <ul className="space-y-1">
+            {inputArtifacts.map((artifact) => (
+              <li key={artifact.id ?? artifact.filename}>
+                <a
+                  href={artifact.downloadUrl}
+                  download={artifact.filename}
+                  className="flex min-h-10 w-full items-center gap-2 rounded-2xl border border-ai-separator bg-ai-primary px-3 text-start shadow-board-xs transition-colors hover:bg-ai-tertiary"
+                >
+                  <span className="font-mono text-[0.8125rem]">{artifact.filename}</span>
+                  <span className="ms-auto text-[0.75rem] text-ai-icon-secondary">
+                    {artifact.sizeBytes ?? 0} o
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
 
       <Section title={`Fichiers produits (${artifacts.length})`}>
         {artifacts.length === 0 ? (

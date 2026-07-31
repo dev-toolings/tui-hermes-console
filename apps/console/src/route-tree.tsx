@@ -18,6 +18,8 @@ import {
 import { AppProviders } from "@/components/providers/app-providers";
 import { ConsoleShell } from "@/components/shell/console-shell";
 import { SettingsNav } from "@/components/settings/settings-nav";
+import { ChatSurfaceSkeleton } from "@/components/chat/chat-surface-skeleton";
+import { usePathname } from "@/lib/router";
 /**
  * Écrans de conversation, chargés à la demande.
  *
@@ -109,7 +111,7 @@ const consoleLayout = createRoute({
   // blanchir la fenêtre entière.
   component: () => (
     <ConsoleShell>
-      <Suspense fallback={<Pending />}>
+      <Suspense fallback={<RouteFallback />}>
         <Outlet />
       </Suspense>
     </ConsoleShell>
@@ -128,6 +130,21 @@ function Pending() {
   return <p className="p-6 text-sm text-muted-foreground">Chargement…</p>;
 }
 
+/**
+ * La frontière `Suspense` est unique pour toute la Console, mais l'attente
+ * qu'elle couvre n'a pas la même forme partout : sur le chat, le chunk différé
+ * porte trois colonnes, et les remplacer par une ligne de texte faisait un
+ * écran intermédiaire de plus. On choisit donc le repli selon la route.
+ */
+function RouteFallback() {
+  const pathname = usePathname();
+  return pathname === "/chat" || pathname.startsWith("/chat/") ? (
+    <ChatSurfaceSkeleton />
+  ) : (
+    <Pending />
+  );
+}
+
 const dashboardRoute = createRoute({
   getParentRoute: () => consoleLayout,
   path: "/",
@@ -143,11 +160,13 @@ const missionsRoute = createRoute({
   path: "/runs",
   validateSearch: (search: Record<string, unknown>) => ({
     filter: typeof search.filter === "string" ? search.filter : undefined,
+    // Le kanban est la vue par défaut ; le tableau reste accessible par l'URL.
+    view: search.view === "table" ? ("table" as const) : ("kanban" as const),
   }),
   loader: loadMissions,
   component: function MissionsRoute() {
-    const { filter } = missionsRoute.useSearch();
-    return <MissionsScreen data={missionsRoute.useLoaderData()} filter={filter} />;
+    const { filter, view } = missionsRoute.useSearch();
+    return <MissionsScreen data={missionsRoute.useLoaderData()} filter={filter} view={view} />;
   },
   pendingComponent: Pending,
   errorComponent: ErrorBox,

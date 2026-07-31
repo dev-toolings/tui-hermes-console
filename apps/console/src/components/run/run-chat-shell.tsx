@@ -7,10 +7,11 @@ import { EventStream } from "./event-stream";
 import { RunDetailsRegistrar, type RunPageDetails } from "./run-page-chrome";
 import { RunThreadHeader } from "./run-thread-header";
 import { RunThreadMetaProvider } from "./run-thread-meta";
+import type { ThreadPhase } from "./use-live-thread";
 
 type StreamProps = Omit<
   React.ComponentProps<typeof EventStream>,
-  "layout" | "modelLabel" | "loading"
+  "layout" | "modelLabel" | "phase"
 >;
 
 export function RunChatShell({
@@ -21,7 +22,7 @@ export function RunChatShell({
   details,
   streamProps,
   threadSnapshot = null,
-  loading = false,
+  phase = "ready",
   surface = "mission",
 }: {
   title: string;
@@ -31,24 +32,18 @@ export function RunChatShell({
   details: RunPageDetails;
   streamProps: StreamProps;
   threadSnapshot?: ThreadSnapshot | null;
-  loading?: boolean;
+  phase?: ThreadPhase;
   surface?: "chat" | "mission";
 }) {
   const stream = (
-    <EventStream {...streamProps} layout="xulux" modelLabel={model} loading={loading} />
+    <EventStream {...streamProps} layout="xulux" modelLabel={model} phase={phase} />
   );
 
   if (surface === "chat") {
     return (
-      <RunDetailsRegistrar details={details}>
+      <RunDetailsRegistrar details={{ ...details, phase }}>
         <RunThreadMetaProvider snapshot={threadSnapshot}>
-          <ChatPane
-            title={loading ? "…" : title}
-            modelLabel={model}
-            loading={loading}
-            trailing={trailing}
-            alerts={alerts}
-          >
+          <ChatPane title={title} phase={phase} trailing={trailing} alerts={alerts}>
             {stream}
           </ChatPane>
         </RunThreadMetaProvider>
@@ -57,10 +52,10 @@ export function RunChatShell({
   }
 
   return (
-    <RunDetailsRegistrar details={details}>
+    <RunDetailsRegistrar details={{ ...details, phase }}>
       <RunThreadMetaProvider snapshot={threadSnapshot}>
         <div className="xulux-chat-root flex h-full min-h-0 flex-col overflow-hidden bg-background font-sans antialiased">
-          <RunThreadHeader title={title} trailing={trailing} loading={loading} />
+          <RunThreadHeader title={title} trailing={trailing} phase={phase} />
           {alerts}
           <div className="min-h-0 flex-1 overflow-hidden">{stream}</div>
         </div>

@@ -2,6 +2,17 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/*
+  Scrollbars: one API over the two competing standards (`scrollbar-width` /
+  `scrollbar-color` for Firefox and recent Chromium, `::-webkit-scrollbar` for
+  the rest). `nocompatible` is what unlocks `scrollbar-*-rounded-*` and
+  `scrollbar-w/h-*` — without it the plugin only ships sizes and colors.
+  See `scrollbar-subtle` at the bottom of this file for the house treatment.
+*/
+@plugin "tailwind-scrollbar" {
+  nocompatible: true;
+}
+
 @source "../../../ui/src";
 @source "../../../../apps/web/src";
 
@@ -262,6 +273,11 @@
   --color-surface-sunken: var(--surface-sunken);
   --color-control: var(--control);
   --color-control-active: var(--control-active);
+
+  /* named colors so tailwind-scrollbar's `scrollbar-thumb-*` can reach the
+     theme tokens instead of an arbitrary `[var(--…)]` value */
+  --color-scroll-thumb: var(--ai-chat-scrollbar-thumb);
+  --color-scroll-thumb-hover: var(--ai-chat-scrollbar-thumb-hover);
 
   /* BoardUI data-viz (Tailwind lime) — the signature chart accent */
   --color-viz-200: #d9f99d; /* lime-200 */
@@ -1056,29 +1072,16 @@ html.theme-transitioning *::after {
   - `scrollbar-subtle` below for real content (thread, code, diffs, long lists) —
     the bar has to be findable, so it stays visible but thin, trackless and
     rounded, and only gains contrast on hover.
+
+  `scrollbar-subtle` is the one name the app uses; it is a thin wrapper over
+  tailwind-scrollbar so the treatment stays in one place. The plugin's own
+  utilities (`scrollbar-thin`, `scrollbar-thumb-*`, `scrollbar-w-*`, the
+  `scrollbar-hover:` variant) remain available for one-off scrollers.
 */
 @utility scrollbar-subtle {
-  scrollbar-width: thin;
-  scrollbar-color: var(--ai-chat-scrollbar-thumb) transparent;
-
-  &::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-  &::-webkit-scrollbar-track,
-  &::-webkit-scrollbar-corner {
-    background: transparent;
-  }
-  /* padded with a transparent border so the thumb reads as a floating pill */
-  &::-webkit-scrollbar-thumb {
-    background-color: var(--ai-chat-scrollbar-thumb);
-    background-clip: content-box;
-    border: 3px solid transparent;
-    border-radius: 9999px;
-  }
-  &::-webkit-scrollbar-thumb:hover {
-    background-color: var(--ai-chat-scrollbar-thumb-hover);
-  }
+  @apply scrollbar-thin scrollbar-track-transparent scrollbar-corner-transparent;
+  @apply scrollbar-thumb-scroll-thumb scrollbar-thumb-rounded-full;
+  @apply scrollbar-hover:scrollbar-thumb-scroll-thumb-hover;
 }
 
 /* shimmering label used while a model response is still pending */

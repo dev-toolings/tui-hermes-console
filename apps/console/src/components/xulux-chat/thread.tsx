@@ -4,23 +4,45 @@ import { XuluxTooltipIconButton } from "./tooltip-icon-button";
 import { cn } from "@/lib/utils";
 import { ThreadPrimitive, useAuiState, useThreadViewport } from "@assistant-ui/react";
 import { ArrowDownIcon, BrainIcon } from "lucide-react";
-import { type FC } from "react";
+import { type FC, type ReactNode } from "react";
 import { XuluxComposer } from "./composer";
 import { XuluxThreadMessage } from "./messages";
 import { xuluxThreadStyle } from "./tokens";
+import { ComposerMetaBar } from "@/components/run/composer-meta-bar";
+import type { ThreadPhase } from "@/components/run/use-live-thread";
 
 export const XuluxThread: FC<{
   showComposer?: boolean;
-  loading?: boolean;
+  phase?: ThreadPhase;
   /** Thread existant (/runs/:id) — pas de welcome brain au refresh. */
   openingExisting?: boolean;
   modelLabel?: string;
-}> = ({ showComposer = true, loading = false, openingExisting = false, modelLabel }) => {
+  /**
+   * Ce qui doit être vu au moment de répondre — aujourd'hui la demande
+   * d'autorisation. Posé dans le dock du composer, pas en tête d'écran : une
+   * décision qui bloque la mission n'a pas à être cherchée en haut d'un fil long.
+   */
+  beforeComposer?: ReactNode;
+}> = ({
+  showComposer = true,
+  phase = "ready",
+  openingExisting = false,
+  modelLabel,
+  beforeComposer,
+}) => {
   const messageCount = useAuiState((s) => s.thread.messages.length);
   const threadLoading = useAuiState((s) => s.thread.isLoading);
   const hasMessages = messageCount > 0;
+  /*
+    Le squelette du fil ne dépend que du fil : dès qu'un message est là, il
+    disparaît, même si la revalidation est encore en vol. En `warm` (en-tête
+    restauré depuis le cache, transcript pas encore arrivé) il reste affiché —
+    c'est le seul endroit de l'écran où l'on n'a effectivement rien à montrer.
+  */
   const isResolving =
-    loading || (openingExisting && !hasMessages) || (!hasMessages && threadLoading);
+    (phase !== "ready" && !hasMessages) ||
+    (openingExisting && !hasMessages) ||
+    (!hasMessages && threadLoading);
   const isNew = !openingExisting && !hasMessages && !isResolving;
 
   return (
@@ -75,11 +97,24 @@ export const XuluxThread: FC<{
         />
       ) : null}
 
+      {/* Hors du dock : un fil en lecture seule (rejeu de fixtures) n'a pas de
+          composer, mais peut très bien porter une demande d'autorisation. */}
+      {beforeComposer ? (
+        <div className="shrink-0 bg-background px-4 pt-3">{beforeComposer}</div>
+      ) : null}
+
       {showComposer ? (
         <div className="aui-thread-composer-dock shrink-0 bg-background px-4 pt-3 pb-4 md:pb-5">
+          {/*
+            Entièrement statique, y compris pendant le chargement. Le composer
+            ne dépend d'aucune donnée serveur pour accepter une frappe, et le
+            bloquer punissait l'utilisateur pour une latence qui n'est pas la
+            sienne. L'envoi, lui, attend le snapshot — voir `sendMessage`.
+          */}
           <div className="mx-auto w-full max-w-(--thread-max-width)">
-            <XuluxComposer modelLabel={modelLabel} />
+            <XuluxComposer />
           </div>
+          <ComposerMetaBar modelLabel={modelLabel} phase={phase} />
         </div>
       ) : null}
     </ThreadPrimitive.Root>
@@ -127,23 +162,50 @@ const ThreadWelcome: FC = () => (
   </div>
 );
 
+/**
+ * Le squelette du fil, à la forme du fil.
+ *
+ * Il montrait trois paragraphes alignés à gauche alors qu'une conversation
+ * alterne une bulle à droite et une réponse pleine largeur : au moment où le
+ * contenu arrivait, tout se réorganisait. On reprend donc les mêmes gabarits
+ * que `XuluxUserMessage` et `HermesAssistantMessage` — même largeur maximale,
+ * même gouttière, même rayon de bulle, même interligne — pour que l'arrivée du
+ * transcript ne déplace rien.
+ */
 const ThreadLoadingMessages: FC = () => (
   <div
     role="status"
     aria-label="Chargement de la conversation"
-    className="mx-auto flex w-full max-w-(--thread-max-width) flex-col gap-5 px-2 pt-6"
+    className="flex flex-col gap-y-6"
   >
     <span className="sr-only">Chargement</span>
-    {Array.from({ length: 3 }, (_, index) => (
-      <div key={index} className="flex flex-col gap-2">
-        <div
-          className="h-4 animate-pulse rounded bg-muted"
-          style={{ width: `${index === 1 ? 88 : 72}%` }}
-        />
-        <div
-          className="h-4 animate-pulse rounded bg-muted"
-          style={{ width: `${index === 0 ? 56 : 64}%` }}
-        />
+    {[
+      { bubble: 62, lines: [86, 71, 44] },
+      { bubble: 38, lines: [78, 52] },
+    ].map((turn, index) => (
+      <div key={index} className="flex flex-col gap-y-6">
+        {/* Tour utilisateur : bulle à droite, `rounded-xl px-4 py-2`. */}
+        <div className="mx-auto flex w-full max-w-(--thread-max-width) justify-end px-2">
+          <div
+            className="h-9 animate-pulse rounded-xl bg-muted"
+            style={{ width: `${turn.bubble}%` }}
+          />
+        </div>
+        {/* Tour assistant : pleine largeur, aligné à gauche. */}
+        <div className="mx-auto w-full max-w-(--thread-max-width) px-2">
+          <div className="flex flex-col gap-2.5">
+            {turn.lines.map((width, line) => (
+              <div
+                key={line}
+                className="h-4 animate-pulse rounded bg-muted"
+                style={{ width: `${width}%` }}
+              />
+            ))}
+          </div>
+          {/* Le pied d'un message assistant réserve `min-h-7` : sans lui, le
+              fil remonterait d'un cran par tour au moment du remplacement. */}
+          <div className="min-h-7" />
+        </div>
       </div>
     ))}
   </div>

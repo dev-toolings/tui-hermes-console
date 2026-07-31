@@ -47,6 +47,59 @@ describe("thread-messages", () => {
     ]);
   });
 
+  test("rattache la décision d’autorisation à l’appel d’outil qu’elle débloque", () => {
+    const parts = buildPartsFromEvents([
+      { type: "tool.call", payload: { toolCallId: "tc_0", tool: "terminal", preview: "curl | python3" } },
+      {
+        type: "approval.requested",
+        payload: { command: "curl | python3", choices: ["once", "deny"], description: null },
+      },
+      { type: "approval.responded", payload: { choice: "once", resolved: 1 } },
+      {
+        type: "tool.result",
+        payload: { toolCallId: "tc_0", durationMs: 1400, error: false, hasResultPayload: true, result: "31 29" },
+      },
+    ]);
+
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toMatchObject({
+      type: "tool-call",
+      toolCallId: "tc_0",
+      args: { approval: { choice: "once" } },
+    });
+  });
+
+  test("un refus se trace comme une autorisation", () => {
+    const parts = buildPartsFromEvents([
+      { type: "tool.call", payload: { toolCallId: "tc_0", tool: "terminal", preview: "rm -rf /" } },
+      { type: "approval.responded", payload: { choice: "deny", resolved: 1 } },
+    ]);
+    expect(parts[0]).toMatchObject({ args: { approval: { choice: "deny" } } });
+  });
+
+  test("tant que personne n’a tranché, l’appel ne porte aucune décision", () => {
+    const parts = buildPartsFromEvents([
+      { type: "tool.call", payload: { toolCallId: "tc_0", tool: "terminal", preview: "curl | python3" } },
+      {
+        type: "approval.requested",
+        payload: { command: "curl | python3", choices: ["once", "deny"], description: null },
+      },
+    ]);
+    expect((parts[0] as { args: Record<string, unknown> }).args.approval).toBeUndefined();
+  });
+
+  test("seul l’appel concerné est marqué, et une décision orpheline est ignorée", () => {
+    const parts = buildPartsFromEvents([
+      { type: "approval.responded", payload: { choice: "once" } },
+      { type: "tool.call", payload: { toolCallId: "tc_0", tool: "terminal", preview: "date" } },
+      { type: "tool.call", payload: { toolCallId: "tc_1", tool: "terminal", preview: "curl | python3" } },
+      { type: "approval.responded", payload: { choice: "deny" } },
+    ]);
+
+    expect((parts[0] as { args: Record<string, unknown> }).args.approval).toBeUndefined();
+    expect(parts[1]).toMatchObject({ args: { approval: { choice: "deny" } } });
+  });
+
   test("buildMessages produit user + assistant", () => {
     const messages = buildMessages("go", [
       { type: "agent.message", payload: { text: "done" } },

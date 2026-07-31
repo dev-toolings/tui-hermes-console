@@ -133,3 +133,23 @@ export const fetchStorage = () =>
 
 export const fetchRuntimeProbe = () =>
   getJson<{ probe: RuntimeProbeDto }>("/api/runtime/probe").then((r) => r.probe);
+
+/**
+ * Les deux seules mutations qu'une mission accepte depuis une liste.
+ *
+ * Elles répondent 202 : l'annulation part vers le runtime, la relance crée un
+ * nouveau run et le démarre. Dans les deux cas l'état affiché ne devient vrai
+ * qu'au rechargement du loader — d'où l'absence de mise à jour optimiste chez
+ * l'appelant.
+ */
+export const cancelRun = (runId: string) =>
+  getJson<{ runId: string; status: "stopping" | "cancelled" }>(
+    `/api/runs/${encodeURIComponent(runId)}/cancel`,
+    { method: "POST" },
+  );
+
+export const retryRun = (runId: string) =>
+  getJson<{ threadId: string; runId: string; sourceRunId: string }>(
+    `/api/runs/${encodeURIComponent(runId)}/retry`,
+    { method: "POST" },
+  );

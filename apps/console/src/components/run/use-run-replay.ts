@@ -7,6 +7,7 @@ import {
   type RunEvent,
   type TokenUsage,
 } from "@console/core/lib/hermes-events";
+import type { ApprovalChoice } from "@console/core/lib/thread-snapshot-mutations";
 import { FIXTURE_RUN, replayFixtures, type ReplaySpeed } from "@/lib/fixture-replay";
 import type { RunStatus } from "@console/core/lib/run-status";
 
@@ -101,7 +102,8 @@ export function useRunReplay({ speed = "fast" }: { speed?: ReplaySpeed } = {}) {
     };
   }, [speed, nonce]);
 
-  const respondApproval = useCallback((approved: boolean) => {
+  const respondApproval = useCallback((choice: ApprovalChoice) => {
+    const approved = choice !== "deny";
     setState((prev) => ({
       ...prev,
       approval: null,

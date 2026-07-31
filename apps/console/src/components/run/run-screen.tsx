@@ -9,7 +9,9 @@ import { RUN_STATUS } from "@console/core/lib/run-status";
 import { formatInactivityLabel } from "@/lib/inactivity";
 import { buildRunExecutionDetails, displayRunHeaderModel } from "@/lib/run-execution-details";
 import { cn } from "@/lib/cn";
+import { ApprovalCard } from "./approval-card";
 import { ConnectorGapBanner } from "./connector-gap-banner";
+import { useRuntimeStatus } from "@/components/shell/use-runtime-status";
 import { XuluxButton } from "@/components/xulux-chat/button";
 
 export function RunScreen({
@@ -48,15 +50,6 @@ function FixtureRunScreen({
           onAction={restart}
         />
       }
-      alerts={
-        state.approval ? (
-          <ApprovalBanner
-            command={state.approval.command}
-            description={state.approval.description}
-            onRespond={respondApproval}
-          />
-        ) : null
-      }
       details={{
         execution: {
           requestedModel: run.model,
@@ -77,6 +70,15 @@ function FixtureRunScreen({
         isRunning: !style.terminal,
         runStatus: state.status,
         runError: state.error,
+        beforeComposer: state.approval ? (
+          <ApprovalCard
+            command={state.approval.command}
+            description={state.approval.description}
+            choices={state.approval.choices}
+            status={state.status}
+            onRespond={respondApproval}
+          />
+        ) : null,
       }}
     />
   );
@@ -97,6 +99,7 @@ function LiveThreadScreen({
     isRunning,
     approval,
     connectorGaps,
+    phase,
     loading,
     error,
     sendMessage,
@@ -104,6 +107,13 @@ function LiveThreadScreen({
     retry,
     respondApproval,
   } = useLiveThread(threadId);
+  const runtime = useRuntimeStatus();
+  /**
+   * On ne ferme la porte que sur un runtime explicitement injoignable. « Jamais
+   * testé » n'est pas « hors ligne » : une mission qui attend une autorisation
+   * prouve à elle seule que le runtime répondait il y a un instant.
+   */
+  const runtimeReachable = runtime.runtime?.lastHealthStatus !== "unreachable";
 
   useEffect(() => {
     if (!snapshot || loading) return;
@@ -136,23 +146,33 @@ function LiveThreadScreen({
     );
   }
 
-  const status = latestRun?.status ?? "pending";
-  const canRetry = Boolean(latestRun && RUN_STATUS[status]?.terminal);
+  const canRetry = Boolean(latestRun && RUN_STATUS[latestRun.status]?.terminal);
 
   return (
     <RunChatShell
       surface={surface}
-      title={snapshot?.title ?? "…"}
-      model={snapshot && latestRun ? displayRunHeaderModel(snapshot, latestRun) : "…"}
+      // Plus de « … » : une chaîne vide dit « je ne sais pas », et c'est
+      // l'en-tête qui décide d'en faire un squelette. Un caractère de
+      // remplissage, lui, se lit comme un titre — le sien.
+      title={snapshot?.title ?? ""}
+      model={snapshot && latestRun ? displayRunHeaderModel(snapshot, latestRun) : ""}
       threadSnapshot={snapshot}
-      loading={loading}
+      phase={phase}
       trailing={
-        <RunStatusTrailing
-          status={status}
-          lastEventAt={isRunning && status !== "awaiting_approval" ? latestRun?.lastEventAt : null}
-          actionLabel={canRetry ? "Relancer" : undefined}
-          onAction={canRetry ? retry : undefined}
-        />
+        // Aucun run connu : rien à dire sur son statut. Un badge « en attente »
+        // par défaut affichait une donnée fausse le temps du chargement.
+        latestRun ? (
+          <RunStatusTrailing
+            status={latestRun.status}
+            lastEventAt={
+              isRunning && latestRun.status !== "awaiting_approval"
+                ? latestRun.lastEventAt
+                : null
+            }
+            actionLabel={canRetry ? "Relancer" : undefined}
+            onAction={canRetry ? retry : undefined}
+          />
+        ) : null
       }
       alerts={
         <>
@@ -164,15 +184,6 @@ function LiveThreadScreen({
             >
               {error}
             </div>
-          ) : null}
-          {approval ? (
-            <ApprovalBanner
-              command={approval.command}
-              description={approval.description}
-              onRespond={(approved) => {
-                void respondApproval(approved);
-              }}
-            />
           ) : null}
         </>
       }
@@ -208,54 +219,20 @@ function LiveThreadScreen({
         isRunning,
         onNew: sendMessage,
         onCancel: cancel,
+        // Au ras du composer : c'est là que le regard est quand la mission
+        // attend une décision, pas en tête d'un fil qu'on vient de dérouler.
+        beforeComposer: approval ? (
+          <ApprovalCard
+            command={approval.command}
+            description={approval.description}
+            choices={approval.choices}
+            status={latestRun?.status ?? null}
+            connected={runtimeReachable}
+            onRespond={respondApproval}
+          />
+        ) : null,
       }}
     />
-  );
-}
-
-function ApprovalBanner({
-  command,
-  description,
-  onRespond,
-}: {
-  command: string | null;
-  description: string | null;
-  onRespond: (approved: boolean) => void;
-}) {
-  return (
-    <div
-      role="alertdialog"
-      aria-live="assertive"
-      className="shrink-0 border-b border-warning/35 bg-warning/5 px-4 py-3"
-    >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-warn-700">L&apos;agent demande une autorisation</p>
-          {description ? <p className="text-sm">{description}</p> : null}
-          {command ? (
-            <code className="mt-2 block overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-xs">
-              {command}
-            </code>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <button
-            type="button"
-            onClick={() => onRespond(false)}
-            className="min-h-9 rounded-full border border-border px-3 text-sm font-medium hover:bg-muted"
-          >
-            Refuser
-          </button>
-          <button
-            type="button"
-            onClick={() => onRespond(true)}
-            className="min-h-9 rounded-full bg-primary px-3 text-sm font-medium text-primary-foreground"
-          >
-            Autoriser
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 
