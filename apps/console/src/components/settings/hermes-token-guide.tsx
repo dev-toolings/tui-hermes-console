@@ -15,7 +15,7 @@ export function HermesTokenGuide() {
         onClick={() => setOpen(true)}
         className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-info-100 px-2 text-[0.6875rem] font-medium text-info-700 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       >
-        <BookOpenIcon className="size-3" />
+        <BookOpenIcon aria-hidden className="size-3" />
         Guide
       </button>
 

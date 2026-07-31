@@ -9,9 +9,10 @@ const createAgentSchema = z.object({
   model: z.string().trim().max(200).optional().nullable(),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    return Response.json({ agents: await listAgents() });
+    const includeArchived = new URL(request.url).searchParams.get("includeArchived") === "true";
+    return Response.json({ agents: await listAgents({ includeArchived }) });
   } catch (error) {
     return apiErrorResponse(error);
   }

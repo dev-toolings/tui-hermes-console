@@ -99,8 +99,10 @@ async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
 export const fetchRuntime = () =>
   getJson<{ runtime: RuntimePublicDto }>("/api/runtime").then((r) => r.runtime);
 
-export const fetchAgents = () =>
-  getJson<{ agents: AgentDto[] }>("/api/agents").then((r) => r.agents);
+export const fetchAgents = (includeArchived = false) =>
+  getJson<{ agents: AgentDto[] }>(
+    includeArchived ? "/api/agents?includeArchived=true" : "/api/agents",
+  ).then((r) => r.agents);
 
 export const fetchAgent = (agentId: string) =>
   getJson<{ agent: AgentDto }>(`/api/agents/${encodeURIComponent(agentId)}`).then(

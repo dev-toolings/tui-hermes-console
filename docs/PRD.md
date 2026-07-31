@@ -98,7 +98,7 @@
 >
 > | # | Changement v0.4 → v0.5 | Surface |
 > |---|---|---|
-> | 1 | Table `agents` + `GET\|POST /api/agents` + `GET\|PATCH /api/agents/:id` | CRUD local, seed de 3 agents si vide |
+> | 1 | Table `agents` + `GET\|POST /api/agents` + `GET\|PATCH /api/agents/:id` | CRUD local, aucun agent créé par défaut |
 > | 2 | `/agents`, `/agents/new`, `/runs/new` branchés sur la base | plus de `AGENTS` statiques |
 > | 3 | `/runs` et dashboard lisent `listThreads()` | plus de liste `RUNS` fictive |
 > | 4 | Table `runtime_config` + `GET\|PUT /api/runtime` | token AES-256-GCM (`APP_ENCRYPTION_KEY`) |
@@ -714,7 +714,7 @@ Aucune n'existe sur cette surface et aucune n'est nécessaire.
 La page `/settings` lit `GET /api/model/options` côté serveur et affiche **tous les providers**
 retournés par Hermes, y compris ceux qui nécessitent encore une connexion. Pour chaque provider
 authentifié, elle expose son inventaire de modèles et les capacités `fast` / `reasoning` annoncées.
-La préférence `provider + model` est persistée dans la base de la Console sur l'agent miroir, puis
+La préférence `provider + model` est persistée dans la base de la Console, séparément des agents, puis
 copiée dans chaque nouvelle conversation. Chaque mission transmet explicitement `provider` et
 `model` à `/v1/runs`. Les conversations existantes gardent ce couple afin de rester reproductibles.
 
@@ -1147,7 +1147,7 @@ volumes: { postgres-data:, files-data:, hermes-data:, hermes-work:, caddy-data: 
     "test": "bun test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:seed": "bun run scripts/seed-hermes-agent.ts"
+    "db:migrate": "drizzle-kit migrate"
   }
 }
 ```

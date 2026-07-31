@@ -133,7 +133,7 @@ function SelectItem({
       className={cn(
         // mt-1 keeps two highlighted rows (hover + the checked one) from merging into one grey block
         "relative mt-1 flex w-full cursor-pointer items-center gap-2 rounded-[10px] py-1.5 pr-8 pl-2 text-sm text-foreground/80 outline-hidden transition-colors select-none first:mt-0",
-        "focus:bg-muted data-[state=checked]:bg-muted data-[state=checked]:text-foreground",
+        "hover:bg-accent/60 focus:bg-accent/60 data-[highlighted]:bg-accent/60 data-[state=checked]:bg-muted data-[state=checked]:text-foreground",
         "data-disabled:pointer-events-none data-disabled:opacity-50",
         "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:min-w-0 *:[span]:last:items-center *:[span]:last:gap-2",
         className

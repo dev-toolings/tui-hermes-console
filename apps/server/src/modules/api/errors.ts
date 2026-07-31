@@ -31,7 +31,7 @@ export function apiErrorResponse(error: unknown) {
     const status =
       error.code === "AGENT_NOT_FOUND"
         ? 404
-        : error.code === "AGENT_ARCHIVED" || error.code === "AGENT_PROTECTED"
+        : error.code === "AGENT_ARCHIVED"
           ? 409
           : 409;
     return Response.json({ error: { code: error.code, message: error.message } }, { status });

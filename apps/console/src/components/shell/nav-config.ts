@@ -11,7 +11,6 @@ import {
   FileBoxIcon,
   LayoutDashboardIcon,
   MessageSquareIcon,
-  ServerIcon,
   SettingsIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -40,7 +39,6 @@ export const DOCUMENTS_NAV = [
 ] satisfies NavItem[];
 
 export const SECONDARY_NAV = [
-  { label: "Runtime Hermes", href: "/settings/runtime", icon: ServerIcon },
   { label: "Paramètres", href: "/settings", icon: SettingsIcon },
   { label: "Aide", href: "/support", icon: CircleHelpIcon },
 ] satisfies NavItem[];

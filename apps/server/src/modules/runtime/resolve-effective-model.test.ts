@@ -12,11 +12,11 @@ mock.module("@/db/client", () => ({
   }),
 }));
 
-mock.module("@/modules/agents/seed", () => ({
-  ensureHermesSeededAgent: mock(async () => ({
-    id: "agent_hermes_runtime",
+mock.module("@/modules/runtime/model-settings", () => ({
+  getRuntimeModelSelection: mock(async () => ({
     provider: "openai-api",
     model: "gpt-5.6-luna",
+    reasoningEffort: null,
   })),
 }));
 

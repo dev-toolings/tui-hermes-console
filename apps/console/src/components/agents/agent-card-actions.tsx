@@ -2,26 +2,57 @@
 
 import { Link } from "@/lib/router";
 import { useRouter } from "@/lib/router";
-import { useTransition } from "react";
-import { MoreHorizontalIcon, Settings2Icon, Trash2Icon } from "lucide-react";
+import { useState } from "react";
+import {
+  ArchiveIcon,
+  MoreHorizontalIcon,
+  RotateCcwIcon,
+  Settings2Icon,
+  Trash2Icon,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@boardui/ui";
 
 export function AgentCardActions({
   agentId,
   agentName,
-  protectedAgent = false,
+  archived = false,
 }: {
   agentId: string;
   agentName: string;
-  protectedAgent?: boolean;
+  archived?: boolean;
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
+
+  async function setArchived(archive: boolean) {
+    setPending(true);
+    try {
+      const response = await fetch(`/api/agents/${agentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archive }),
+      });
+      if (response.ok) router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function deletePermanently() {
+    setPending(true);
+    try {
+      const response = await fetch(`/api/agents/${agentId}`, { method: "DELETE" });
+      if (response.ok) router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
     <DropdownMenu>
@@ -39,29 +70,41 @@ export function AgentCardActions({
             Configurer
           </Link>
         </DropdownMenuItem>
-        {!protectedAgent ? (
+        <>
           <DropdownMenuItem
-            variant="destructive"
             disabled={pending}
             onSelect={(event) => {
               event.preventDefault();
-              if (
-                !window.confirm(
-                  `Supprimer « ${agentName} » ?\n\nL’agent sera retiré de la base et les sessions Hermes liées seront effacées.`,
-                )
-              ) {
-                return;
-              }
-              startTransition(async () => {
-                await fetch(`/api/agents/${agentId}`, { method: "DELETE" });
-                router.refresh();
-              });
+              void setArchived(!archived);
             }}
           >
-            <Trash2Icon />
-            Supprimer
+            {archived ? <RotateCcwIcon /> : <ArchiveIcon />}
+            {archived ? "Restaurer" : "Archiver"}
           </DropdownMenuItem>
-        ) : null}
+          {archived ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={pending}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  if (
+                    !window.confirm(
+                      `Supprimer définitivement « ${agentName} » ?\n\nL’agent sera retiré de la base et les sessions Hermes liées seront effacées. Cette action est irréversible.`,
+                    )
+                  ) {
+                    return;
+                  }
+                  void deletePermanently();
+                }}
+              >
+                <Trash2Icon />
+                Supprimer définitivement
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </>
       </DropdownMenuContent>
     </DropdownMenu>
   );

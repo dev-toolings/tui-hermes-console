@@ -9,8 +9,7 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:seed": "bun run scripts/seed-hermes-agent.ts"
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
     "@console/core": "workspace:*",

@@ -80,6 +80,16 @@ export const runtimeConfig = pgTable("runtime_config", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Préférences d'inférence globales de la Console, indépendantes des agents. */
+export const runtimeModelSettings = pgTable("runtime_model_settings", {
+  id: text("id").primaryKey().default("default"),
+  provider: text("provider"),
+  model: text("model"),
+  reasoningEffort: text("reasoning_effort"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 
 export const connectors = pgTable(
   "connectors",

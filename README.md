@@ -62,18 +62,16 @@ le volume partagé est le seul chemin fichiers (upload API Hermes rejeté).
 
 ## Configuration locale
 
-Prérequis : le conteneur `infra-postgres` (`~/Documents/infra/compose.yml`) démarré sur `:5432`,
-avec une base dédiée `hermes_console` :
+Prérequis : le conteneur `infra-postgres` (`~/Documents/infra/compose.yml`) démarré sur `:5432` :
 
 ```bash
 docker start infra-postgres
-docker exec infra-postgres createdb -U test hermes_console   # une seule fois
 ```
 
 Puis, à la racine du repo :
 
 ```bash
-make setup   # install + .env.local (clé de chiffrement générée) + db-check + migrations
+make setup   # install + .env.local + création/vérification DB + migrations
 ```
 
 Variables serveur :
@@ -115,7 +113,6 @@ Le redémarrage d'Hermes depuis la Console reste réservé à un runtime local :
 ## Démarrage
 
 ```bash
-make db-seed   # agent miroir depuis /health + /v1/models (runtime Hermes requis)
 make dev
 ```
 

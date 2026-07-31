@@ -4,11 +4,10 @@ import { getDatabase } from "@/db/client";
 import { agents, runs, threads } from "@/db/schema";
 import { resolveHermesRuntimeConfig } from "@/modules/runtime/config";
 import { deleteHermesSession, HermesRuntimeError } from "@/modules/runtime/hermes-adapter";
-import { ensureHermesSeededAgent, HERMES_SEEDED_AGENT_ID } from "./seed";
 
 export class AgentRepositoryError extends Error {
   constructor(
-    readonly code: "AGENT_NOT_FOUND" | "AGENT_ARCHIVED" | "AGENT_PROTECTED" | "SLUG_CONFLICT",
+    readonly code: "AGENT_NOT_FOUND" | "AGENT_ARCHIVED" | "SLUG_CONFLICT",
     message: string,
   ) {
     super(message);
@@ -20,8 +19,6 @@ export type { AgentDto } from "@console/core/types/api";
 import type { AgentDto } from "@console/core/types/api";
 
 export async function listAgents(options?: { includeArchived?: boolean }): Promise<AgentDto[]> {
-  await ensureHermesSeededAgent();
-
   const query = getDatabase().select().from(agents);
   const rows = await (
     options?.includeArchived
@@ -172,13 +169,6 @@ export async function resolveActiveAgentRef(target: string): Promise<AgentDto> {
 }
 
 export async function deleteAgent(agentId: string): Promise<void> {
-  if (agentId === HERMES_SEEDED_AGENT_ID) {
-    throw new AgentRepositoryError(
-      "AGENT_PROTECTED",
-      "L’agent miroir Hermes ne peut pas être supprimé.",
-    );
-  }
-
   const db = getDatabase();
   const [existing] = await db.select({ id: agents.id }).from(agents).where(eq(agents.id, agentId)).limit(1);
   if (!existing) {

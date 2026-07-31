@@ -12,3 +12,4 @@ auth.md
 # la règle `*.png` ci-dessus les excluait et `tauri build` cassait au clone.
 !apps/console/src-tauri/icons/**/*.png
 .playwright-mcp/
+.impeccable/

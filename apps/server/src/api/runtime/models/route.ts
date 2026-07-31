@@ -1,10 +1,9 @@
 import { z } from "zod";
 import { apiErrorResponse } from "@/modules/api/errors";
-import { updateAgent } from "@/modules/agents/repository";
 import {
-  ensureHermesSeededAgent,
-  HERMES_SEEDED_AGENT_ID,
-} from "@/modules/agents/seed";
+  getRuntimeModelSelection,
+  saveRuntimeModelSelection,
+} from "@/modules/runtime/model-settings";
 import {
   DEFAULT_REASONING_EFFORT,
   HERMES_REASONING_EFFORTS,
@@ -80,15 +79,7 @@ export async function PUT(request: Request) {
       requested: input.reasoningEffort,
     });
 
-    const agent = await ensureHermesSeededAgent();
-    if (!agent) {
-      throw new HermesRuntimeError(
-        "L’agent Hermes n’est pas disponible.",
-        503,
-        "HERMES_AGENT_UNAVAILABLE",
-      );
-    }
-    await updateAgent(HERMES_SEEDED_AGENT_ID, {
+    await saveRuntimeModelSelection({
       provider: input.provider,
       model: input.model,
       reasoningEffort,
@@ -119,13 +110,13 @@ async function getModelSettings(options?: {
 }) {
   const config = await resolveHermesRuntimeConfig();
   const catalog = options?.catalog ?? await getModelCatalog(config, options?.refresh === true);
-  const agent = await ensureHermesSeededAgent();
+  const selection = await getRuntimeModelSelection();
   const selectedProvider =
     catalog.providers.find(
       (provider) =>
-        provider.slug === agent?.provider &&
+        provider.slug === selection.provider &&
         provider.authenticated &&
-        provider.models.some((model) => model.id === agent?.model),
+        provider.models.some((model) => model.id === selection.model),
     ) ??
     catalog.providers.find(
       (provider) =>
@@ -144,14 +135,14 @@ async function getModelSettings(options?: {
 
   const available = new Set(selectedProvider.models.map((model) => model.id));
   const selectedModel =
-    (agent?.model && available.has(agent.model) ? agent.model : null) ??
+    (selection.model && available.has(selection.model) ? selection.model : null) ??
     (available.has(catalog.runtimeDefaultModel) ? catalog.runtimeDefaultModel : null) ??
     selectedProvider.models[0]!.id;
 
   const selectedMeta = selectedProvider.models.find((model) => model.id === selectedModel);
   const selectedReasoningEffort = selectedMeta?.reasoning
-    ? isHermesReasoningEffort(agent?.reasoningEffort)
-      ? agent.reasoningEffort
+    ? isHermesReasoningEffort(selection.reasoningEffort)
+      ? selection.reasoningEffort
       : DEFAULT_REASONING_EFFORT
     : null;
 
@@ -165,9 +156,9 @@ async function getModelSettings(options?: {
       : [],
     persistence: {
       source:
-        agent?.provider === selectedProvider.slug &&
-        agent?.model &&
-        available.has(agent.model)
+        selection.provider === selectedProvider.slug &&
+        selection.model &&
+        available.has(selection.model)
           ? "console_database"
           : "hermes_runtime",
       appliesTo: "new_threads",

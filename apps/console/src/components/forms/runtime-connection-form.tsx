@@ -303,7 +303,7 @@ export function RuntimeConnectionForm({
                 ))}
               </datalist>
             </Field>
-            <Field icon={NetworkIcon} label="Port SSH">
+            <Field icon={NetworkIcon} label="Port SSH" hint="22 par défaut.">
               <input
                 name="sshPort"
                 inputMode="numeric"
@@ -315,7 +315,11 @@ export function RuntimeConnectionForm({
             </Field>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field icon={UserRoundIcon} label="Utilisateur">
+            <Field
+              icon={UserRoundIcon}
+              label="Utilisateur"
+              hint="Compte utilisé pour ouvrir la session distante."
+            >
               <input
                 name="sshUser"
                 autoComplete="off"
@@ -438,22 +442,34 @@ export function RuntimeConnectionForm({
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-seam pt-4">
         <StatusMessage status={status} />
         <div className="flex gap-2">
-          <Button type="button" disabled={disabled} onClick={() => void testConnection()}>
-            {status.kind === "loading" && status.action === "test" ? (
-              <LoaderCircleIcon className="size-4 animate-spin" />
-            ) : null}
+          <Button
+            type="button"
+            disabled={disabled}
+            leadingIcon={
+              status.kind === "loading" && status.action === "test" ? SpinnerIcon : undefined
+            }
+            onClick={() => void testConnection()}
+          >
             Tester
           </Button>
-          <Button type="submit" variant="primary" disabled={disabled}>
-            {status.kind === "loading" && status.action === "save" ? (
-              <LoaderCircleIcon className="size-4 animate-spin" />
-            ) : null}
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={disabled}
+            leadingIcon={
+              status.kind === "loading" && status.action === "save" ? SpinnerIcon : undefined
+            }
+          >
             Enregistrer
           </Button>
         </div>
       </div>
     </form>
   );
+}
+
+function SpinnerIcon({ className }: { className?: string }) {
+  return <LoaderCircleIcon className={cn(className, "animate-spin motion-reduce:animate-none")} />;
 }
 
 function StatusMessage({ status }: { status: Status }) {

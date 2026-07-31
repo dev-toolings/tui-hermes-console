@@ -2,7 +2,6 @@ import { Link } from "@/lib/router";
 import { BotIcon, PlusIcon } from "lucide-react";
 import { AgentCardActions } from "@/components/agents/agent-card-actions";
 import { Badge, ButtonLink, Card, CardSurface, PageShell, SectionHeading } from "@/components/ui/boardui";
-import { HERMES_SEEDED_AGENT_ID } from "@console/core/modules/agents/identity";
 import type { AgentsData } from "@/loaders";
 
 function formatRelative(iso: string | null) {
@@ -19,12 +18,14 @@ function formatRelative(iso: string | null) {
 
 export function AgentsScreen({ data }: { data: AgentsData }) {
   const { agents } = data;
+  const activeAgents = agents.filter((agent) => !agent.archivedAt);
+  const archivedAgents = agents.filter((agent) => agent.archivedAt);
 
   return (
     <PageShell>
       <SectionHeading
         title="Agents configurés"
-        description="Un agent miroir du runtime Hermes. Seed via bun run db:seed — Hermes n’a pas d’API de profils."
+        description="Les agents actifs peuvent recevoir de nouvelles missions. Les agents archivés restent disponibles pour restauration ou suppression."
         action={
           <ButtonLink href="/runs/new" variant="primary">
             <PlusIcon className="size-4" />
@@ -33,57 +34,41 @@ export function AgentsScreen({ data }: { data: AgentsData }) {
         }
       />
 
-      {agents.length === 0 ? (
+      {activeAgents.length === 0 ? (
         <Card>
           <CardSurface className="py-10 text-center">
             <p className="text-sm font-medium">Aucun agent</p>
             <p className="mt-1 text-[0.75rem] text-muted-foreground">
-              Lance <code className="font-mono">bun run db:seed</code> avec Hermes joignable pour
-              matérialiser l’agent runtime.
+              Créez votre premier agent pour lui confier des missions avec ses propres instructions.
             </p>
+            <ButtonLink href="/agents/new" className="mt-4">
+              <PlusIcon className="size-4" />
+              Créer un agent
+            </ButtonLink>
           </CardSurface>
         </Card>
       ) : (
         <div className="grid gap-3 lg:grid-cols-3">
-          {agents.map((agent) => (
-            <Card key={agent.id}>
-              <CardSurface className="flex h-full flex-col">
-                <div className="flex items-start justify-between gap-3">
-                  <span className="flex size-10 items-center justify-center rounded-[10px] bg-info-soft text-info-700">
-                    <BotIcon className="size-5" />
-                  </span>
-                  <AgentCardActions
-                    agentId={agent.id}
-                    agentName={agent.name}
-                    protectedAgent={agent.id === HERMES_SEEDED_AGENT_ID}
-                  />
-                </div>
-                <h2 className="mt-4 text-sm font-semibold">{agent.name}</h2>
-                <p className="mt-1 flex-1 text-[0.75rem] leading-5 text-muted-foreground">
-                  {agent.description ?? "Sans description"}
-                </p>
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <Badge>{agent.model ?? "hermes-agent"}</Badge>
-                  <span className="text-[0.6875rem] text-muted-foreground">
-                    {agent.runs} mission{agent.runs === 1 ? "" : "s"}
-                  </span>
-                </div>
-                <div className="mt-4 flex items-center justify-between border-t border-seam pt-3">
-                  <span className="text-[0.6875rem] text-muted-foreground">
-                    Dernière : {formatRelative(agent.lastRunAt)}
-                  </span>
-                  <Link
-                    href={`/agents/${agent.id}`}
-                    className="text-[0.75rem] font-medium text-primary hover:underline"
-                  >
-                    Configurer
-                  </Link>
-                </div>
-              </CardSurface>
-            </Card>
-          ))}
+          {activeAgents.map((agent) => <AgentCard key={agent.id} agent={agent} />)}
         </div>
       )}
+
+      {archivedAgents.length > 0 ? (
+        <section className="space-y-3" aria-labelledby="archived-agents-title">
+          <div>
+            <h2 id="archived-agents-title" className="text-sm font-semibold">
+              Agents archivés
+            </h2>
+            <p className="mt-1 text-[0.75rem] text-muted-foreground">
+              Indisponibles pour les nouvelles missions. Restaurez-les ou supprimez-les
+              définitivement.
+            </p>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-3">
+            {archivedAgents.map((agent) => <AgentCard key={agent.id} agent={agent} />)}
+          </div>
+        </section>
+      ) : null}
 
       <Card>
         <CardSurface className="p-0">
@@ -101,6 +86,51 @@ export function AgentsScreen({ data }: { data: AgentsData }) {
         </CardSurface>
       </Card>
     </PageShell>
+  );
+}
+
+function AgentCard({ agent }: { agent: AgentsData["agents"][number] }) {
+  const archived = Boolean(agent.archivedAt);
+
+  return (
+    <Card>
+      <CardSurface className="flex h-full flex-col">
+        <div className="flex items-start justify-between gap-3">
+          <span className="flex size-10 items-center justify-center rounded-[10px] bg-info-soft text-info-700">
+            <BotIcon className="size-5" />
+          </span>
+          <AgentCardActions
+            agentId={agent.id}
+            agentName={agent.name}
+            archived={archived}
+          />
+        </div>
+        <div className="mt-4 flex items-center gap-2">
+          <h2 className="text-sm font-semibold">{agent.name}</h2>
+          {archived ? <Badge>Archivé</Badge> : null}
+        </div>
+        <p className="mt-1 flex-1 text-[0.75rem] leading-5 text-muted-foreground">
+          {agent.description ?? "Sans description"}
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Badge>{agent.model ?? "hermes-agent"}</Badge>
+          <span className="text-[0.6875rem] text-muted-foreground">
+            {agent.runs} mission{agent.runs === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div className="mt-4 flex items-center justify-between border-t border-seam pt-3">
+          <span className="text-[0.6875rem] text-muted-foreground">
+            Dernière : {formatRelative(agent.lastRunAt)}
+          </span>
+          <Link
+            href={`/agents/${agent.id}`}
+            className="text-[0.75rem] font-medium text-primary hover:underline"
+          >
+            Configurer
+          </Link>
+        </div>
+      </CardSurface>
+    </Card>
   );
 }
 

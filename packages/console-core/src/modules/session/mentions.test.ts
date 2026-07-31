@@ -36,8 +36,8 @@ describe("parseAgentMention", () => {
   });
 
   test("accepts ids and names used as refs", () => {
-    expect(parseAgentMention("@agent_hermes_runtime ping")).toEqual({
-      ref: "agent_hermes_runtime",
+    expect(parseAgentMention("@agent_support ping")).toEqual({
+      ref: "agent_support",
       prompt: "ping",
     });
   });

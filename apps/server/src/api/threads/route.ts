@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { apiErrorResponse } from "@/modules/api/errors";
 import { requireActiveAgent, resolveActiveAgentRef } from "@/modules/agents/repository";
-import { ensureHermesSeededAgent } from "@/modules/agents/seed";
 import { createThreadWithRun, listThreads } from "@/modules/runs/repository";
 import { startRun } from "@/modules/runs/runner";
+import { getRuntimeModelSelection } from "@/modules/runtime/model-settings";
 import type { ThreadSource } from "@/db/schema";
 
 const FREE_CHAT_INSTRUCTIONS = `Tu es un assistant conversationnel. Réponds directement à la demande.
@@ -64,15 +64,15 @@ export async function POST(request: Request) {
           message: input.message,
         }
       : await (async () => {
-          const seeded = await ensureHermesSeededAgent();
+          const selection = await getRuntimeModelSelection();
           return {
             source: "chat" as const,
             agentId: null,
             agentName: "Chat libre",
             instructions: FREE_CHAT_INSTRUCTIONS,
-            provider: seeded?.provider ?? null,
-            model: seeded?.model || "hermes-agent",
-            reasoningEffort: seeded?.reasoningEffort ?? null,
+            provider: selection.provider,
+            model: selection.model || "hermes-agent",
+            reasoningEffort: selection.reasoningEffort,
             message: input.message,
           };
         })();

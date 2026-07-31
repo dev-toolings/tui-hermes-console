@@ -77,6 +77,7 @@ env: ## Crée apps/server/.env.local s'il manque (clé de chiffrement générée
 		sed "s|^APP_ENCRYPTION_KEY=.*|APP_ENCRYPTION_KEY=$$key|" "$(ENV_TPL)" > "$(ENV_FILE)"; \
 		printf "$(GREEN)✓$(RESET) %s\n" "$(ENV_FILE) created from $(ENV_TPL) (APP_ENCRYPTION_KEY generated)"; \
 	fi
+	@chmod 600 "$(ENV_FILE)"
 
 .PHONY: workdir
 workdir: env ## Crée le volume partagé HERMES_SHARED_WORKDIR
@@ -197,7 +198,7 @@ check: lint typecheck test ## Lint + typecheck + tests
 ##@ Base de données
 
 .PHONY: db-check
-db-check: ## Vérifie que Postgres écoute et que la base $(PG_DB) existe
+db-check: ## Vérifie Postgres et crée la base $(PG_DB) si elle manque
 	@if ! (exec 3<>/dev/tcp/$(PG_HOST)/$(PG_PORT)) 2>/dev/null; then \
 		printf "$(RED)✗$(RESET) %s\n" "no Postgres on $(PG_HOST):$(PG_PORT)" >&2; \
 		printf "    docker start $(PG_CTR)\n" >&2; \
@@ -206,8 +207,10 @@ db-check: ## Vérifie que Postgres écoute et que la base $(PG_DB) existe
 	fi
 	@if docker exec $(PG_CTR) true >/dev/null 2>&1; then \
 		psql="docker exec $(PG_CTR) psql"; \
+		createdb="docker exec $(PG_CTR) createdb"; \
 	elif command -v psql >/dev/null 2>&1; then \
 		psql="psql -h $(PG_HOST) -p $(PG_PORT)"; \
+		createdb="createdb -h $(PG_HOST) -p $(PG_PORT)"; \
 	else \
 		printf "$(YELLOW)!$(RESET) %s\n" "Postgres up on $(PG_HOST):$(PG_PORT) — no psql, skipping $(PG_DB) check"; \
 		exit 0; \
@@ -215,9 +218,8 @@ db-check: ## Vérifie que Postgres écoute et que la base $(PG_DB) existe
 	found=$$($$psql -U $(PG_USER) -d postgres -tAc \
 		"SELECT 1 FROM pg_database WHERE datname='$(PG_DB)'" 2>/dev/null); \
 	if [ "$$found" != "1" ]; then \
-		printf "$(RED)✗$(RESET) %s\n" "database $(PG_DB) does not exist on $(PG_HOST):$(PG_PORT)" >&2; \
-		printf "    docker exec $(PG_CTR) createdb -U $(PG_USER) $(PG_DB)\n" >&2; \
-		exit 1; \
+		printf "$(CYAN)▸$(RESET) %s\n" "creating database $(PG_DB)"; \
+		$$createdb -U $(PG_USER) $(PG_DB) || exit 1; \
 	fi; \
 	printf "$(GREEN)✓$(RESET) %s\n" "Postgres $(PG_HOST):$(PG_PORT) — database $(PG_DB) ready"
 
@@ -230,11 +232,6 @@ db-generate: ## Génère une migration Drizzle depuis le schéma
 db-migrate: ## Applique les migrations
 	$(call say,Applying migrations)
 	@$(PKG) run db:migrate
-
-.PHONY: db-seed
-db-seed: ## Seed l'agent miroir depuis le runtime Hermes
-	$(call say,Seeding Hermes mirror agent)
-	@$(PKG) run db:seed
 
 .PHONY: db-studio
 db-studio: ## Ouvre Drizzle Studio

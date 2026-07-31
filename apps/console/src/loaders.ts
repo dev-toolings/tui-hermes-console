@@ -35,7 +35,7 @@ export async function loadMissions() {
 export type MissionsData = Awaited<ReturnType<typeof loadMissions>>;
 
 export async function loadAgents() {
-  return { agents: await fetchAgents() };
+  return { agents: await fetchAgents(true) };
 }
 export type AgentsData = Awaited<ReturnType<typeof loadAgents>>;
 

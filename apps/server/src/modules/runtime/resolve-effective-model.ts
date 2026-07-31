@@ -5,7 +5,7 @@ import {
   isHermesReasoningEffort,
   type HermesReasoningEffort,
 } from "@console/core/lib/runtime/reasoning-effort";
-import { ensureHermesSeededAgent } from "@/modules/agents/seed";
+import { getRuntimeModelSelection } from "@/modules/runtime/model-settings";
 
 const LEGACY_MODEL_ALIASES = new Set(["", "hermes-agent"]);
 
@@ -20,7 +20,7 @@ function normalizeEffort(value: string | null | undefined): HermesReasoningEffor
 
 /**
  * Résout le modèle réellement envoyé à Hermes.
- * Les settings Console mettent à jour l’agent seedé ; les threads historiques
+ * Les settings Console conservent une sélection globale ; les threads historiques
  * peuvent encore porter l’alias `hermes-agent`.
  */
 export async function resolveEffectiveModel(input: {
@@ -45,11 +45,11 @@ export async function resolveEffectiveInference(input: {
   model: string;
   reasoningEffort: HermesReasoningEffort | null;
 }> {
-  const hermesAgent = await ensureHermesSeededAgent();
-  const consoleModel = hermesAgent?.model ?? null;
+  const selection = await getRuntimeModelSelection();
+  const consoleModel = selection.model;
   const consoleDefault = isConcreteModel(consoleModel) ? consoleModel : null;
-  const consoleProvider = hermesAgent?.provider?.trim() || null;
-  const consoleEffort = normalizeEffort(hermesAgent?.reasoningEffort);
+  const consoleProvider = selection.provider;
+  const consoleEffort = selection.reasoningEffort;
   const threadModel = input.threadModel.trim();
   const threadEffort = normalizeEffort(input.threadReasoningEffort);
 

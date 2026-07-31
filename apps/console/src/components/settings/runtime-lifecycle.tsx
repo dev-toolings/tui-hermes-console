@@ -3,6 +3,7 @@
 import * as React from "react";
 import { CheckCircle2Icon, LoaderCircleIcon, RotateCwIcon, TriangleAlertIcon } from "lucide-react";
 import { Button } from "@/components/ui/boardui";
+import { cn } from "@/lib/cn";
 import { notifyRuntimePublicChanged } from "@/lib/runtime/public-client";
 
 type RuntimeDto = {
@@ -80,13 +81,9 @@ export function RuntimeLifecycle({
         {state.kind !== "confirm" ? (
           <Button
             disabled={!runtime?.configured || !managedLocally || restarting}
+            leadingIcon={restarting ? SpinnerIcon : RotateCwIcon}
             onClick={() => setState({ kind: "confirm" })}
           >
-            {restarting ? (
-              <LoaderCircleIcon className="size-4 animate-spin" />
-            ) : (
-              <RotateCwIcon className="size-4" />
-            )}
             {restarting ? "Redémarrage…" : "Redémarrer Hermes"}
           </Button>
         ) : null}
@@ -131,6 +128,10 @@ export function RuntimeLifecycle({
       ) : null}
     </div>
   );
+}
+
+function SpinnerIcon({ className }: { className?: string }) {
+  return <LoaderCircleIcon className={cn(className, "animate-spin motion-reduce:animate-none")} />;
 }
 
 function formatDuration(milliseconds: number) {

@@ -1,9 +1,18 @@
 "use client";
 
 import { useRouter } from "@/lib/router";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { ArchiveIcon, RotateCcwIcon, Trash2Icon } from "lucide-react";
 import { AgentForm } from "@/components/forms/agent-form";
-import { Badge, ButtonLink, Card, CardSurface, PageShell, SectionHeading } from "@/components/ui/boardui";
+import {
+  Badge,
+  Button,
+  ButtonLink,
+  Card,
+  CardSurface,
+  PageShell,
+  SectionHeading,
+} from "@/components/ui/boardui";
 
 type AgentView = {
   id: string;
@@ -30,9 +39,61 @@ function formatRelative(iso: string | null) {
 
 export function AgentDetailClient({ agent }: { agent: AgentView }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [pendingAction, setPendingAction] = useState<
+    "archive" | "restore" | "delete" | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
   const archived = Boolean(agent.archivedAt);
+
+  async function setArchived(archive: boolean) {
+    setError(null);
+    setPendingAction(archive ? "archive" : "restore");
+    try {
+      const response = await fetch(`/api/agents/${agent.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archive }),
+      });
+      const body = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) {
+        throw new Error(
+          body.error?.message ??
+            (archive ? "Archivage impossible." : "Restauration impossible."),
+        );
+      }
+      router.push("/agents");
+      router.refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Mise à jour impossible.");
+      setPendingAction(null);
+    }
+  }
+
+  async function deletePermanently() {
+    if (
+      !window.confirm(
+        `Supprimer définitivement « ${agent.name} » ?\n\nL’agent sera retiré de la base et les sessions Hermes liées seront effacées. Cette action est irréversible.`,
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setPendingAction("delete");
+    try {
+      const response = await fetch(`/api/agents/${agent.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | null;
+        throw new Error(body?.error?.message ?? "Suppression impossible.");
+      }
+      router.push("/agents");
+      router.refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Suppression impossible.");
+      setPendingAction(null);
+    }
+  }
 
   return (
     <PageShell className="mx-auto max-w-5xl">
@@ -40,9 +101,11 @@ export function AgentDetailClient({ agent }: { agent: AgentView }) {
         title={agent.name}
         description={agent.description ?? "Sans description"}
         action={
-          <ButtonLink href="/runs/new" variant="primary">
-            Lancer une mission
-          </ButtonLink>
+          archived ? null : (
+            <ButtonLink href="/runs/new" variant="primary">
+              Lancer une mission
+            </ButtonLink>
+          )
         }
       />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
@@ -88,33 +151,36 @@ export function AgentDetailClient({ agent }: { agent: AgentView }) {
                   {error}
                 </p>
               ) : null}
-              <button
-                type="button"
-                disabled={pending || archived}
-                onClick={() => {
-                  setError(null);
-                  startTransition(async () => {
-                    try {
-                      const response = await fetch(`/api/agents/${agent.id}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ archive: true }),
-                      });
-                      const body = (await response.json()) as { error?: { message?: string } };
-                      if (!response.ok) {
-                        throw new Error(body.error?.message ?? "Archivage impossible.");
-                      }
-                      router.push("/agents");
-                      router.refresh();
-                    } catch (reason) {
-                      setError(reason instanceof Error ? reason.message : "Archivage impossible.");
-                    }
-                  });
-                }}
-                className="mt-4 w-full rounded-[10px] border border-neg-100 bg-neg-soft px-3 py-2 text-[0.75rem] font-medium text-neg-700 disabled:opacity-50"
-              >
-                {pending ? "Archivage…" : "Archiver l’agent"}
-              </button>
+              {archived ? (
+                <div className="mt-4 space-y-2">
+                  <Button
+                    className="w-full"
+                    disabled={pendingAction !== null}
+                    leadingIcon={RotateCcwIcon}
+                    onClick={() => void setArchived(false)}
+                  >
+                    {pendingAction === "restore" ? "Restauration…" : "Restaurer l’agent"}
+                  </Button>
+                  <Button
+                    className="w-full"
+                    variant="danger"
+                    disabled={pendingAction !== null}
+                    leadingIcon={Trash2Icon}
+                    onClick={() => void deletePermanently()}
+                  >
+                    {pendingAction === "delete" ? "Suppression…" : "Supprimer définitivement"}
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  className="mt-4 w-full"
+                  disabled={pendingAction !== null}
+                  leadingIcon={ArchiveIcon}
+                  onClick={() => void setArchived(true)}
+                >
+                  {pendingAction === "archive" ? "Archivage…" : "Archiver l’agent"}
+                </Button>
+              )}
             </CardSurface>
           </Card>
         </div>

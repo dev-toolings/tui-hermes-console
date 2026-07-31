@@ -8,7 +8,7 @@ import {
   cn,
 } from "@boardui/ui";
 import { Link } from "@/lib/router";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
@@ -16,7 +16,7 @@ export function Button({
   variant = "secondary",
   className,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+}: Omit<ComponentProps<typeof BoardUIButton>, "variant"> & { variant?: ButtonVariant }) {
   return <BoardUIButton type="button" variant={variant} className={className} {...props} />;
 }
 

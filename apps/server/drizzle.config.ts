@@ -1,8 +1,8 @@
 import { defineConfig } from "drizzle-kit";
 
-// Bun charge `.env` et `.env.local` du répertoire courant avant d'exécuter le
-// script : lancé via `bun run db:generate` depuis `apps/server`, DATABASE_URL
-// est déjà dans l'environnement.
+// Les scripts du workspace chargent explicitement `apps/server/.env.local`
+// avant d'entrer dans le filtre `server`. Sans cela, Bun résout l'environnement
+// depuis la racine du monorepo avant de changer le répertoire du package.
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
   throw new Error("DATABASE_URL is required to run Drizzle commands.");
