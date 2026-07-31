@@ -22,7 +22,7 @@ dans un seul module métier ; seulement `next/link` (18 sites) et
 ```
 ┌── Tauri (Rust) ──────────────────────────────────────┐
 │  WebView → apps/console  (Vite + React 19 + TanStack)│
-│      │  fetch /api → 127.0.0.1:3170                  │
+│      │  fetch → origine injectée par Rust            │
 │      ▼                                                │
 │  sidecar → apps/server  (Hono, binaire 65 Mo)        │
 │   ├ drizzle → Postgres                                │
@@ -138,6 +138,49 @@ pas l'autorisation d'accessibilité (-25211) et `screencapture` est refusé dans
 cet environnement. Ce qui *est* établi, c'est que la fenêtre n'attend plus le
 sidecar — le SPA sonde `/api/healthz` alors que l'API est encore absente, ce
 qu'il ne pourrait pas faire si sa webview n'existait pas déjà.
+
+## À quelle API le SPA parle-t-il
+
+Le SPA appelle des chemins relatifs (`/api/…`). Ça suffit partout où il est
+servi par le serveur lui-même : le navigateur sur `:3170`, et le développement
+derrière le proxy Vite. **Empaqueté, non** — la fenêtre charge depuis le
+protocole `tauri://`, et un `/api/…` relatif y résout vers
+`tauri://localhost/api/…`. Le protocole d'assets ne connaît pas ce chemin, il
+renvoie l'`index.html`, et le premier `response.json()` lève sous WebKit
+« The string did not match the expected pattern. » L'écran affichait une erreur
+de syntaxe là où la requête n'était simplement jamais partie.
+
+Rust injecte donc l'origine dans la fenêtre avant tout script de l'application
+(`window.__CONSOLE_API_ORIGIN__`), et `src/lib/api-origin.ts` réécrit les appels
+`/api/…` en conséquence. En un point unique, et pas au cas par cas sur la
+quarantaine d'appels du SPA : c'est l'oubli d'un seul qui reproduirait le bug,
+silencieusement, et seulement dans l'application empaquetée.
+
+L'origine vient de la configuration, pas du code :
+
+| `CONSOLE_API_ORIGIN` | Origine appelée | Sidecar local |
+|---|---|---|
+| vide | `http://127.0.0.1:3170` | lancé |
+| `https://console.exemple.fr` | l'URL donnée | **pas lancé** |
+
+Changer de serveur ne demande donc pas de reconstruire le SPA. `connect-src`
+autorise la boucle locale quel que soit le port, et n'importe quelle origine
+HTTPS : une API distante doit être en TLS. Côté serveur, rien à faire —
+`tauri://localhost` est déjà autorisé en CORS et par le garde anti-CSRF
+(`origins.ts`), reverse-proxy compris.
+
+Vérifié en interposant un proxy témoin entre la fenêtre et l'API, sur
+l'application installée dans `/Applications` :
+
+```
+GET /api/healthz                 origin=tauri://localhost
+GET /api/agents                  origin=tauri://localhost
+GET /api/threads?source=mission  origin=tauri://localhost
+GET /api/runtime                 origin=tauri://localhost
+```
+
+Et avec `CONSOLE_API_ORIGIN` pointé ailleurs : les six requêtes partent vers
+l'origine configurée, zéro vers `:3170`, et aucun `hermes-server` n'est lancé.
 
 ## Configuration de l'application empaquetée
 

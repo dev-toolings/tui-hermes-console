@@ -60,8 +60,16 @@ export function awaitServerReady() {
       try {
         // En dev le proxy Vite répond 500 quand l'amont est injoignable ; en
         // production le `fetch` rejette. `response.ok` couvre les deux.
+        //
+        // Le type de contenu n'est pas une précaution de principe : un `/api`
+        // qui n'atteint pas le serveur peut très bien répondre 200 — le
+        // protocole d'assets de Tauri renvoie l'`index.html` pour tout chemin
+        // inconnu. Sans cette vérification, le garde se déclare prêt sur une
+        // page HTML et laisse les `loader` échouer juste après.
         const response = await fetch("/api/healthz", { cache: "no-store" });
-        if (response.ok) return;
+        if (response.ok && response.headers.get("content-type")?.includes("json")) {
+          return;
+        }
       } catch {
         // Sidecar pas encore à l'écoute — ce n'est pas une panne.
       }

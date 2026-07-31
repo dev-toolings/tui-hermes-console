@@ -9,6 +9,19 @@ use tauri_plugin_shell::ShellExt;
 /// Nom du fichier de configuration, dans le répertoire de config de l'app.
 const CONFIG_FILE: &str = "console.env";
 
+/// Clé de configuration donnant l'origine que le SPA doit appeler.
+///
+/// La contrepartie vit dans `connect-src` (tauri.conf.json), qui autorise
+/// exactement deux choses : la boucle locale, quel que soit le port, et
+/// n'importe quelle origine HTTPS. Le HTTP en clair reste donc refusé ailleurs
+/// que sur 127.0.0.1 — une API distante doit être en TLS. La politique étant
+/// figée à la compilation, elle ne peut pas nommer une origine choisie plus
+/// tard : elle décrit une classe d'origines, pas une adresse.
+const API_ORIGIN_KEY: &str = "CONSOLE_API_ORIGIN";
+
+/// Par défaut, le sidecar lancé juste à côté.
+const DEFAULT_API_ORIGIN: &str = "http://127.0.0.1:3170";
+
 /// Gabarit écrit au premier lancement, quand aucune configuration n'existe.
 const CONFIG_TEMPLATE: &str = r#"# Configuration de Hermes Console.
 #
@@ -26,6 +39,18 @@ APP_ENCRYPTION_KEY=
 
 # Volume de travail partagé avec l'hôte Hermes — même chemin des deux côtés.
 HERMES_SHARED_WORKDIR=/tmp/hermes-console-work
+
+# Origine de l'API appelée par l'interface.
+#
+# Laissée vide, l'application lance son propre serveur sur http://127.0.0.1:3170
+# et lui parle. Renseignez-la pour viser une Console hébergée ailleurs — un VPS
+# par exemple : aucun serveur local n'est alors démarré.
+#
+#   CONSOLE_API_ORIGIN=https://console.mon-domaine.fr
+#
+# En HTTPS : la politique de sécurité de la fenêtre n'autorise le HTTP que sur
+# la boucle locale (voir `csp` dans tauri.conf.json).
+CONSOLE_API_ORIGIN=
 "#;
 
 /// Les clés sans lesquelles le serveur ne peut rien faire d'utile.
@@ -134,12 +159,46 @@ fn spawn_console_server(
     Ok(())
 }
 
-fn open_main_window(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+/// Origine de l'API telle que le SPA doit l'appeler.
+///
+/// Le sidecar local par défaut, n'importe quelle URL dès que
+/// `CONSOLE_API_ORIGIN` est renseigné — un VPS, par exemple. Rien n'est codé
+/// en dur côté SPA : changer de serveur ne demande pas de le reconstruire.
+fn api_origin(config: &HashMap<String, String>) -> String {
+    config
+        .get(API_ORIGIN_KEY)
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_API_ORIGIN)
+        .trim_end_matches('/')
+        .to_string()
+}
+
+/// Vrai quand l'API est celle qu'on lance nous-mêmes, sur cette machine.
+fn is_local_origin(origin: &str) -> bool {
+    origin == DEFAULT_API_ORIGIN
+}
+
+fn open_main_window(
+    app: &tauri::AppHandle,
+    api_origin: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Injecté avant tout script de l'application : le SPA lit cette valeur au
+    // chargement de son module d'API, donc bien avant que React ne rende quoi
+    // que ce soit. `to_string` de serde produit un littéral JSON correctement
+    // échappé — une URL ne devrait jamais casser le script, mais elle vient
+    // d'un fichier que l'utilisateur édite à la main.
+    let script = format!(
+        "window.__CONSOLE_API_ORIGIN__ = {};",
+        serde_json::to_string(api_origin)?
+    );
+
     WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
         .title("Hermes Console")
         .inner_size(1440.0, 900.0)
         .min_inner_size(320.0, 480.0)
         .resizable(true)
+        .initialization_script(script)
         .build()?;
     Ok(())
 }
@@ -178,10 +237,18 @@ pub fn run() {
                 }
             };
 
-            if let Err(error) = spawn_console_server(handle, &config) {
-                // Sans serveur, l'UI n'a aucune donnée : mieux vaut le dire
-                // clairement dans les logs que d'afficher une coquille vide.
-                eprintln!("[tauri] démarrage du serveur Console impossible : {error}");
+            let api_origin = api_origin(&config);
+
+            if is_local_origin(&api_origin) {
+                if let Err(error) = spawn_console_server(handle, &config) {
+                    // Sans serveur, l'UI n'a aucune donnée : mieux vaut le dire
+                    // clairement dans les logs que d'afficher une coquille vide.
+                    eprintln!("[tauri] démarrage du serveur Console impossible : {error}");
+                }
+            } else {
+                // L'API vit ailleurs : lancer un sidecar en plus ne servirait
+                // personne et occuperait le port 3170 pour rien.
+                eprintln!("[tauri] API distante ({api_origin}) — pas de sidecar local");
             }
 
             // La fenêtre s'ouvre tout de suite, sans attendre le sidecar.
@@ -193,7 +260,7 @@ pub fn run() {
             // ce qu'on attend d'une application native. C'est désormais le SPA qui
             // absorbe le démarrage, dans `awaitServerReady` (`src/lib/api.ts`) :
             // la coque s'affiche immédiatement, le contenu se remplit ensuite.
-            if let Err(error) = open_main_window(handle) {
+            if let Err(error) = open_main_window(handle, &api_origin) {
                 eprintln!("[tauri] impossible d'ouvrir la fenêtre : {error}");
             }
 

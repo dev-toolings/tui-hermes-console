@@ -26,7 +26,7 @@ describe("awaitServerReady", () => {
         // quand rien n'écoute, le proxy Vite répond 500 quand l'amont est mort.
         if (healthCalls === 1) throw new TypeError("Failed to fetch");
         if (healthCalls === 2) return new Response("proxy error", { status: 500 });
-        return new Response("ok", { status: 200 });
+        return Response.json({ ok: true });
       }
       return Response.json({ agents: [] });
     }) as typeof fetch;
@@ -41,7 +41,7 @@ describe("awaitServerReady", () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       if (String(input).includes("/api/healthz")) {
         healthCalls++;
-        return new Response("ok", { status: 200 });
+        return Response.json({ ok: true });
       }
       return Response.json({ agents: [] });
     }) as typeof fetch;
@@ -52,10 +52,34 @@ describe("awaitServerReady", () => {
     expect(healthCalls).toBe(1);
   });
 
+  test("un 200 en HTML ne compte pas comme une API prête", async () => {
+    let healthCalls = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/healthz")) {
+        healthCalls++;
+        // Ce que renvoie le protocole d'assets de Tauri pour un chemin inconnu :
+        // l'index du SPA, en 200. Sans la vérification du type de contenu, le
+        // garde se déclarait prêt là-dessus.
+        if (healthCalls < 3) {
+          return new Response("<!doctype html><title>Hermes</title>", {
+            status: 200,
+            headers: { "content-type": "text/html" },
+          });
+        }
+        return Response.json({ ok: true });
+      }
+      return Response.json({ agents: [] });
+    }) as typeof fetch;
+
+    const { fetchAgents } = await freshApi("html");
+    expect(await fetchAgents()).toEqual([]);
+    expect(healthCalls).toBe(3);
+  });
+
   test("une erreur d'API reste une erreur, le garde ne la masque pas", async () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       if (String(input).includes("/api/healthz")) {
-        return new Response("ok", { status: 200 });
+        return Response.json({ ok: true });
       }
       return Response.json({ error: { code: "boom", message: "cassé" } }, { status: 500 });
     }) as typeof fetch;
