@@ -25,6 +25,31 @@ describe("assertSameOriginMutation", () => {
     expect(() => assertSameOriginMutation(request)).not.toThrow();
   });
 
+  /**
+   * Ces deux cas régressaient depuis que le SPA a sa propre origine : la règle
+   * « même origine » refusait toutes les mutations de la Console elle-même.
+   * L'écran Runtime affichait « Origine de requête refusée » sur Enregistrer.
+   */
+  test("accepts the Vite dev server serving the SPA", () => {
+    const request = new Request("http://127.0.0.1:3170/api/runtime", {
+      method: "PUT",
+      headers: { origin: "http://localhost:1420", "sec-fetch-site": "same-site" },
+    });
+
+    expect(() => assertSameOriginMutation(request)).not.toThrow();
+  });
+
+  test("accepts a packaged Tauri window", () => {
+    for (const origin of ["tauri://localhost", "http://tauri.localhost"]) {
+      const request = new Request("http://127.0.0.1:3170/api/runtime", {
+        method: "PUT",
+        headers: { origin },
+      });
+
+      expect(() => assertSameOriginMutation(request)).not.toThrow();
+    }
+  });
+
   test("rejects cross-site and malformed origins", () => {
     const crossSite = new Request("http://localhost:3000/api/runtime/restart", {
       headers: {

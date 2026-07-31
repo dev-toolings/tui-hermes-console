@@ -13,6 +13,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { ROUTES, type RouteModule } from "./routes";
 import { register } from "./instrumentation";
+import { isAllowedOrigin } from "@/modules/api/origins";
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 type HttpMethod = (typeof HTTP_METHODS)[number];
@@ -30,19 +31,15 @@ type RouteHandler = (
 const app = new Hono();
 
 /**
- * Le SPA est servi depuis une autre origine en dev (Vite sur :1420), et depuis
- * `tauri://localhost` une fois empaqueté. On n'ouvre donc pas au monde : la
- * liste est explicite.
+ * Le SPA est servi depuis une autre origine en dev (Vite sur :1420) et depuis
+ * `tauri://localhost` une fois empaqueté. La liste vient de `origins.ts`, la
+ * même que celle du garde anti-CSRF : deux listes divergentes autoriseraient en
+ * CORS ce que le garde refuse.
  */
 app.use(
   "/api/*",
   cors({
-    origin: (origin) =>
-      origin === "http://localhost:1420" ||
-      origin === "http://127.0.0.1:1420" ||
-      origin.startsWith("tauri://")
-        ? origin
-        : null,
+    origin: (origin, c) => (isAllowedOrigin(origin, c.req.raw) ? origin : null),
     credentials: true,
   }),
 );
