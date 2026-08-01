@@ -1,10 +1,10 @@
 # PRD — Hermes Console
 
-**Version :** 1.2
-**Date :** 31-07-2026
+**Version :** 1.3
+**Date :** 01-08-2026
 **Statut :** vérité produit auditée — technical preview, non prête pour une offre B2B autonome
 **Produit :** application self-hosted d’exploitation de missions exécutées par Hermes Agent
-**Périmètre actuel :** une installation partagée, un runtime Hermes actif, plusieurs comptes Google allowlistés sans rôles
+**Périmètre actuel :** une installation, plusieurs sites isolés techniquement, plusieurs comptes Google allowlistés ; les rôles et l'ownership restent incomplets
 **Runtime de référence :** Hermes Agent v0.19.0, API server sur le port 8642
 
 > Ce document décrit l’arbre de travail réel au 31-07-2026, y compris les changements non encore
@@ -243,11 +243,12 @@ Précisions :
 
 ### 6.3 Capacités absentes
 
-- organisation, tenant, site ou projet comme frontière d’autorisation ;
+- organisation/tenant et ownership métier comme frontière complète d'autorisation ;
+- site/projet comme frontière technique : implémenté et vérifié localement, mais non accepté avant Gate 1 ;
 - propriétaire sur agent, session, mission, connecteur ou artefact ;
 - rôles admin, operator, requester, approver, auditor ;
 - OIDC générique, SAML ou SCIM ;
-- audit immuable avec acteur, action, décision et état avant/après ;
+- revue Gate et E2E navigateur du contexte site ;
 - policy engine fail-closed sur outils, chemins, connecteurs, modèles ou budget ;
 - runtimes multiples, fleet, enrôlement, révocation et rotation ;
 - lifecycle distant : provisioning, upgrade, rollback et backup ;
@@ -338,8 +339,9 @@ L’adapter reste le seul point de couplage au protocole.
 
 ### 8.1 Modèle actuel
 
-- console_users : identité Google, sans rôle ;
-- console_sessions : token opaque hashé, CSRF et expiration ;
+- console_users : identité Google ; les memberships portent actuellement les rôles de site, sans matrice appliquée ;
+- console_sessions : token opaque hashé, CSRF, expiration et site actif sélectionné ;
+- sites, projects, site_memberships : frontière technique site/projet ;
 - console_setup : état global de l’installation ;
 - runtime_config et runtime_model_settings : une configuration globale ;
 - agents : identité opérationnelle locale ;
@@ -347,21 +349,21 @@ L’adapter reste le seul point de couplage au protocole.
 - runs : mission ;
 - messages et run_events : transcript et trace technique ;
 - artifacts : métadonnées de fichiers ;
-- connectors : secret typé global.
+- connectors : secrets typés et scopés par site ;
+- audit_ledger_entries : ledger append-only séparé des événements runtime, avec acteur et décision.
 
 ### 8.2 Conséquence B2B
 
-Les lignes métier ne portent ni user_id, ni tenant_id, ni site_id. Tous les emails autorisés
-partagent donc les mêmes agents, missions, connecteurs et artefacts.
+Les ressources métier portent désormais un site et éventuellement un projet. Un membre ne voit que
+son site actif, mais la matrice RBAC et l'ownership ne sont pas encore appliqués. Les réglages
+runtime, modèles, setup et credentials restent des singletons d'installation sans autorité
+`installation_admin` distincte.
 
-Le run_events actuel est un ledger technique, pas un audit de conformité :
+Le `run_events` actuel reste un ledger technique, distinct du ledger d'audit :
 
-- pas d’acteur humain ;
-- pas de décision d’autorisation ;
-- pas d’état avant/après ;
-- pas de garantie append-only administrable ;
-- pas d’export signé ;
-- pas de rétention par policy.
+- l'audit append-only existe séparément, mais son attribution complète dépend encore du moteur de
+  policy et du RBAC ;
+- aucun export expurgé accepté ni rétention par policy ;
 
 Ajouter davantage d’utilisateurs sans modèle d’autorisation élargirait le risque. Le RBAC et
 l’attribution précèdent toute croissance multi-user.
@@ -479,12 +481,12 @@ le pipeline de publication ne sont pas livrés.
 
 | Commande | Résultat |
 |---|---|
-| bun run test | 230 tests verts |
-| @console/core | 61 tests, 8 fichiers |
-| server | 93 tests, 21 fichiers |
-| console | 76 tests, 11 fichiers |
+| bun run test | 326 tests verts |
+| @console/core | 63 tests, 9 fichiers |
+| server | 173 tests, 42 fichiers |
+| console | 90 tests, 17 fichiers |
 | bun run typecheck | vert |
-| bun run lint | vert avec 3 warnings |
+| bun run lint | vert avec 2 warnings |
 | bun run build | vert |
 
 Warnings connus :

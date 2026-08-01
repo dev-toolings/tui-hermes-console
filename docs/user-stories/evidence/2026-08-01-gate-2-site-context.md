@@ -1,15 +1,17 @@
 # Preuve US-G2-001 — Isolation par site et projet
 
-**Date :** 2026-08-01
-
-**Branche :** `feat/us-g2-001-site-context`
-
-**Commit de référence :** `75075bc`
-
-**État technique :** `VÉRIFIÉE`
-
-**Décision de Gate :** non émise — Gate 1 n'est pas encore acceptée
-**Périmètre exclu :** US-G2-005 et US-G2-006
+- Date/heure UTC : 2026-08-01T00:00:00Z (validation locale)
+- Story : US-G2-001
+- Commit/build : `75075bc`, branche `feat/us-g2-001-site-context`
+- Environnement : local, PostgreSQL 17 réel en conteneur éphémère
+- Opérateur : `codex-root`
+- Reviewer : Vador (contre-audit technique) ; product owner à faire
+- Cible : deux sites synthétiques `paris` et `lyon`
+- Versions Console/Hermes/PostgreSQL/OpenSSH : Console du commit `75075bc`, Hermes non requis,
+  PostgreSQL 17.6, OpenSSH non requis
+- État technique : `VÉRIFIÉE`
+- Décision de Gate : non émise — Gate 1 n'est pas encore acceptée
+- Périmètre exclu : US-G2-005 et US-G2-006
 
 ## Contrat vérifié
 
@@ -57,6 +59,13 @@ Deux sites réels sont chargés. Les listes sont limitées au site acteur. Les I
 étrangers et aléatoires produisent les mêmes réponses 404 et douze entrées de
 ledger uniformes.
 
+Le test d'input scope est également exécuté :
+
+```text
+bun test ./apps/server/src/modules/auth/site-context-input.test.ts
+2 pass, 0 fail
+```
+
 ### P-SEC
 
 La campagne inter-site vérifie que les snapshots métier restent inchangés et
@@ -74,3 +83,57 @@ champs `siteId` et `projectId` fournis dans les JSON métier sont rejetés.
 
 La story ne peut pas être `ACCEPTÉE` tant que sa dépendance Gate 1 et la revue
 du product owner/responsable sécurité ne sont pas clôturées.
+
+## Préconditions
+
+- Les migrations 0011 à 0020 sont appliquées dans le conteneur PostgreSQL de test.
+- Le daemon Docker est disponible.
+- Les valeurs métier et les identifiants sont synthétiques.
+
+## Scénario positif
+
+- Given : deux sites, leurs projets et leurs ressources, avec un membre actif sur `paris`.
+- When : les routes de liste sont appelées avec le contexte site serveur.
+- Then attendu : seules les ressources `paris` sont retournées.
+- Résultat observé : agents, connecteurs, threads et fichiers retournent uniquement `paris`.
+- Code de sortie/ID de corrélation : code 0 ; `p-int-site-scope`.
+
+## Scénarios négatifs
+
+### Identifiant étranger ou aléatoire
+
+- Given : membre du site `paris`, identifiant d'une ressource `lyon` puis identifiant inexistant.
+- When : lecture, suppression, annulation, approbation, SSE ou téléchargement.
+- Then attendu : même 404, aucune fuite d'existence, aucun effet.
+- Résultat observé : 12 refus auditables, snapshots inchangés, effets externes non appelés.
+- Absence d'effet vérifiée par : compteurs PostgreSQL et doubles d'effets runtime/disque/flux.
+
+## Commandes et sorties expurgées
+
+```text
+bun test apps/server/drizzle/site-project-foundations-migration.test.ts
+3 pass, 0 fail, 31 expect() calls
+bun test apps/server/drizzle/site-context-api.integration.test.ts
+2 pass, 0 fail, 37 expect() calls
+bun test ./apps/server/src/modules/auth/site-context-input.test.ts
+2 pass, 0 fail
+```
+
+## Inventaire/hash avant et après
+
+Les comptes d'agents, threads et artefacts ainsi que le statut du run `lyon` sont identiques avant
+et après la campagne négative. Aucun octet réel n'est lu ou écrit.
+
+## Incidents, écarts et dérogations
+
+Pas d'incident. La preuve n'est pas une E2E navigateur et ne clôt pas la dépendance Gate 1.
+
+## Nettoyage
+
+Le conteneur PostgreSQL éphémère et ses données synthétiques sont supprimés après le test.
+
+## Acceptation reviewer
+
+- Nom/identifiant : à renseigner par le product owner et le responsable sécurité habilités
+- Date : à renseigner
+- Décision : `ACCEPTÉE` | `REFUSÉE` — en attente
