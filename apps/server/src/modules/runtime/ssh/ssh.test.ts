@@ -9,6 +9,7 @@ import {
   forwardArgs,
   parseSystemSftpStat,
   parseSystemSftpList,
+  scpArgs,
   systemSftpListCommand,
 } from "./system-ssh";
 import { targetFingerprint } from "./index";
@@ -45,6 +46,13 @@ describe("system ssh arguments", () => {
 
   test("never prompts — the Next server has no TTY", () => {
     expect(args).toContain("BatchMode=yes");
+  });
+
+  test("uses only the configured SSH identities", () => {
+    expect(args).toContain("IdentitiesOnly=yes");
+    expect(scpArgs(target, "/tmp/local", "kev@192.168.1.57:/srv/remote")).toContain(
+      "IdentitiesOnly=yes",
+    );
   });
 
   test("cannot inherit an accept-new or disabled host-key policy", () => {

@@ -27,6 +27,8 @@ export function baseSshArgs(target: SshTarget): string[] {
     "-o",
     "BatchMode=yes",
     "-o",
+    "IdentitiesOnly=yes",
+    "-o",
     "ControlMaster=auto",
     "-o",
     `ControlPath=${controlPath(target)}`,
@@ -63,6 +65,32 @@ export function forwardArgs(target: SshTarget, localPort: number, remote: string
     "-L",
     `127.0.0.1:${localPort}:${remote}`,
     `${target.user}@${target.host}`,
+  ];
+}
+
+export function scpArgs(target: SshTarget, from: string, to: string): string[] {
+  return [
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "IdentitiesOnly=yes",
+    "-o",
+    "ControlMaster=auto",
+    "-o",
+    `ControlPath=${controlPath(target)}`,
+    "-o",
+    "StrictHostKeyChecking=yes",
+    "-o",
+    "UpdateHostKeys=no",
+    "-o",
+    `UserKnownHostsFile=${configuredKnownHostsPath()}`,
+    "-o",
+    "GlobalKnownHostsFile=/dev/null",
+    "-P",
+    String(target.port),
+    "--",
+    from,
+    to,
   ];
 }
 
@@ -181,27 +209,7 @@ export function createSystemSshChannel(target: SshTarget): SshChannel {
   }
 
   function scp(from: string, to: string): Promise<string> {
-    return exec("scp", [
-      "-o",
-      "BatchMode=yes",
-      "-o",
-      "ControlMaster=auto",
-      "-o",
-      `ControlPath=${controlPath(target)}`,
-      "-o",
-      "StrictHostKeyChecking=yes",
-      "-o",
-      "UpdateHostKeys=no",
-      "-o",
-      `UserKnownHostsFile=${configuredKnownHostsPath()}`,
-      "-o",
-      "GlobalKnownHostsFile=/dev/null",
-      "-P",
-      String(target.port),
-      "--",
-      from,
-      to,
-    ]);
+    return exec("scp", scpArgs(target, from, to));
   }
 
   async function downloadBounded(
