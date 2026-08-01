@@ -19,7 +19,7 @@ daté seulement après exécution ; `—` signifie « non prouvé », pas « non
 | US-G1-SSH-001..009 | §9.4, §10 — recette SSH détaillée | US-G1-008 | [états détaillés](SSH-STORIES.md) | voir chaque story |
 | US-G2-001 | §6.3, §8, §13 — site/projet | Gate 1 acceptée | [preuve site context 2026-08-01](evidence/2026-08-01-gate-2-site-context.md) | `VÉRIFIÉE` |
 | US-G2-002 | §4, §13 — cinq rôles | US-G2-001 | [preuve RBAC 2026-08-01](evidence/2026-08-01-gate-2-rbac.md) | `IMPLÉMENTÉE` |
-| US-G2-003 | §8, §13 — propriété des ressources | US-G2-001, US-G2-002 | — | `PROPOSÉE` |
+| US-G2-003 | §8, §13 — propriété des ressources | US-G2-001, US-G2-002 | [preuve ownership 2026-08-01](evidence/2026-08-01-gate-2-ownership.md) | `IMPLÉMENTÉE` |
 | US-G2-004 | §13 — séparation MSP/client | US-G2-002, US-G2-003 | — | `PROPOSÉE` |
 | US-G2-005 | §13 — policies par ressource | US-G2-002, US-G2-003 | — | `PROPOSÉE` |
 | US-G2-006 | §6.3, §13 — identité entreprise qualifiée | US-G2-002 | — | `PROPOSÉE` |

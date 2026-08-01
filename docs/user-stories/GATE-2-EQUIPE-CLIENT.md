@@ -51,6 +51,10 @@
 - **Preuves :** `P-CODE`, `P-INT`, `P-SEC`, invariants DB, matrice CRUD par ressource et audit de
   transfert.
 - **État initial :** `PROPOSÉE`.
+- **État courant au 2026-08-01 :** `IMPLÉMENTÉE` backend/DB/UI et vérifiée localement par P-CODE/P-INT ;
+  non `ACCEPTÉE` tant que la P-E2E navigateur, la revue produit/sécurité et la dépendance Gate 1
+  ne sont pas clôturées.
+- **Preuve datée :** [`2026-08-01-gate-2-ownership.md`](evidence/2026-08-01-gate-2-ownership.md).
 
 ## US-G2-004 — Séparer l'opérateur MSP du client final
 

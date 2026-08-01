@@ -4,7 +4,7 @@
 **Date :** 01-08-2026
 **Statut :** vérité produit auditée — technical preview, non prête pour une offre B2B autonome
 **Produit :** application self-hosted d’exploitation de missions exécutées par Hermes Agent
-**Périmètre actuel :** une installation, plusieurs sites isolés techniquement, plusieurs comptes Google allowlistés ; les rôles et l'ownership restent incomplets
+**Périmètre actuel :** une installation, plusieurs sites isolés techniquement, plusieurs comptes Google allowlistés ; rôles et ownership sont implémentés localement mais restent non acceptés avant P-E2E/revue
 **Runtime de référence :** Hermes Agent v0.19.0, API server sur le port 8642
 
 > Ce document décrit l’arbre de travail réel au 31-07-2026, y compris les changements non encore
@@ -243,11 +243,13 @@ Précisions :
 
 ### 6.3 Capacités absentes
 
-- organisation/tenant et ownership métier comme frontière complète d'autorisation ;
+- organisation/tenant et séparation MSP/client complète ; ownership métier est implémenté côté
+  backend/DB/UI, mais reste non accepté avant P-E2E et revue ;
 - site/projet comme frontière technique : implémenté et vérifié localement, mais non accepté avant Gate 1 ;
-- propriétaire sur agent, session, mission, connecteur ou artefact ;
-- rôles admin, operator, requester, approver, auditor : matrice serveur et garde d'installation
-  implémentées et vérifiées localement, mais non acceptées avant P-E2E/revue ;
+- preuve navigateur multi-compte et décision de Gate sur le propriétaire agent/session/mission,
+  connecteur ou artefact ;
+- rôles admin, operator, requester, approver, auditor : matrice serveur, garde d'installation et
+  owner-scoping implémentés et vérifiés localement, mais non acceptés avant P-E2E/revue ;
 - OIDC générique, SAML ou SCIM ;
 - revue Gate et E2E navigateur du contexte site ;
 - policy engine fail-closed sur outils, chemins, connecteurs, modèles ou budget ;
@@ -346,20 +348,22 @@ L’adapter reste le seul point de couplage au protocole.
 - sites, projects, site_memberships : frontière technique site/projet ;
 - console_setup : état global de l’installation ;
 - runtime_config et runtime_model_settings : une configuration globale ;
-- agents : identité opérationnelle locale ;
-- threads : session et snapshot d’agent ;
-- runs : mission ;
+- agents : identité opérationnelle locale, propriétaire et auteur ;
+- threads : session, snapshot d’agent, propriétaire et auteur ;
+- runs : mission, owner hérité du thread et auteur de l'action ;
 - messages et run_events : transcript et trace technique ;
-- artifacts : métadonnées de fichiers ;
-- connectors : secrets typés et scopés par site ;
+- artifacts : métadonnées de fichiers, owner hérité du run et auteur ;
+- connectors : secrets typés, owner/auteur et scope site ;
 - audit_ledger_entries : ledger append-only séparé des événements runtime, avec acteur et décision.
 
 ### 8.2 Conséquence B2B
 
-Les ressources métier portent désormais un site et éventuellement un projet. Un membre ne voit que
-son site actif ; la matrice RBAC serveur refuse les actions non attribuées et les rôles site ne
-peuvent pas atteindre les singletons runtime, modèles, setup ou credentials. L'ownership métier,
-la P-E2E navigateur et l'autorité `installation_admin` restent à livrer.
+Les ressources métier portent désormais un site, éventuellement un projet, un owner et un auteur.
+Un requester ne lit et ne modifie que ses ressources ; un operator garde la visibilité de site et
+ne transfère que ses propres ressources ; admin peut transférer une ressource vers un owner
+`admin/operator/requester`. Le transfert thread est atomique avec runs et artefacts, l'audit est
+append-only, et les caches UI changent de namespace par utilisateur/site. La P-E2E navigateur, la
+revue Gate et l'autorité `installation_admin` restent à livrer.
 
 Le `run_events` actuel reste un ledger technique, distinct du ledger d'audit :
 
@@ -619,7 +623,8 @@ Composants : validation commerciale, sécurité, collaboration, fleet, qualité.
 
 - site/projet comme frontière minimale ;
 - rôles admin, operator, requester, approver, auditor ;
-- propriété et autorisation sur agents, missions, artefacts et connecteurs ;
+- propriété et autorisation sur agents, missions, artefacts et connecteurs (implémentées localement,
+  acceptation P-E2E encore requise) ;
 - OIDC générique, puis SAML/SCIM seulement sur demande qualifiée ;
 - séparation opérateur MSP et client final ;
 - politiques par outil, chemin, connecteur, modèle et budget.
