@@ -18,6 +18,9 @@ import {
 } from "./chain";
 
 type AuditDatabase = ReturnType<typeof getDatabase>;
+export type AuditTransaction = Parameters<
+  Parameters<AuditDatabase["transaction"]>[0]
+>[0];
 
 export interface AppendAuditEntryInput {
   eventId: string;
@@ -60,7 +63,17 @@ export async function appendAuditEntry(
   const hmacKey = resolveAuditHmacKey(dependencies.hmacKey);
   const db = dependencies.database ?? getDatabase();
 
-  return db.transaction(async (tx) => {
+  return db.transaction((tx) =>
+    appendAuditEntryInTransaction(input, tx, { hmacKey }),
+  );
+}
+
+export async function appendAuditEntryInTransaction(
+  input: AppendAuditEntryInput,
+  tx: AuditTransaction,
+  dependencies: Pick<AuditServiceDependencies, "hmacKey"> = {},
+) {
+    const hmacKey = resolveAuditHmacKey(dependencies.hmacKey);
     const [targetSite] = await tx
       .select({ id: sites.id })
       .from(sites)
@@ -156,7 +169,6 @@ export async function appendAuditEntry(
       );
     }
     return mapAuditLedgerRow(rawCreated);
-  });
 }
 
 interface AuditLedgerRawRow extends Record<string, unknown> {

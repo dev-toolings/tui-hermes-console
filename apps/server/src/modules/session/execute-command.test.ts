@@ -22,7 +22,24 @@ mock.module("@/db/client", () => ({
   }),
 }));
 
-import { executeSessionCommand } from "./execute-command";
+import {
+  executeSessionCommand,
+  siteActionForSessionCommand,
+} from "./execute-command";
+
+describe("session command authorization classification", () => {
+  test.each([
+    ["/help", "thread.command"],
+    ["/agent show", "thread.read"],
+    ["/agent create Audit bot | instructions", "agent.create"],
+    ["/agent edit name=Audit bot", "agent.update"],
+    ["/agent switch audit-bot", "thread.agent.switch"],
+    ["/connector status", "connector.read"],
+    ["/model gpt-5.6", "agent.update"],
+  ] as const)("maps %s to %s", (raw, action) => {
+    expect(siteActionForSessionCommand(raw)).toBe(action);
+  });
+});
 
 describe("executeSessionCommand agent isolation", () => {
   test("rejects /agent show on chat threads", async () => {

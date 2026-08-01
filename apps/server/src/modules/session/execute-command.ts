@@ -20,6 +20,31 @@ import type { ConnectorType } from "@/db/schema";
 import { CONNECTOR_TYPE_LABELS } from "@console/core/modules/connectors/requirements";
 import type { SiteRequestContext } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
+import {
+  assertSiteAction,
+  type SiteAction,
+} from "@/modules/auth/site-authorization";
+
+export function siteActionForSessionCommand(raw: string): SiteAction {
+  const text = raw.trim();
+  if (text === "/help" || text === "/commands") return "thread.command";
+  const command = parseSessionCommand(text);
+  switch (command?.kind) {
+    case "agent_show":
+      return "thread.read";
+    case "agent_create":
+      return "agent.create";
+    case "agent_edit":
+    case "model":
+      return "agent.update";
+    case "agent_switch":
+      return "thread.agent.switch";
+    case "connector_status":
+      return "connector.read";
+    default:
+      return "thread.command";
+  }
+}
 
 export async function executeSessionCommand(input: {
   context: SiteRequestContext;
@@ -27,6 +52,7 @@ export async function executeSessionCommand(input: {
   raw: string;
 }): Promise<SessionCommandResult> {
   const text = input.raw.trim();
+  await assertSiteAction(input.context, siteActionForSessionCommand(text));
 
   if (text === "/help" || text === "/commands") {
     return { handled: true, systemMessage: sessionCommandHelp() };

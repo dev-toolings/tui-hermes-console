@@ -11,6 +11,7 @@
  */
 
 import * as agents from "@/api/agents/route";
+import * as audit from "@/api/audit/route";
 import * as auth from "@/api/auth/route";
 import * as agentDetail from "@/api/agents/[agentId]/route";
 import * as connectors from "@/api/connectors/route";
@@ -39,47 +40,171 @@ import * as threadDetail from "@/api/threads/[threadId]/route";
 import * as threadCommands from "@/api/threads/[threadId]/commands/route";
 import * as threadEvents from "@/api/threads/[threadId]/events/route";
 import * as threadMessages from "@/api/threads/[threadId]/messages/route";
+import * as siteMembership from "@/api/site/memberships/[userId]/route";
+import * as siteMemberships from "@/api/site/memberships/route";
+import type { SiteAction } from "@/modules/auth/site-authorization";
 
 export type RouteModule = Record<string, unknown>;
 
-export const ROUTES: Array<{ path: string; module: RouteModule }> = [
-  { path: "/api/healthz", module: healthz },
-  { path: "/api/readyz", module: readyz },
-  { path: "/api/auth", module: auth },
-  { path: "/api/setup", module: setup },
+export const ROUTE_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
+export type RouteMethod = (typeof ROUTE_METHODS)[number];
 
-  { path: "/api/agents", module: agents },
-  { path: "/api/agents/:agentId", module: agentDetail },
+export type RouteAccess =
+  | { boundary: "public" }
+  | { boundary: "setup" }
+  | { boundary: "installation" }
+  | {
+      boundary: "site";
+      actions: Partial<Record<RouteMethod, SiteAction>>;
+    };
 
-  { path: "/api/connectors", module: connectors },
-  { path: "/api/connectors/:type", module: connectorDetail },
-  { path: "/api/connectors/:type/test", module: connectorTest },
+export type RouteDefinition = {
+  path: string;
+  module: RouteModule;
+  access: RouteAccess;
+};
 
-  { path: "/api/files", module: files },
-  { path: "/api/files/:fileId", module: fileDetail },
+const publicAccess = { boundary: "public" } as const;
+const setupAccess = { boundary: "setup" } as const;
+const installationAccess = { boundary: "installation" } as const;
+const siteAccess = (
+  actions: Partial<Record<RouteMethod, SiteAction>>,
+): RouteAccess => ({ boundary: "site", actions });
+
+export const ROUTES: RouteDefinition[] = [
+  { path: "/api/healthz", module: healthz, access: publicAccess },
+  { path: "/api/readyz", module: readyz, access: publicAccess },
+  { path: "/api/auth", module: auth, access: publicAccess },
+  { path: "/api/setup", module: setup, access: setupAccess },
+
+  {
+    path: "/api/audit",
+    module: audit,
+    access: siteAccess({ GET: "audit.read" }),
+  },
+  {
+    path: "/api/site/memberships",
+    module: siteMemberships,
+    access: siteAccess({ GET: "membership.manage" }),
+  },
+  {
+    path: "/api/site/memberships/:userId",
+    module: siteMembership,
+    access: siteAccess({ PUT: "membership.manage" }),
+  },
+
+  {
+    path: "/api/agents",
+    module: agents,
+    access: siteAccess({ GET: "agent.read", POST: "agent.create" }),
+  },
+  {
+    path: "/api/agents/:agentId",
+    module: agentDetail,
+    access: siteAccess({
+      GET: "agent.read",
+      PATCH: "agent.update",
+      DELETE: "agent.delete",
+    }),
+  },
+
+  {
+    path: "/api/connectors",
+    module: connectors,
+    access: siteAccess({ GET: "connector.read" }),
+  },
+  {
+    path: "/api/connectors/:type",
+    module: connectorDetail,
+    access: siteAccess({ PUT: "connector.upsert", DELETE: "connector.delete" }),
+  },
+  {
+    path: "/api/connectors/:type/test",
+    module: connectorTest,
+    access: siteAccess({ POST: "connector.test" }),
+  },
+
+  {
+    path: "/api/files",
+    module: files,
+    access: siteAccess({ GET: "artifact.read", POST: "artifact.create" }),
+  },
+  {
+    path: "/api/files/:fileId",
+    module: fileDetail,
+    access: siteAccess({ GET: "artifact.read" }),
+  },
 
   // Avant `/:runId/…` : « activity » matcherait le motif paramétré.
-  { path: "/api/runs/activity", module: runActivity },
-  { path: "/api/runs/:runId/approval", module: runApproval },
-  { path: "/api/runs/:runId/cancel", module: runCancel },
-  { path: "/api/runs/:runId/retry", module: runRetry },
+  {
+    path: "/api/runs/activity",
+    module: runActivity,
+    access: siteAccess({ GET: "run.read" }),
+  },
+  {
+    path: "/api/runs/:runId/approval",
+    module: runApproval,
+    access: siteAccess({ POST: "run.approve" }),
+  },
+  {
+    path: "/api/runs/:runId/cancel",
+    module: runCancel,
+    access: siteAccess({ POST: "run.cancel" }),
+  },
+  {
+    path: "/api/runs/:runId/retry",
+    module: runRetry,
+    access: siteAccess({ POST: "run.retry" }),
+  },
 
-  { path: "/api/settings/storage", module: settingsStorage },
+  {
+    path: "/api/settings/storage",
+    module: settingsStorage,
+    access: siteAccess({ GET: "storage.read" }),
+  },
 
-  { path: "/api/runtime", module: runtime },
-  { path: "/api/runtime/models", module: runtimeModels },
-  { path: "/api/runtime/probe", module: runtimeProbe },
-  { path: "/api/runtime/restart", module: runtimeRestart },
-  { path: "/api/runtime/ssh-hosts", module: sshHosts },
-  { path: "/api/runtime/test", module: runtimeTest },
+  { path: "/api/runtime", module: runtime, access: installationAccess },
+  { path: "/api/runtime/models", module: runtimeModels, access: installationAccess },
+  { path: "/api/runtime/probe", module: runtimeProbe, access: installationAccess },
+  { path: "/api/runtime/restart", module: runtimeRestart, access: installationAccess },
+  { path: "/api/runtime/ssh-hosts", module: sshHosts, access: installationAccess },
+  { path: "/api/runtime/test", module: runtimeTest, access: installationAccess },
   // Avant `/:provider/credentials` : Hono retient la première correspondance,
   // et « openai-codex » matcherait le motif paramétré.
-  { path: "/api/runtime/providers/openai-codex/auth", module: codexAuth },
-  { path: "/api/runtime/providers/:provider/credentials", module: providerCredentials },
+  {
+    path: "/api/runtime/providers/openai-codex/auth",
+    module: codexAuth,
+    access: installationAccess,
+  },
+  {
+    path: "/api/runtime/providers/:provider/credentials",
+    module: providerCredentials,
+    access: installationAccess,
+  },
 
-  { path: "/api/threads", module: threads },
-  { path: "/api/threads/:threadId", module: threadDetail },
-  { path: "/api/threads/:threadId/commands", module: threadCommands },
-  { path: "/api/threads/:threadId/events", module: threadEvents },
-  { path: "/api/threads/:threadId/messages", module: threadMessages },
+  {
+    path: "/api/threads",
+    module: threads,
+    access: siteAccess({ GET: "thread.read", POST: "thread.create" }),
+  },
+  {
+    path: "/api/threads/:threadId",
+    module: threadDetail,
+    access: siteAccess({ GET: "thread.read", DELETE: "thread.delete" }),
+  },
+  {
+    path: "/api/threads/:threadId/commands",
+    module: threadCommands,
+    access: siteAccess({ POST: "thread.command" }),
+  },
+  {
+    path: "/api/threads/:threadId/events",
+    module: threadEvents,
+    access: siteAccess({ GET: "thread.events.read" }),
+  },
+  {
+    path: "/api/threads/:threadId/messages",
+    module: threadMessages,
+    access: siteAccess({ POST: "thread.message" }),
+  },
 ];

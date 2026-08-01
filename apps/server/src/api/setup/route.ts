@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { apiErrorResponse } from "@/modules/api/errors";
-import { getConsoleSetup, setConsoleSetupStep } from "@/modules/setup/service";
+import { getConsoleSetup } from "@/modules/setup/service";
 import { requireSession } from "@/modules/auth/service";
+import { denyInstallationAccess } from "@/modules/auth/site-authorization";
+import type { AuthenticatedRouteContext } from "@/modules/api/route-context";
 import {
   acceptCurrentAiDisclosure,
   CURRENT_AI_DISCLOSURE,
@@ -43,9 +45,19 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request,
+  context: AuthenticatedRouteContext,
+) {
   try {
     const input = updateSetupSchema.parse(await request.json());
+    if ("step" in input) {
+      return denyInstallationAccess(
+        context.siteContext,
+        request.method,
+        "/api/setup",
+      );
+    }
     const session = await requireSession(request);
     if ("consentVersion" in input) {
       const consent = await acceptCurrentAiDisclosure(
@@ -60,13 +72,6 @@ export async function POST(request: Request) {
         },
       });
     }
-    return Response.json({
-      setup: publicSetupState(
-        await setConsoleSetupStep(input.step, {
-          hasCurrentAiConsent: hasCurrentAiDisclosureConsent(session),
-        }),
-      ),
-    });
   } catch (error) {
     return apiErrorResponse(error);
   }

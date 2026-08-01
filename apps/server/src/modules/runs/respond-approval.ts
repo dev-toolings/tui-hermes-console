@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
   APPROVAL_CHOICES,
@@ -13,6 +14,7 @@ import {
 import { isRunActive, resumeAgentRun } from "./runner";
 import type { SiteRequestContext } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
+import { denySiteAction } from "@/modules/auth/site-authorization";
 
 const bodySchema = z.object({
   choice: z.enum(APPROVAL_CHOICES),
@@ -48,6 +50,20 @@ export async function respondRunApproval(
   },
 ): Promise<RespondApprovalResult> {
   const { choice } = bodySchema.parse(rawBody);
+  if (choice === "session" || choice === "always") {
+    await denySiteAction(context, {
+      action: "run.approve",
+      resourceType: "run",
+      resourceId: `sha256:${createHash("sha256").update(runId).digest("hex")}`,
+      reasonCode: "PERSISTENT_APPROVAL_UNSUPPORTED",
+      state: { choice },
+      error: {
+        message: "Les décisions persistantes ne sont pas disponibles.",
+        status: 403,
+        code: "PERSISTENT_APPROVAL_UNSUPPORTED",
+      },
+    });
+  }
   const run = await getRunCancelTarget(context, runId);
   if (!run) {
     await auditScopedMiss(context, { action: "run.approval", resourceType: "run", resourceId: runId });

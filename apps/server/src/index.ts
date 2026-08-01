@@ -11,7 +11,11 @@ import { join } from "node:path";
 import { stat } from "node:fs/promises";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { ROUTES, type RouteModule } from "./routes";
+import {
+  ROUTES,
+  ROUTE_METHODS,
+  type RouteDefinition,
+} from "./routes";
 import { register } from "./instrumentation";
 import { isAllowedOrigin } from "@/modules/api/origins";
 import { apiErrorResponse } from "@/modules/api/errors";
@@ -28,9 +32,10 @@ import {
   isAiRunStartRequest,
   runStartPreconditionResponse,
 } from "@/modules/setup/ai-disclosure";
-
-const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
-type HttpMethod = (typeof HTTP_METHODS)[number];
+import {
+  assertSiteAction,
+  denyInstallationAccess,
+} from "@/modules/auth/site-authorization";
 
 /**
  * Signature des handlers de `src/api/**` : (Request, { params: Promise<…> }).
@@ -102,27 +107,57 @@ app.use("/api/*", async (c, next) => {
   }
 });
 
-function mountRoute(path: string, module: RouteModule) {
-  for (const method of HTTP_METHODS) {
-    const handler = module[method];
+function mountRoute(route: RouteDefinition) {
+  for (const method of ROUTE_METHODS) {
+    const handler = route.module[method];
     if (typeof handler !== "function") continue;
+    const action =
+      route.access.boundary === "site" ? route.access.actions[method] : undefined;
+    if (route.access.boundary === "site" && !action) {
+      throw new Error(`SITE_ACTION_MISSING:${method} ${route.path}`);
+    }
 
-    app.on(method, path, (c) =>
-      (handler as RouteHandler)(c.req.raw, {
-        params: Promise.resolve(c.req.param() as Record<string, string>),
-        siteContext: c.get("siteContext") ?? null,
-      }),
-    );
+    app.on(method, route.path, async (c) => {
+      try {
+        const siteContext = c.get("siteContext") ?? null;
+        if (action) {
+          if (!siteContext) {
+            throw new AuthError(
+              "Le contexte de site est indisponible.",
+              503,
+              "SITE_CONTEXT_UNAVAILABLE",
+            );
+          }
+          await assertSiteAction(siteContext, action);
+        }
+        if (route.access.boundary === "installation") {
+          if (!siteContext) {
+            throw new AuthError(
+              "Le contexte de site est indisponible.",
+              503,
+              "SITE_CONTEXT_UNAVAILABLE",
+            );
+          }
+          await denyInstallationAccess(siteContext, method, route.path);
+        }
+        return await (handler as RouteHandler)(c.req.raw, {
+          params: Promise.resolve(c.req.param() as Record<string, string>),
+          siteContext,
+        });
+      } catch (error) {
+        return apiErrorResponse(error);
+      }
+    });
   }
 }
 
-for (const route of ROUTES) mountRoute(route.path, route.module);
+for (const route of ROUTES) mountRoute(route);
 
 /** Inventaire des routes réellement montées — utile pour vérifier la parité. */
 app.get("/__routes", (c) =>
   c.json({
     routes: ROUTES.flatMap((route) =>
-      HTTP_METHODS.filter((method) => typeof route.module[method] === "function").map(
+      ROUTE_METHODS.filter((method) => typeof route.module[method] === "function").map(
         (method) => `${method} ${route.path}`,
       ),
     ),
