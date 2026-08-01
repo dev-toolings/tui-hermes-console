@@ -50,6 +50,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 - [01-08-2026 — compatibilité image Hermes réelle](2026-08-01-gate-1-hermes-real-image-confinement.md) :
   G1-002B tire l’image upstream par digest, observe sa version/configuration et refuse de la
   promouvoir lorsque l’overlay ne peut pas la démarrer ; story `BLOQUÉE`.
+- [01-08-2026 — matrice candidate Hermes G1-002C](2026-08-01-gate-1-g1-002c-candidate-matrix.md) :
+  compare 65532:/work, 10000:/opt/data et bootstrap root ; verdict global non-promu
+  `BLOCKED`/`DECISION_REQUIRED`, story G1-002 toujours `BLOQUÉE`.
 - [01-08-2026 — enveloppe et enforcer policy](2026-08-01-gate-1-g1-004a-local.md) :
   G1-004A local (tuple Ed25519 stricte, TTL/nonce/payload/portée, consommation anti-rejeu et
   effet synthétique) ; P-SEC/P-E2E et intégration Hermes encore ouvertes, story `BLOQUÉE`.

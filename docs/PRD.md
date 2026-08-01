@@ -551,6 +551,11 @@ PostgreSQL réel pour deux sites, vérifie hash/trailer et événement d’appen
 CSRF, scope injecté, chaîne HMAC altérée et append indisponible sans corps NDJSON. Cette preuve
 reste P-INT locale et ne ferme ni la dépendance G1-004, ni P-SEC/P-E2E, ni Gate 1.
 
+Preuve préparatoire G1-002C : `bun run proof:g1-002c` compare les profils 65532:/work,
+10000:/opt/data et bootstrap root sur l’image Hermes digestée. Le profil upstream peut être
+techniquement sondé mais le JSON garde `promotionAllowed=false`, le verdict global
+`BLOCKED`/`DECISION_REQUIRED` et une sortie non nulle ; US-G1-002 et Gate 1 restent ouvertes.
+
 Warnings connus :
 
 - TanStack Table incompatible avec une optimisation du compilateur React ;
