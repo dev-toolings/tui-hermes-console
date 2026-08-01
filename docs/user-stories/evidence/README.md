@@ -28,8 +28,8 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
   remplacement réel du conteneur Console, volume `files-data` conservé et refus d’intégrité ;
   même hôte uniquement, P-OPS production et reprise après sinistre encore ouvertes.
 - [01-08-2026 — notice IA et garde de consentement](2026-08-01-gate-1-ai-disclosure-local.md) :
-  notice versionnée, sémantique accessible et refus centralisé `423/428` ; P-E2E navigateur et revue
-  clavier/lecteur d’écran encore ouverts.
+  notice versionnée, manifeste de routes, persistance PostgreSQL et refus centralisé `423/428` ;
+  P-E2E navigateur et revue clavier/lecteur d’écran encore ouverts.
 - [01-08-2026 — garde SFTP locale](2026-08-01-gate-1-ssh-sftp-006a-local.md) : US-G1-SSH-006A
   borne les chemins distants avant les appels SFTP ; aucune preuve de frontière OS/VPS.
 
