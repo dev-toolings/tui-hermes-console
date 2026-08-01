@@ -1,0 +1,9 @@
+services:
+  console:
+    environment:
+      HERMES_SSH_KNOWN_HOSTS_FILE: /home/bun/.ssh/known_hosts
+    volumes:
+      - type: bind
+        source: ${CONSOLE_SSH_DIR:?CONSOLE_SSH_DIR is required for the SSH overlay}
+        target: /home/bun/.ssh
+        read_only: true

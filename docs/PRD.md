@@ -492,7 +492,9 @@ compose.prod.yml livre seulement :
 Il ne livre pas Hermes et ne partage aucun volume avec lui. Le runtime est externe :
 
 - direct : URL privée joignable et contrat de workdir partagé à organiser hors du Compose ;
-- SSH : tunnel vers une machine distante et miroir SFTP.
+- SSH : tunnel vers une machine distante et miroir SFTP. Le fichier optionnel
+  `compose.prod.ssh.yml` monte un dossier SSH dédié en lecture seule à `/home/bun/.ssh` ; il ne
+  doit jamais recevoir le `~/.ssh` complet d’un opérateur ni une clé privée suivie par Git.
 
 L’image Console est non-root, read-only, avec tmpfs et no-new-privileges. Caddy termine TLS,
 supprime le header Server et flush le SSE.

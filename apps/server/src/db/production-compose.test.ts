@@ -61,4 +61,46 @@ describeWithCompose("production Compose secret boundaries", () => {
     expect(environment("postgres").DATABASE_OWNER_URL).toBeUndefined();
     expect(environment("postgres").DATABASE_URL).toBeUndefined();
   });
+
+  test("keeps the dedicated SSH material opt-in and read-only", () => {
+    const result = spawnSync(
+      "docker",
+      [
+        "compose",
+        "--env-file",
+        "deploy/production.env.example",
+        "-f",
+        "compose.prod.yml",
+        "-f",
+        "compose.prod.ssh.yml",
+        "config",
+        "--format",
+        "json",
+      ],
+      {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+        env: { ...process.env, CONSOLE_SSH_DIR: resolve(repositoryRoot, "deploy/ssh") },
+      },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    const config = JSON.parse(result.stdout) as {
+      services: Record<string, {
+        environment?: Record<string, string>;
+        volumes?: Array<{ type?: string; source?: string; target?: string; read_only?: boolean }>;
+      }>;
+    };
+    const sshVolume = config.services.console?.volumes?.find(
+      (volume) => volume.target === "/home/bun/.ssh",
+    );
+    expect(sshVolume).toMatchObject({
+      type: "bind",
+      read_only: true,
+      target: "/home/bun/.ssh",
+    });
+    expect(sshVolume?.source).toEndWith("/deploy/ssh");
+    expect(config.services.console?.environment?.HERMES_SSH_KNOWN_HOSTS_FILE).toBe(
+      "/home/bun/.ssh/known_hosts",
+    );
+  });
 });

@@ -1,1 +1,3 @@
 production.env
+ssh/*
+!ssh/known_hosts
