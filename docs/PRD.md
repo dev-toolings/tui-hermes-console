@@ -390,6 +390,10 @@ Le `run_events` actuel reste un ledger technique, distinct du ledger d'audit :
 - l'audit append-only existe séparément, avec enveloppes historiques v1 et nouvelles enveloppes v2
   snapshotant organisation cliente, organisation opératrice et mandat ; les policies détaillées
   restent G2-005 ;
+- la preuve locale G1-005C applique les migrations de production avec identités owner/runtime
+  distinctes, réserve l’append à la fonction contrôlée et refuse au rôle runtime les mutations du
+  ledger, de sa tête, de ses triggers et l’accès/usage direct de sa séquence ; le propriétaire DB et
+  P-SEC restent ouverts ;
 - un export d’audit expurgé est désormais implémenté (`POST /api/audit/exports`) avec vérification
   de chaîne, pseudonymisation et audit de l’export ; il reste non accepté avant P-SEC/P-E2E ;
 - une policy de rétention site-wide versionnée, un legal hold, un aperçu de purge dry-run et un
@@ -550,6 +554,12 @@ Preuve locale complémentaire G1-005B : `bun run proof:g1-005b` passe l’export
 PostgreSQL réel pour deux sites, vérifie hash/trailer et événement d’append, puis refuse rôle,
 CSRF, scope injecté, chaîne HMAC altérée et append indisponible sans corps NDJSON. Cette preuve
 reste P-INT locale et ne ferme ni la dépendance G1-004, ni P-SEC/P-E2E, ni Gate 1.
+
+Preuve locale complémentaire G1-005C : `bun run proof:g1-005c` passe 3 tests sur PostgreSQL scratch,
+sépare owner/runtime, refuse les altérations directes et chemins de contournement avec SQLSTATE
+`42501`, puis neutralise un rôle hostile lors d'une mise à niveau sans perdre le ledger historique.
+Cette preuve reste P-INT locale ; propriétaire DB, revue indépendante, G1-004, P-SEC/P-E2E et Gate 1
+restent ouverts.
 
 Preuve préparatoire G1-002C : `bun run proof:g1-002c` compare les profils 65532:/work,
 10000:/opt/data et bootstrap root sur l’image Hermes digestée. Le profil upstream peut être

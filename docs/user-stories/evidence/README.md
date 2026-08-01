@@ -23,6 +23,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 - [01-08-2026 — export d’audit HTTP/PostgreSQL G1-005B](2026-08-01-gate-1-g1-005b-audit-export.md) :
   P-INT locale sur Hono/PostgreSQL, isolation multi-site, HMAC/trailer et refus fail-closed ;
   revue indépendante, P-SEC/P-E2E, G1-004 et Gate 1 restent ouverts.
+- [01-08-2026 — immutabilité PostgreSQL du ledger G1-005C](2026-08-01-gate-1-g1-005c-audit-immutability.md) :
+  P-INT locale sur la séparation owner/runtime, refus des altérations directes et neutralisation
+  d'un rôle hostile ; propriétaire DB, revue indépendante, P-SEC/P-E2E et Gate 1 restent ouverts.
 - [01-08-2026 — export métier vérifié](2026-08-01-gate-1-lifecycle-export.md) : slice G1-006B
   local ; backup/restauration et acceptation Gate encore ouverts.
 - [01-08-2026 — vérificateur relationnel de bundle](2026-08-01-gate-1-lifecycle-verifier.md) : slice
