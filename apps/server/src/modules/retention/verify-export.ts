@@ -7,7 +7,7 @@ const artifactSchema = z
     runId: z.string().min(1),
     sizeBytes: z.number().int().nonnegative(),
     checksumSha256: z.string().regex(/^[0-9a-f]{64}$/i),
-    bytesBase64: z.string().min(1),
+    bytesBase64: z.string(),
   })
   .passthrough();
 
@@ -26,6 +26,8 @@ export type VerifiedLifecycleExport = {
   artifactCount: number;
   artifactBytes: number;
 };
+
+const MAX_VERIFIED_EXPORT_BYTES = 100 * 1024 * 1024;
 
 /**
  * Verifies a bundle without writing to disk, invoking a shell, or mutating a
@@ -58,11 +60,17 @@ export function verifyLifecycleExport(
       throw new Error("LIFECYCLE_EXPORT_INVALID_BASE64");
     }
     const decoded = Buffer.from(artifact.bytesBase64, "base64");
+    if (decoded.toString("base64") !== artifact.bytesBase64) {
+      throw new Error("LIFECYCLE_EXPORT_INVALID_BASE64");
+    }
     const digest = createHash("sha256").update(decoded).digest("hex");
     if (decoded.byteLength !== artifact.sizeBytes || digest !== artifact.checksumSha256.toLowerCase()) {
       throw new Error("LIFECYCLE_EXPORT_ARTIFACT_INTEGRITY_FAILED");
     }
     artifactBytes += decoded.byteLength;
+    if (artifactBytes > MAX_VERIFIED_EXPORT_BYTES) {
+      throw new Error("LIFECYCLE_EXPORT_TOO_LARGE");
+    }
   }
   return {
     sha256,
