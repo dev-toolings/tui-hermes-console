@@ -66,5 +66,8 @@ describe("route authorization inventory", () => {
     expect(
       ROUTES.find(({ path }) => path === "/api/settings/data-lifecycle/previews/:previewId")?.access,
     ).toEqual({ boundary: "site", actions: { GET: "data.lifecycle.preview" } });
+    expect(
+      ROUTES.find(({ path }) => path === "/api/settings/data-lifecycle/exports")?.access,
+    ).toEqual({ boundary: "site", actions: { POST: "data.lifecycle.export" } });
   });
 });

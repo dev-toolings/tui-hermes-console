@@ -35,8 +35,9 @@ bun run typecheck                         PASS
 git diff --check                          PASS
 ```
 
-Les tests PostgreSQL avec rôle runtime, l’exercice réel export/backup/restauration, la purge
-conditionnée et la preuve P-OPS/P-SEC restent à faire. Ce rapport ne vaut pas acceptation de Gate 1.
+Les tests PostgreSQL avec rôle runtime, le backup/restauration externe, la purge conditionnée et la
+preuve P-OPS/P-SEC restent à faire. L’export métier vérifié est documenté dans le rapport G1-006B.
+Ce rapport ne vaut pas acceptation de Gate 1.
 
 ## Verdict
 

@@ -19,7 +19,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 - [01-08-2026 — export d’audit expurgé](2026-08-01-gate-1-audit-export.md) : préparation code
   locale pour US-G1-005 ; P-SEC/P-E2E et acceptation Gate encore ouvertes.
 - [01-08-2026 — policy de cycle de vie et aperçu dry-run](2026-08-01-gate-1-lifecycle-preview.md) :
-  slice G1-006A local ; export métier, backup/restauration, purge et acceptation Gate encore ouverts.
+  slice G1-006A local ; backup/restauration, purge et acceptation Gate encore ouverts.
+- [01-08-2026 — export métier vérifié](2026-08-01-gate-1-lifecycle-export.md) : slice G1-006B
+  local ; backup/restauration, purge et acceptation Gate encore ouverts.
 
 ## Modèle
 

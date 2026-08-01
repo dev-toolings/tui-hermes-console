@@ -3,7 +3,7 @@ import type { SiteMembershipRole } from "@/db/schema";
 import { appendAuditEntry } from "@/modules/audit/service";
 import { AuthError, type SiteRequestContext } from "./service";
 
-export const SITE_ROLE_MATRIX_VERSION = "2026-08-01.us-g1-006a.v1";
+export const SITE_ROLE_MATRIX_VERSION = "2026-08-01.us-g1-006b.v1";
 
 export const SITE_ACTIONS = [
   "agent.read",
@@ -34,6 +34,7 @@ export const SITE_ACTIONS = [
   "data.lifecycle.read",
   "data.lifecycle.manage",
   "data.lifecycle.preview",
+  "data.lifecycle.export",
   "ownership.transfer",
 ] as const;
 
@@ -101,6 +102,7 @@ export const SITE_ROLE_PERMISSIONS: Readonly<
     "audit.export",
     "data.lifecycle.read",
     "data.lifecycle.preview",
+    "data.lifecycle.export",
   ]),
 };
 
