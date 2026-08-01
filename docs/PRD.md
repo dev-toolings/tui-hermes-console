@@ -391,8 +391,8 @@ Le `run_events` actuel reste un ledger technique, distinct du ledger d'audit :
   de chaîne, pseudonymisation et audit de l’export ; il reste non accepté avant P-SEC/P-E2E ;
 - une policy de rétention site-wide versionnée, un legal hold, un aperçu de purge dry-run et un
   export métier JSON avec octets d’artefacts vérifiés sont désormais implémentés (G1-006A/B), sans
-  suppression ni mutation Hermes ; le backup/restauration et la purge conditionnée restent à livrer
-  et à prouver ;
+  suppression ni mutation Hermes ; un vérificateur local prépare G1-006C, mais le backup/restauration
+  externe et la purge conditionnée restent à livrer et à prouver ;
 
 Ajouter davantage d’utilisateurs sans modèle d’autorisation élargirait le risque. Le RBAC et
 l’attribution précèdent toute croissance multi-user.
