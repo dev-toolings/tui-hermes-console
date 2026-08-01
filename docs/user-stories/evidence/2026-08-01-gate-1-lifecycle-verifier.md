@@ -2,7 +2,7 @@
 
 - Date/heure UTC : 2026-08-01
 - Story : US-G1-006 (préparation G1-006C)
-- Commit : à renseigner après commit
+- Commit : `295b206`
 - Environnement : Bun local
 - Reviewer : non effectué
 
@@ -13,7 +13,8 @@ Le vérificateur `apps/server/scripts/verify-lifecycle-export.ts` contrôle sans
 - unicité des artefacts ;
 - décodage base64, taille déclarée et SHA-256 de chaque octet.
 
-Tests locaux : `bun test apps/server/src/modules/retention/verify-export.test.ts` — PASS.
+Tests locaux : `bun test apps/server/src/modules/retention/verify-export.test.ts` — PASS ; suite
+complète `bun test` : 390 pass, 0 fail.
 
 Ce n’est pas encore une preuve de backup externe ni de restauration scratch. Aucun statut de story
 complète n’est changé.
