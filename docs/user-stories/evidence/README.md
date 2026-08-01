@@ -27,6 +27,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 - [01-08-2026 — durabilité Compose des artefacts](2026-08-01-gate-1-artifact-durability-local.md) :
   remplacement réel du conteneur Console, volume `files-data` conservé et refus d’intégrité ;
   même hôte uniquement, P-OPS production et reprise après sinistre encore ouvertes.
+- [01-08-2026 — notice IA et garde de consentement](2026-08-01-gate-1-ai-disclosure-local.md) :
+  notice versionnée, sémantique accessible et refus centralisé `423/428` ; P-E2E navigateur et revue
+  clavier/lecteur d’écran encore ouverts.
 
 ## Modèle
 

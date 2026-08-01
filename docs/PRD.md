@@ -480,7 +480,11 @@ Avant tout pilote :
 - secrets runtime hors navigateur et transcript ;
 - egress et credentials scindés selon le workflow ;
 - avertissement explicite que l’utilisateur interagit avec une IA et que des commandes peuvent être
-  exécutées.
+  exécutées. La notice versionnée `2026-08-01.v2` est maintenant reliée sémantiquement à son contrôle
+  de consentement, et les trois routes de démarrage/retry refusent l’absence de consentement (`428`).
+
+Cette preuve reste locale : aucun parcours navigateur automatisé, test lecteur d’écran ou consentement
+Google réel n’est encore accepté.
 
 La Console fournit des éléments de preuve utiles à la conformité ; elle n’est pas « AI Act
 compliant » par elle-même.
