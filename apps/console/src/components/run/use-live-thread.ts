@@ -45,6 +45,7 @@ const ACTIVE_STATUSES: ProductRunStatus[] = [
  * que le stream venait de livrer.
  */
 const RECONNECT_POLL_MS = 3000;
+const TERMINAL_REVALIDATE_POLL_MS = 10_000;
 const SNAPSHOT_CACHE_LIMIT = 20;
 
 type CachedSnapshot = { thread: ThreadSnapshot; gaps: ConnectorType[] };
@@ -185,6 +186,20 @@ type ApiErrorBody = {
   };
 };
 
+class ThreadAccessError extends Error {
+  constructor(
+    readonly status: 403 | 404,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ThreadAccessError";
+  }
+}
+
+function isThreadAccessError(reason: unknown): reason is ThreadAccessError {
+  return reason instanceof ThreadAccessError;
+}
+
 export function useLiveThread(threadId: string) {
   const router = useRouter();
   /**
@@ -216,7 +231,26 @@ export function useLiveThread(threadId: string) {
    */
   const completeRef = useRef(cached?.complete ?? false);
 
-  useEffect(() => onSessionCacheScopeChange(() => snapshotCache.clear()), []);
+  const clearLocalThread = useCallback((reason?: unknown) => {
+    snapshotRef.current = null;
+    completeRef.current = false;
+    streamingRef.current = false;
+    setSnapshot(null);
+    setConnectorGaps([]);
+    setCommandMessages([]);
+    setComplete(false);
+    setLoading(false);
+    setError(reason ? toMessage(reason) : "Cette conversation n’est plus accessible.");
+    dropThreadSnapshotCache(threadId);
+  }, [threadId]);
+
+  useEffect(
+    () => onSessionCacheScopeChange(() => {
+      snapshotCache.clear();
+      clearLocalThread(new Error("Le contexte de session a changé."));
+    }),
+    [clearLocalThread],
+  );
 
   const markComplete = useCallback(() => {
     completeRef.current = true;
@@ -238,7 +272,14 @@ export function useLiveThread(threadId: string) {
   );
 
   const refresh = useCallback(async () => {
-    const { thread, gaps } = await fetchThreadSnapshot(threadId);
+    let result: Awaited<ReturnType<typeof fetchThreadSnapshot>>;
+    try {
+      result = await fetchThreadSnapshot(threadId);
+    } catch (reason) {
+      if (isThreadAccessError(reason)) clearLocalThread(reason);
+      throw reason;
+    }
+    const { thread, gaps } = result;
     const current = snapshotRef.current;
     if (current) {
       applySnapshot(mergeThreadSnapshots(current, thread));
@@ -250,7 +291,7 @@ export function useLiveThread(threadId: string) {
     writeStoredChrome(threadId, { thread, gaps });
     setError(null);
     return thread;
-  }, [applyConnectorGaps, applySnapshot, markComplete, threadId]);
+  }, [applyConnectorGaps, applySnapshot, clearLocalThread, markComplete, threadId]);
 
   useEffect(() => {
     let disposed = false;
@@ -266,7 +307,10 @@ export function useLiveThread(threadId: string) {
         writeStoredChrome(threadId, { thread, gaps });
       })
       .catch((reason) => {
-        if (!disposed) setError(toMessage(reason));
+        if (!disposed) {
+          if (isThreadAccessError(reason)) clearLocalThread(reason);
+          else setError(toMessage(reason));
+        }
       })
       .finally(() => {
         if (!disposed) setLoading(false);
@@ -277,7 +321,7 @@ export function useLiveThread(threadId: string) {
     return () => {
       disposed = true;
     };
-  }, [applyConnectorGaps, applySnapshot, markComplete, threadId]);
+  }, [applyConnectorGaps, applySnapshot, clearLocalThread, markComplete, threadId]);
 
   /** Échange affiché côté client seulement — rien n'est persisté ni exécuté. */
   const pushLocalExchange = useCallback((userText: string, systemText: string) => {
@@ -451,6 +495,9 @@ export function useLiveThread(threadId: string) {
         if (!response.ok) {
           applySnapshot(current);
           const messageText = await readApiError(response);
+          if (response.status === 403 || response.status === 404) {
+            clearLocalThread(new ThreadAccessError(response.status, messageText));
+          }
           setError(messageText);
           throw new Error(messageText);
         }
@@ -498,7 +545,7 @@ export function useLiveThread(threadId: string) {
         streamingRef.current = false;
       }
     },
-    [applySnapshot, pushLocalExchange, refresh, router, threadId],
+    [applySnapshot, clearLocalThread, pushLocalExchange, refresh, router, threadId],
   );
 
   const latestRun = snapshot?.runs.at(-1) ?? null;
@@ -512,8 +559,6 @@ export function useLiveThread(threadId: string) {
   }, [latestRun, snapshot]);
 
   useEffect(() => {
-    if (!isRunning) return;
-
     let disposed = false;
     let refreshing = false;
     const reconcile = async () => {
@@ -541,7 +586,10 @@ export function useLiveThread(threadId: string) {
           await refresh();
         }
       } catch (reason) {
-        if (!disposed) setError(toMessage(reason));
+        if (!disposed) {
+          if (isThreadAccessError(reason)) clearLocalThread(reason);
+          else setError(toMessage(reason));
+        }
       } finally {
         refreshing = false;
       }
@@ -549,13 +597,13 @@ export function useLiveThread(threadId: string) {
 
     const timer = window.setInterval(() => {
       void reconcile();
-    }, RECONNECT_POLL_MS);
+    }, isRunning ? RECONNECT_POLL_MS : TERMINAL_REVALIDATE_POLL_MS);
 
     return () => {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [applySnapshot, isRunning, refresh, threadId]);
+  }, [applySnapshot, clearLocalThread, isRunning, refresh, threadId]);
 
   const cancel = useCallback(async () => {
     const run = snapshotRef.current?.runs.at(-1);
@@ -671,8 +719,12 @@ async function fetchThreadSnapshot(threadId: string) {
     cache: "no-store",
   });
   if (!response.ok) {
-    if (response.status === 403 || response.status === 404) dropThreadSnapshotCache(threadId);
-    throw new Error(await readApiError(response));
+    const message = await readApiError(response);
+    if (response.status === 403 || response.status === 404) {
+      dropThreadSnapshotCache(threadId);
+      throw new ThreadAccessError(response.status, message);
+    }
+    throw new Error(message);
   }
   const body = (await response.json()) as {
     thread: ThreadSnapshot;

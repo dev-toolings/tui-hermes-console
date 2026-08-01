@@ -48,6 +48,19 @@ function psql(statement: string, database = "ownership") {
   );
 }
 
+function spawnPsql(statement: string) {
+  const process = Bun.spawn(
+    [
+      "docker", "exec", "-i", containerName, "psql", "-v", "ON_ERROR_STOP=1",
+      "-U", "postgres", "-d", "ownership", "-Atq",
+    ],
+    { stdin: "pipe", stdout: "pipe", stderr: "pipe" },
+  );
+  process.stdin.write(statement);
+  process.stdin.end();
+  return process;
+}
+
 function applyMigrations() {
   for (const entry of journal.entries) {
     psql(readFileSync(join(import.meta.dir, `${entry.tag}.sql`), "utf8"));
@@ -140,6 +153,8 @@ describeWithDocker("explicit resource ownership through Hono and PostgreSQL", ()
         ('usr_operator', 'operator@example.com', 'sub-operator', '2026-08-01.v2', now()),
         ('usr_alice', 'alice@example.com', 'sub-alice', '2026-08-01.v2', now()),
         ('usr_bob', 'bob@example.com', 'sub-bob', '2026-08-01.v2', now()),
+        ('usr_author', 'author@example.com', 'sub-author', '2026-08-01.v2', now()),
+        ('usr_race', 'race@example.com', 'sub-race', '2026-08-01.v2', now()),
         ('usr_auditor', 'auditor@example.com', 'sub-auditor', '2026-08-01.v2', now()),
         ('usr_lyon', 'lyon@example.com', 'sub-lyon', '2026-08-01.v2', now());
       INSERT INTO site_memberships (user_id, site_id, role) VALUES
@@ -147,6 +162,8 @@ describeWithDocker("explicit resource ownership through Hono and PostgreSQL", ()
         ('usr_operator', 'paris', 'operator'),
         ('usr_alice', 'paris', 'requester'),
         ('usr_bob', 'paris', 'requester'),
+        ('usr_author', 'paris', 'requester'),
+        ('usr_race', 'paris', 'requester'),
         ('usr_auditor', 'paris', 'auditor'),
         ('usr_lyon', 'lyon', 'admin');
       INSERT INTO console_sessions
@@ -176,7 +193,7 @@ describeWithDocker("explicit resource ownership through Hono and PostgreSQL", ()
       INSERT INTO runs
         (id, site_id, owner_user_id, author_user_id, thread_id, input, status) VALUES
         ('run_alice', 'paris', 'usr_alice', 'usr_alice', 'thr_alice', 'Alice', 'completed'),
-        ('run_bob', 'paris', 'usr_bob', 'usr_operator', 'thr_bob', 'Bob', 'completed');
+        ('run_bob', 'paris', 'usr_bob', 'usr_author', 'thr_bob', 'Bob', 'completed');
       INSERT INTO artifacts
         (id, site_id, owner_user_id, author_user_id, run_id, direction, filename, storage_path, size_bytes, checksum_sha256) VALUES
         ('file_alice', 'paris', 'usr_alice', 'usr_alice', 'run_alice', 'output', 'alice.txt', '/vault/alice.txt', 1, '00'),
@@ -307,8 +324,22 @@ describeWithDocker("explicit resource ownership through Hono and PostgreSQL", ()
         WHERE action = 'ownership.create'
           AND resource_type = 'artifact'
           AND after_state->>'ownerUserId' = 'usr_bob'
-          AND after_state->>'authorUserId' = 'usr_operator'
-          AND actor_user_id = 'usr_operator';`)).toBe("1");
+          AND after_state->>'authorUserId' = 'usr_author'
+          AND actor_user_id = 'usr_author'
+          AND reason_code = 'RESOURCE_CREATED';`)).toBe("1");
+
+      // Output delivery is asynchronous: the immutable author may have been
+      // revoked before Hermes writes its files. The active owner remains the
+      // explicit accountable actor for this late delivery.
+      psql(`DELETE FROM site_memberships WHERE site_id = 'paris' AND user_id = 'usr_author';`);
+      await writeFile(`${outputDir}/after-revocation.txt`, "late output");
+      await scanOutputArtifacts({ siteId: "paris" }, "run_bob");
+      expect(psql(`SELECT count(*) FROM audit_ledger_entries
+        WHERE action = 'ownership.create'
+          AND resource_type = 'artifact'
+          AND after_state->>'authorUserId' = 'usr_author'
+          AND actor_user_id = 'usr_bob'
+          AND reason_code = 'RESOURCE_OUTPUT_DELIVERED_AFTER_AUTHOR_REVOCATION';`)).toBe("1");
     } finally {
       await rm(outputDir, { recursive: true, force: true });
     }
@@ -401,6 +432,33 @@ describeWithDocker("explicit resource ownership through Hono and PostgreSQL", ()
     });
     expect(psql(`SELECT role FROM site_memberships WHERE site_id = 'paris' AND user_id = 'usr_alice';`)).toBe("requester");
     expect(() => psql(`UPDATE site_memberships SET role = 'auditor' WHERE site_id = 'paris' AND user_id = 'usr_alice';`)).toThrow();
+  });
+
+  test("database serializes concurrent owner creation and role degradation", async () => {
+    const roleChange = spawnPsql(`
+      BEGIN;
+      UPDATE site_memberships SET role = 'auditor'
+        WHERE site_id = 'paris' AND user_id = 'usr_race';
+      SELECT pg_sleep(1);
+      COMMIT;
+    `);
+    await Bun.sleep(150);
+    const resourceInsert = spawnPsql(`
+      BEGIN;
+      INSERT INTO agents
+        (id, site_id, owner_user_id, author_user_id, name, slug, instructions)
+      VALUES ('agt_race', 'paris', 'usr_race', 'usr_admin', 'Race', 'race-agent', 'Race');
+      COMMIT;
+    `);
+    await Promise.all([
+      roleChange.exited,
+      resourceInsert.exited,
+      new Response(roleChange.stdout).text(),
+      new Response(resourceInsert.stdout).text(),
+    ]);
+    expect(await resourceInsert.exited).not.toBe(0);
+    expect(psql(`SELECT role FROM site_memberships WHERE site_id = 'paris' AND user_id = 'usr_race';`)).toBe("auditor");
+    expect(psql(`SELECT count(*) FROM agents WHERE id = 'agt_race';`)).toBe("0");
   });
 
   test("database rejects null, non-member, and aggregate owner divergence", () => {

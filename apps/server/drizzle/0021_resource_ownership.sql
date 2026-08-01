@@ -279,6 +279,13 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  -- Resource creation/transfer and membership degradation share one advisory
+  -- transaction lock. Without it, READ COMMITTED could validate both sides
+  -- against the old role and leave a revoked member owning a resource.
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    NEW."site_id" || ':' || NEW."owner_user_id",
+    0
+  ));
   IF NOT EXISTS (
     SELECT 1 FROM "site_memberships"
     WHERE "user_id" = NEW."owner_user_id"
@@ -303,6 +310,12 @@ BEGIN
   IF TG_OP <> 'DELETE' AND NEW."role" IN ('admin', 'operator', 'requester') THEN
     RETURN NEW;
   END IF;
+  -- Must use the same key as validate_resource_owner_role(). This serializes
+  -- role degradation/revocation with concurrent owner inserts/transfers.
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    OLD."site_id" || ':' || OLD."user_id",
+    0
+  ));
   IF EXISTS (
     SELECT 1 FROM "agents" WHERE "site_id" = target_site_id AND "owner_user_id" = target_user_id
     UNION ALL SELECT 1 FROM "connectors" WHERE "site_id" = target_site_id AND "owner_user_id" = target_user_id

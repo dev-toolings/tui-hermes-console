@@ -33,6 +33,11 @@ import {
 export type { ArtifactDto } from "@console/core/types/api";
 import type { ArtifactDto } from "@console/core/types/api";
 
+type ArtifactAudit = {
+  context: SiteRequestContext;
+  reasonCode?: string;
+};
+
 export class ArtifactError extends Error {
   constructor(
     readonly code:
@@ -123,7 +128,7 @@ export async function depositInputFile(
       mimeType: file.type || null,
       sizeBytes,
       checksumSha256: checksum,
-    }, context);
+    }, { context });
   } catch (error) {
     await Promise.all([
       rm(storagePath, { force: true }),
@@ -139,7 +144,12 @@ export async function scanOutputArtifacts(
   runId: string,
 ): Promise<ArtifactDto[]> {
   const runScope = await resolveRunScope(scope, runId, false);
-  const auditContext = await resolveArtifactAuditContext(scope, runId, runScope.authorUserId);
+  const audit = await resolveArtifactAuditContext(
+    scope,
+    runId,
+    runScope.authorUserId,
+    runScope.ownerUserId,
+  );
   const outDir = runOutputDir(runId);
   const existing = await listArtifactsForRun(scope, runId, "output");
   const quotas = getArtifactQuotas();
@@ -225,7 +235,7 @@ export async function scanOutputArtifacts(
         mimeType: null,
         sizeBytes: source.size,
         checksumSha256: checksum,
-      }, auditContext);
+      }, audit);
     } catch (error) {
       await rm(storagePath, { force: true });
       throw error;
@@ -242,7 +252,8 @@ async function resolveArtifactAuditContext(
   scope: SiteScope,
   runId: string,
   authorUserId: string,
-): Promise<SiteRequestContext> {
+  ownerUserId: string,
+): Promise<ArtifactAudit> {
   const [membership] = await getDatabase()
     .select({ role: siteMemberships.role })
     .from(siteMemberships)
@@ -251,14 +262,39 @@ async function resolveArtifactAuditContext(
       eq(siteMemberships.userId, authorUserId),
     ))
     .limit(1);
-  if (!membership) {
-    throw new Error("L'auteur du run n'a plus de membership active pour auditer l'artefact.");
+  if (membership) {
+    return {
+      context: {
+        siteId: scope.siteId,
+        userId: authorUserId,
+        role: membership.role,
+        correlationId: `artifact:${runId}`,
+      },
+    };
+  }
+  // L'auteur est une identité historique et immuable : sa révocation ne doit
+  // pas empêcher la livraison asynchrone d'une sortie. Le propriétaire actif
+  // devient alors l'acteur explicitement traçable de cette livraison tardive;
+  // ce n'est pas une élévation de rôle ni un remplacement de l'auteur.
+  const [ownerMembership] = await getDatabase()
+    .select({ role: siteMemberships.role })
+    .from(siteMemberships)
+    .where(and(
+      eq(siteMemberships.siteId, scope.siteId),
+      eq(siteMemberships.userId, ownerUserId),
+    ))
+    .limit(1);
+  if (!ownerMembership) {
+    throw new Error("Le propriétaire du run n'a plus de membership active pour auditer l'artefact.");
   }
   return {
-    siteId: scope.siteId,
-    userId: authorUserId,
-    role: membership.role,
-    correlationId: `artifact:${runId}`,
+    context: {
+      siteId: scope.siteId,
+      userId: ownerUserId,
+      role: ownerMembership.role,
+      correlationId: `artifact:${runId}`,
+    },
+    reasonCode: "RESOURCE_OUTPUT_DELIVERED_AFTER_AUTHOR_REVOCATION",
   };
 }
 
@@ -416,7 +452,7 @@ async function insertArtifact(input: {
   mimeType: string | null;
   sizeBytes: number;
   checksumSha256: string;
-}, context?: SiteRequestContext): Promise<ArtifactDto> {
+}, audit?: ArtifactAudit): Promise<ArtifactDto> {
   const id = `file_${randomUUID().replaceAll("-", "")}`;
   const now = new Date();
   const values = {
@@ -434,16 +470,16 @@ async function insertArtifact(input: {
     checksumSha256: input.checksumSha256,
     createdAt: now,
   };
-  if (context) {
+  if (audit) {
     await getDatabase().transaction(async (tx) => {
       await tx.insert(artifacts).values(values);
-      await auditOwnershipCreation(tx, context, {
+      await auditOwnershipCreation(tx, audit.context, {
         resourceType: "artifact",
         resourceId: id,
         projectId: input.projectId,
         ownerUserId: input.ownerUserId,
         authorUserId: input.authorUserId,
-      });
+      }, { reasonCode: audit.reasonCode });
     });
   } else {
     await getDatabase().insert(artifacts).values(values);

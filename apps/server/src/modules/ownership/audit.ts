@@ -15,6 +15,7 @@ export async function auditOwnershipCreation(
     ownerUserId: string;
     authorUserId: string;
   },
+  options: { reasonCode?: string } = {},
 ) {
   await appendAuditEntryInTransaction({
     eventId: randomUUID(),
@@ -26,7 +27,7 @@ export async function auditOwnershipCreation(
     resourceType: resource.resourceType,
     resourceId: resource.resourceId,
     decision: "allowed",
-    reasonCode: "RESOURCE_CREATED",
+    reasonCode: options.reasonCode ?? "RESOURCE_CREATED",
     beforeState: {},
     afterState: {
       siteId: context.siteId,
