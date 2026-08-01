@@ -245,8 +245,9 @@ Précisions :
 ### 6.3 Capacités absentes
 
 - séparation organisationnelle MSP/client, mandats site/projet et affectations individuelles :
-  implémentés côté backend/DB/UI et vérifiés localement, mais non acceptés avant P-E2E multi-compte,
-  P-SEC partenaire et revue ; la sélection interactive entre plusieurs mandats reste à livrer ;
+  implémentés côté backend/DB/UI et vérifiés localement, avec snapshot et annulation des runs actifs
+  lors d’une révocation ; non acceptés avant P-E2E multi-compte, P-SEC partenaire et revue ; la
+  sélection interactive entre plusieurs mandats reste à livrer ;
 - site/projet comme frontière technique : implémenté et vérifié localement, mais non accepté avant Gate 1 ;
 - preuve navigateur multi-compte et décision de Gate sur le propriétaire agent/session/mission,
   connecteur ou artefact ;
@@ -357,7 +358,8 @@ L’adapter reste le seul point de couplage au protocole.
 - runtime_config et runtime_model_settings : une configuration globale ;
 - agents : identité opérationnelle locale, propriétaire et auteur ;
 - threads : session, snapshot d’agent, propriétaire et auteur ;
-- runs : mission, owner hérité du thread et auteur de l'action ;
+- runs : mission, owner hérité du thread, auteur de l'action et snapshot du mandat/organisations
+  d'autorisation pour les runs MSP ;
 - messages et run_events : transcript et trace technique ;
 - artifacts : métadonnées de fichiers, owner hérité du run et auteur ;
 - connectors : secrets typés, owner/auteur et scope site ;
@@ -371,10 +373,10 @@ affiliation MSP, mandat actif et affectation individuelle ; un approver reste cl
 Le transfert thread est atomique avec runs et artefacts, l'audit append-only snapshotte les deux
 organisations et le mandat, et les caches UI changent de namespace par utilisateur/site/contexte.
 La P-E2E navigateur, la revue Gate, la sélection interactive de mandats multiples et l'autorité
-`installation_admin` restent à livrer. Une révocation ferme les nouvelles requêtes et les flux
-long-lived, mais le runner Hermes d'un run déjà lancé n'est pas encore aborté ; le filtrage initial
-des capacités UI est livré mais non encore prouvé en navigateur, et le provisioning initial MSP
-reste bootstrap-only.
+`installation_admin` restent à livrer. Une révocation snapshotée ferme les nouvelles requêtes et
+annule les runs actifs côté Console, y compris au reconciler après redémarrage ; l'arrêt effectif
+sur Hermes distant reste à prouver sur une cible réelle. Le filtrage initial des capacités UI est
+livré mais non encore prouvé en navigateur, et le provisioning initial MSP reste bootstrap-only.
 
 Le `run_events` actuel reste un ledger technique, distinct du ledger d'audit :
 

@@ -432,6 +432,60 @@ export async function isSiteRequestContextActive(
   );
 }
 
+/**
+ * Revalide l'autorisation snapshotée sur une mission non terminale.
+ * Les missions historiques sans mandat restent compatibles ; toute mission
+ * MSP snapshotée doit encore avoir son mandat et son affectation actifs.
+ */
+export async function isPersistedRunAuthorizationActive(run: {
+  siteId: string;
+  authorUserId: string;
+  projectId: string | null;
+  mandateId: string | null;
+  operatorOrganizationId: string | null;
+  clientOrganizationId: string | null;
+}) {
+  if (!run.mandateId) return true;
+
+  const now = new Date();
+  const [authorization] = await getDatabase()
+    .select({
+      projectId: mspMandates.projectId,
+      operatorOrganizationId: mspMandates.operatorOrganizationId,
+      clientOrganizationId: mspMandates.clientOrganizationId,
+    })
+    .from(mspMandates)
+    .innerJoin(
+      mspMandateAssignments,
+      and(
+        eq(mspMandateAssignments.mandateId, mspMandates.id),
+        eq(mspMandateAssignments.userId, run.authorUserId),
+      ),
+    )
+    .where(
+      and(
+        eq(mspMandates.id, run.mandateId),
+        eq(mspMandates.siteId, run.siteId),
+        lte(mspMandates.startsAt, now),
+        isNull(mspMandates.revokedAt),
+        or(isNull(mspMandates.expiresAt), gt(mspMandates.expiresAt, now)),
+        isNull(mspMandateAssignments.revokedAt),
+        or(
+          isNull(mspMandateAssignments.expiresAt),
+          gt(mspMandateAssignments.expiresAt, now),
+        ),
+      ),
+    )
+    .limit(1);
+
+  return Boolean(
+    authorization &&
+      (authorization.projectId === null || authorization.projectId === run.projectId) &&
+      authorization.operatorOrganizationId === run.operatorOrganizationId &&
+      authorization.clientOrganizationId === run.clientOrganizationId,
+  );
+}
+
 export async function beginGoogleLogin() {
   const config = requiredConfig();
   const state = randomToken();

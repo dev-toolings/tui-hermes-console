@@ -143,6 +143,10 @@ export async function createThreadWithRun(context: SiteRequestContext, input: {
       siteId: context.siteId,
       ownerUserId: context.userId,
       authorUserId: context.userId,
+      mandateId: context.mandateId,
+      operatorOrganizationId:
+        context.role === "operator" ? context.actorOrganizationId : null,
+      clientOrganizationId: context.clientOrganizationId,
       projectId,
       threadId,
       input: input.message,
@@ -231,6 +235,10 @@ export async function createRunForThread(context: SiteRequestContext, threadId: 
       siteId: context.siteId,
       ownerUserId: thread.ownerUserId,
       authorUserId: context.userId,
+      mandateId: context.mandateId,
+      operatorOrganizationId:
+        context.role === "operator" ? context.actorOrganizationId : null,
+      clientOrganizationId: context.clientOrganizationId,
       projectId: thread.projectId,
       threadId,
       input,
@@ -791,6 +799,10 @@ export type ActiveRunRow = {
   id: string;
   siteId: string;
   projectId: string | null;
+  authorUserId: string;
+  mandateId: string | null;
+  operatorOrganizationId: string | null;
+  clientOrganizationId: string | null;
   threadId: string;
   status: ProductRunStatus;
   hermesResponseId: string | null;
@@ -816,6 +828,10 @@ export async function getRunCancelTarget(
       id: runs.id,
       siteId: runs.siteId,
       projectId: runs.projectId,
+      authorUserId: runs.authorUserId,
+      mandateId: runs.mandateId,
+      operatorOrganizationId: runs.operatorOrganizationId,
+      clientOrganizationId: runs.clientOrganizationId,
       threadId: runs.threadId,
       status: runs.status,
       hermesResponseId: runs.hermesResponseId,
@@ -849,6 +865,10 @@ export async function listNonTerminalRuns(): Promise<ActiveRunRow[]> {
       id: runs.id,
       siteId: runs.siteId,
       projectId: runs.projectId,
+      authorUserId: runs.authorUserId,
+      mandateId: runs.mandateId,
+      operatorOrganizationId: runs.operatorOrganizationId,
+      clientOrganizationId: runs.clientOrganizationId,
       threadId: runs.threadId,
       status: runs.status,
       hermesResponseId: runs.hermesResponseId,

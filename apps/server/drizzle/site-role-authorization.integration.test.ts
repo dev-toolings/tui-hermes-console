@@ -66,7 +66,7 @@ function sqlString(value: string) {
 }
 
 function applyMigrations() {
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 22)) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= 23)) {
     psql(readFileSync(join(import.meta.dir, `${entry.tag}.sql`), "utf8"));
   }
 }
@@ -699,6 +699,29 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
       }),
     );
     expect(assigned.status).toBe(201);
+    const assignedOperator = await appFetch(
+      authenticatedRequest("admin", `/api/site/mandates/${mandateId}/assignments`, {
+        method: "POST",
+        body: { userId: "usr_operator" },
+      }),
+    );
+    expect(assignedOperator.status).toBe(201);
+
+    psql(`
+      INSERT INTO threads
+        (id, site_id, owner_user_id, author_user_id, title, agent_id, agent_name, instructions, hermes_conversation)
+      VALUES
+        ('thr_target_assignment_revoke', 'paris', 'usr_target', 'usr_target', 'Assignment revoke', 'agt_paris', 'Paris agent', 'Paris', 'console:target-assignment-revoke'),
+        ('thr_operator_mandate_revoke', 'paris', 'usr_operator', 'usr_operator', 'Mandate revoke', 'agt_paris', 'Paris agent', 'Paris', 'console:operator-mandate-revoke');
+      INSERT INTO runs
+        (id, site_id, owner_user_id, author_user_id, thread_id, input, status,
+         mandate_id, operator_organization_id, client_organization_id)
+      VALUES
+        ('run_target_assignment_revoke', 'paris', 'usr_target', 'usr_target', 'thr_target_assignment_revoke', 'Assignment revoke', 'running',
+         '${mandateId}', 'org_msp_default', 'org_client_paris'),
+        ('run_operator_mandate_revoke', 'paris', 'usr_operator', 'usr_operator', 'thr_operator_mandate_revoke', 'Mandate revoke', 'running',
+         '${mandateId}', 'org_msp_default', 'org_client_paris');
+    `);
 
     const revokedAssignment = await appFetch(
       authenticatedRequest("admin", `/api/site/mandates/${mandateId}/assignments/usr_target`, {
@@ -706,6 +729,8 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
       }),
     );
     expect(revokedAssignment.status).toBe(200);
+    expect(psql(`SELECT status FROM runs WHERE id = 'run_target_assignment_revoke';`)).toBe("cancelled");
+    expect(psql(`SELECT status FROM runs WHERE id = 'run_operator_mandate_revoke';`)).toBe("running");
 
     const revoked = await appFetch(
       authenticatedRequest("admin", `/api/site/mandates/${mandateId}`, {
@@ -713,12 +738,13 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
       }),
     );
     expect(revoked.status).toBe(200);
+    expect(psql(`SELECT status FROM runs WHERE id = 'run_operator_mandate_revoke';`)).toBe("cancelled");
     expect(
       psql(`SELECT count(*) FROM audit_ledger_entries
         WHERE action IN ('msp_mandate.create', 'msp_mandate.assignment.add',
                          'msp_mandate.assignment.revoke', 'msp_mandate.revoke')
           AND resource_id = '${mandateId}';`),
-    ).toBe("4");
+    ).toBe("5");
   });
 
   test("a revoked MSP assignment invalidates the session before returning and audits the denial", async () => {

@@ -611,6 +611,15 @@ export const runs = pgTable(
     authorUserId: text("author_user_id")
       .notNull()
       .references(() => consoleUsers.id),
+    mandateId: text("mandate_id").references(() => mspMandates.id, {
+      onDelete: "set null",
+    }),
+    operatorOrganizationId: text("operator_organization_id").references(
+      () => organizations.id,
+    ),
+    clientOrganizationId: text("client_organization_id").references(
+      () => organizations.id,
+    ),
     threadId: text("thread_id")
       .notNull()
       .references(() => threads.id, { onDelete: "cascade" }),
@@ -673,6 +682,11 @@ export const runs = pgTable(
     index("runs_status_idx").on(table.status),
     index("runs_site_idx").on(table.siteId),
     index("runs_site_owner_idx").on(table.siteId, table.ownerUserId),
+    index("runs_site_mandate_status_idx").on(
+      table.siteId,
+      table.mandateId,
+      table.status,
+    ),
   ],
 );
 

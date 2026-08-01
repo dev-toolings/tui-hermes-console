@@ -9,6 +9,11 @@ import { publishThreadEvent } from "./event-bus";
 import { decideReconcileAction } from "./reconcile-decision";
 import { resolveHermesProtocol } from "./protocol";
 import {
+  isPersistedRunAuthorizationActive,
+  type SiteRequestContext,
+} from "@/modules/auth/service";
+import { cancelRun } from "./cancel-run";
+import {
   appendRunEvents,
   completeRun,
   failRun,
@@ -104,6 +109,32 @@ async function reconcileOne(
   protocol: ReturnType<typeof resolveHermesProtocol>,
   result: ReconcileResult,
 ): Promise<void> {
+  if (
+    run.mandateId &&
+    !(await isPersistedRunAuthorizationActive({
+      siteId: run.siteId,
+      authorUserId: run.authorUserId,
+      projectId: run.projectId,
+      mandateId: run.mandateId,
+      operatorOrganizationId: run.operatorOrganizationId,
+      clientOrganizationId: run.clientOrganizationId,
+    }))
+  ) {
+    const context: SiteRequestContext = {
+      siteId: run.siteId,
+      userId: run.authorUserId,
+      role: "operator",
+      actorOrganizationId: run.operatorOrganizationId ?? "",
+      clientOrganizationId: run.clientOrganizationId ?? "",
+      mandateId: run.mandateId,
+      mandateProjectId: run.projectId,
+      correlationId: `msp-reconciliation:${run.mandateId}:${run.id}`,
+    };
+    await cancelRun(context, run.id);
+    result.cancelled += 1;
+    return;
+  }
+
   if (!run.hermesResponseId) {
     await closeAsFailed(
       run,

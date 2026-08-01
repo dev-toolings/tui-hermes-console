@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
 import {
   consoleUsers,
@@ -8,12 +8,15 @@ import {
   organizationMemberships,
   organizations,
   projects,
+  runs,
   siteMemberships,
 } from "@/db/schema";
 import { appendAuditEntryInTransaction } from "@/modules/audit/service";
 import type { AuditJsonValue } from "@/modules/audit/chain";
 import { assertSiteAction } from "./site-authorization";
 import { AuthError, type SiteRequestContext } from "./service";
+import { cancelRun } from "@/modules/runs/cancel-run";
+import { failRun } from "@/modules/runs/repository";
 
 export type MandateInput = {
   operatorOrganizationId: string;
@@ -74,6 +77,65 @@ async function appendMandateAudit(
     },
     tx,
   );
+}
+
+const ACTIVE_RUN_STATUSES = [
+  "pending",
+  "starting",
+  "running",
+  "awaiting_approval",
+] as const;
+
+type RevocationRunTarget = {
+  id: string;
+  siteId: string;
+  projectId: string | null;
+  authorUserId: string;
+  mandateId: string | null;
+  operatorOrganizationId: string | null;
+  clientOrganizationId: string | null;
+};
+
+async function cancelRevokedRuns(
+  mandate: typeof mspMandates.$inferSelect,
+  targets: RevocationRunTarget[],
+) {
+  for (const target of targets) {
+    if (
+      !target.mandateId ||
+      !target.operatorOrganizationId ||
+      !target.clientOrganizationId
+    ) {
+      continue;
+    }
+    const context: SiteRequestContext = {
+      siteId: target.siteId,
+      userId: target.authorUserId,
+      role: "operator",
+      actorOrganizationId: target.operatorOrganizationId,
+      clientOrganizationId: target.clientOrganizationId,
+      mandateId: target.mandateId,
+      mandateProjectId: mandate.projectId,
+      correlationId: `msp-revocation:${mandate.id}:${target.id}`,
+    };
+    try {
+      const result = await cancelRun(context, target.id);
+      // A run owned by this process is aborted asynchronously by the runner.
+      // Close the product state here as well so a revoked authorization cannot
+      // leave a visible active run while the stream unwinds.
+      if (result.status === "stopping") {
+        await failRun(context, target.id, "", "cancelled");
+      }
+    } catch (error) {
+      // The mandate/assignment mutation remains committed. A terminal race is
+      // harmless; other failures are retained in logs for operational follow-up.
+      console.error("[msp-revocation] run cancellation failed", {
+        mandateId: mandate.id,
+        runId: target.id,
+        error,
+      });
+    }
+  }
 }
 
 export async function listSiteMandates(context: SiteRequestContext) {
@@ -161,14 +223,32 @@ export async function revokeSiteMandate(
 ) {
   await assertSiteAction(context, "membership.manage");
   requireClientAdmin(context);
-  return getDatabase().transaction(async (tx) => {
+  const result = await getDatabase().transaction(async (tx) => {
     const [mandate] = await tx
       .select()
       .from(mspMandates)
       .where(and(eq(mspMandates.id, mandateId), eq(mspMandates.siteId, context.siteId)))
       .for("update");
     if (!mandate) throw new AuthError("Le mandat est introuvable.", 404, "MSP_MANDATE_NOT_FOUND");
-    if (mandate.revokedAt) return mandate;
+    if (mandate.revokedAt) return { mandate, targets: [] as RevocationRunTarget[] };
+    const targets = await tx
+      .select({
+        id: runs.id,
+        siteId: runs.siteId,
+        projectId: runs.projectId,
+        authorUserId: runs.authorUserId,
+        mandateId: runs.mandateId,
+        operatorOrganizationId: runs.operatorOrganizationId,
+        clientOrganizationId: runs.clientOrganizationId,
+      })
+      .from(runs)
+      .where(
+        and(
+          eq(runs.siteId, mandate.siteId),
+          eq(runs.mandateId, mandate.id),
+          inArray(runs.status, ACTIVE_RUN_STATUSES),
+        ),
+      );
     const revokedAt = new Date();
     const [updated] = await tx
       .update(mspMandates)
@@ -178,8 +258,10 @@ export async function revokeSiteMandate(
     await appendMandateAudit(tx, context, mandate.id, "msp_mandate.revoke", {
       revokedAt: null,
     }, { revokedAt: revokedAt.toISOString() });
-    return updated;
+    return { mandate: updated ?? { ...mandate, revokedAt }, targets };
   });
+  await cancelRevokedRuns(result.mandate, result.targets);
+  return result.mandate;
 }
 
 export async function assignSiteMandate(
@@ -238,12 +320,32 @@ export async function revokeSiteMandateAssignment(
 ) {
   await assertSiteAction(context, "membership.manage");
   requireClientAdmin(context);
-  return getDatabase().transaction(async (tx) => {
+  const result = await getDatabase().transaction(async (tx) => {
     const [mandate] = await tx
-      .select({ id: mspMandates.id })
+      .select()
       .from(mspMandates)
-      .where(and(eq(mspMandates.id, mandateId), eq(mspMandates.siteId, context.siteId)));
+      .where(and(eq(mspMandates.id, mandateId), eq(mspMandates.siteId, context.siteId)))
+      .for("update");
     if (!mandate) throw new AuthError("Le mandat est introuvable.", 404, "MSP_MANDATE_NOT_FOUND");
+    const targets = await tx
+      .select({
+        id: runs.id,
+        siteId: runs.siteId,
+        projectId: runs.projectId,
+        authorUserId: runs.authorUserId,
+        mandateId: runs.mandateId,
+        operatorOrganizationId: runs.operatorOrganizationId,
+        clientOrganizationId: runs.clientOrganizationId,
+      })
+      .from(runs)
+      .where(
+        and(
+          eq(runs.siteId, mandate.siteId),
+          eq(runs.mandateId, mandate.id),
+          eq(runs.authorUserId, userId),
+          inArray(runs.status, ACTIVE_RUN_STATUSES),
+        ),
+      );
     const [assignment] = await tx
       .update(mspMandateAssignments)
       .set({ revokedAt: new Date() })
@@ -254,6 +356,8 @@ export async function revokeSiteMandateAssignment(
       userId,
       revokedAt: null,
     }, { userId, revokedAt: assignment.revokedAt?.toISOString() ?? null });
-    return assignment;
+    return { assignment, mandate, targets };
   });
+  await cancelRevokedRuns(result.mandate, result.targets);
+  return result.assignment;
 }

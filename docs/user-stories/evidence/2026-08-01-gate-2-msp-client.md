@@ -2,7 +2,7 @@
 
 - Date/heure UTC : 2026-08-01
 - Story : US-G2-004
-- Commit/build : branche `feat/us-g2-004-msp-client`, commit à rattacher après revue
+- Commit/build : branche `feat/us-g2-004-msp-client`, commit `3f2b45e`
 - Environnement : local, PostgreSQL Docker éphémère `postgres:17.6-alpine` épinglé par digest
 - Opérateur : équipe Console
 - Reviewer : Vador — contre-audit à rattacher
@@ -11,8 +11,8 @@
 ## Préconditions
 
 - US-G2-001 à US-G2-003 sont présentes sur la branche dérivée de `main`.
-- La migration 0022 ajoute organisations client/MSP, affiliations, mandats site/projet,
-  affectations individuelles et enveloppe d’audit v2.
+- Les migrations 0022 et 0023 ajoutent organisations client/MSP, affiliations, mandats site/projet,
+  affectations individuelles, enveloppe d’audit v2 et snapshot d’autorisation sur les runs.
 - Un site possède exactement une organisation cliente. Un operator doit avoir une affiliation MSP,
   une membership `operator`, un mandat actif et une affectation individuelle.
 - Les mandats ne portent aucune policy d’outil, chemin, connecteur, modèle ou budget : G2-005 reste
@@ -42,7 +42,17 @@
 - Given : admin de l’organisation cliente.
 - When : `POST /api/site/mandates`, affectation, révocation d’affectation puis révocation du mandat.
 - Then attendu : chaque mutation est bornée au site, validée par la DB et auditée.
-- Résultat observé : **vert** ; scénario API intégré dans `site-role-authorization.integration.test.ts`.
+- Résultat observé : **vert** ; scénario API intégré dans `site-role-authorization.integration.test.ts`,
+  avec annulation des runs actifs liés à l’affectation puis au mandat révoqués.
+
+### Révocation d’un run actif
+
+- Given : deux runs actifs snapshotés sur le même mandat, portés par deux opérateurs affectés.
+- When : l’affectation du premier opérateur est révoquée, puis le mandat entier.
+- Then attendu : le premier run est `cancelled` lors de la révocation d’affectation ; le second est
+  `cancelled` lors de la révocation du mandat. Après redémarrage, le reconciler refuse aussi de
+  reprendre un run dont le mandat ou l’affectation n’est plus actif.
+- Résultat observé : **vert** en PostgreSQL Docker ; la preuve Hermes distant/restart reste P-E2E.
 
 ## Scénarios négatifs
 
@@ -71,7 +81,8 @@
 
 - 0022 est expand/backfill/contract : le site legacy déterministe reçoit uniquement une organisation
   cliente si aucun operator historique n’est présent ; toute migration legacy ambiguë exige un
-  staging explicite et rollbacke sinon.
+  staging explicite et rollbacke sinon. 0023 ajoute uniquement des colonnes nullable et un index
+  pour conserver l’autorisation snapshotée des runs sans réécrire les missions historiques.
 - Les entrées audit v1 restent nullables pour les snapshots organisationnels et ne sont pas rehashées.
   Les nouvelles écritures utilisent l’enveloppe v2 et le trigger SECURITY DEFINER vérifie le
   snapshot d’organisation et le mandat actif avant d’avancer la chaîne.
@@ -83,7 +94,7 @@
 ```text
 bun run typecheck                                      # core, server, console : vert
 bun test apps/server/drizzle/site-role-authorization.integration.test.ts
-  12 pass · 174 assertions
+  12 pass · 178 assertions
 bun test apps/server/drizzle/site-context-api.integration.test.ts
   2 pass · 37 assertions
 bun test apps/server/drizzle/resource-ownership.integration.test.ts
@@ -97,7 +108,7 @@ bun test apps/server/src/routes.test.ts apps/server/src/api/auth/route.test.ts \
   apps/console/src/route-tree.test.ts
   13 pass · 88 assertions
 bun test
-  368 pass · 0 fail · 1246 expect() calls · 75 fichiers
+  368 pass · 0 fail · 1250 expect() calls · 75 fichiers
 ```
 
 La campagne globale séquentielle atteint 368 tests passants sans échec. Le scénario de sortie
@@ -112,9 +123,9 @@ finale partenaire restent à exécuter.
 - Les sorties Hermes hors contexte HTTP résolvent automatiquement un mandat projet exact, puis un
   mandat site ; l’absence ou l’ambiguïté du mandat fait échouer la livraison et l’audit plutôt que
   d’émettre une preuve opérateur incomplète.
-- Une révocation ferme les nouvelles requêtes, les flux SSE et le polling, mais n’interrompt pas
-  encore un run Hermes déjà démarré : le runner conserve son snapshot jusqu’à sa fin. La décision
-  d’abort/revalidation aux frontières d’effet reste à traiter avec le runtime.
+- Une révocation annule désormais les runs actifs snapshotés dans la Console et empêche leur reprise
+  après redémarrage ; l’arrêt effectif d’un run Hermes distant et la résilience réseau restent à
+  prouver par P-E2E sur le runtime réel.
 - Le dashboard n’appelle plus les agents sans `agent.read`, les actions créer/annuler/relancer des
   Missions suivent les capabilities et le lien Paramètres global est masqué tant que
   `installation.admin` n’existe pas. La P-E2E par persona doit encore confirmer ces parcours et

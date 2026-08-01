@@ -63,7 +63,7 @@ function psql(statement: string, database = "site_api") {
 }
 
 function applyMigrations() {
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 22)) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= 23)) {
     psql(readFileSync(join(import.meta.dir, `${entry.tag}.sql`), "utf8"));
   }
 }

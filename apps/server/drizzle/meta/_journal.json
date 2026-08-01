@@ -162,6 +162,13 @@
       "when": 1785715200000,
       "tag": "0022_msp_client_separation",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1785718800000,
+      "tag": "0023_run_mandate_snapshot",
+      "breakpoints": true
     }
   ]
 }
