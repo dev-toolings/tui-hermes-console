@@ -28,6 +28,9 @@ export interface AppendAuditEntryInput {
   targetSiteId: string;
   actorUserId: string;
   actorRole: SiteMembershipRole;
+  actorOrganizationId: string;
+  clientOrganizationId: string;
+  mandateId: string | null;
   action: string;
   resourceType: string;
   resourceId: string;
@@ -133,6 +136,7 @@ export async function appendAuditEntryInTransaction(
     const recordedAt = new Date();
     const payload: AuditHashPayload = {
       ...input,
+      envelopeVersion: 2,
       occurredAt: input.occurredAt.toISOString(),
       recordedAt: recordedAt.toISOString(),
       sequence: head?.nextSequence ?? 1,
@@ -146,6 +150,10 @@ export async function appendAuditEntryInTransaction(
         ${input.targetSiteId}::text,
         ${input.actorUserId}::text,
         ${input.actorRole}::text,
+        ${input.actorOrganizationId}::text,
+        ${input.clientOrganizationId}::text,
+        ${input.mandateId}::text,
+        ${2}::integer,
         ${input.action}::text,
         ${input.resourceType}::text,
         ${input.resourceId}::text,
@@ -178,6 +186,10 @@ interface AuditLedgerRawRow extends Record<string, unknown> {
   target_site_id: string;
   actor_user_id: string;
   actor_role: SiteMembershipRole;
+  actor_organization_id: string | null;
+  client_organization_id: string | null;
+  mandate_id: string | null;
+  envelope_version: 1 | 2;
   action: string;
   resource_type: string;
   resource_id: string;
@@ -203,6 +215,10 @@ function mapAuditLedgerRow(
     targetSiteId: row.target_site_id,
     actorUserId: row.actor_user_id,
     actorRole: row.actor_role,
+    actorOrganizationId: row.actor_organization_id,
+    clientOrganizationId: row.client_organization_id,
+    mandateId: row.mandate_id,
+    envelopeVersion: row.envelope_version,
     action: row.action,
     resourceType: row.resource_type,
     resourceId: row.resource_id,
@@ -228,6 +244,10 @@ function rowToChainEntry(
     targetSiteId: row.targetSiteId,
     actorUserId: row.actorUserId,
     actorRole: row.actorRole,
+    actorOrganizationId: row.actorOrganizationId,
+    clientOrganizationId: row.clientOrganizationId,
+    mandateId: row.mandateId,
+    envelopeVersion: row.envelopeVersion as 1 | 2,
     action: row.action,
     resourceType: row.resourceType,
     resourceId: row.resourceId,
@@ -253,6 +273,9 @@ function sameEvent(
     row.targetSiteId === input.targetSiteId &&
     row.actorUserId === input.actorUserId &&
     row.actorRole === input.actorRole &&
+    row.actorOrganizationId === input.actorOrganizationId &&
+    row.clientOrganizationId === input.clientOrganizationId &&
+    row.mandateId === input.mandateId &&
     row.action === input.action &&
     row.resourceType === input.resourceType &&
     row.resourceId === input.resourceId &&

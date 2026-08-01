@@ -63,7 +63,7 @@ function psql(statement: string, database = "site_api") {
 }
 
 function applyMigrations() {
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 21)) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= 22)) {
     psql(readFileSync(join(import.meta.dir, `${entry.tag}.sql`), "utf8"));
   }
 }
@@ -72,6 +72,10 @@ const actor = {
   siteId: "paris",
   userId: "usr_paris",
   role: "operator" as const,
+  actorOrganizationId: "org_msp_default",
+  clientOrganizationId: "org_client_paris",
+  mandateId: "mandate_paris",
+  mandateProjectId: null,
   correlationId: "p-int-site-scope",
 };
 
@@ -113,13 +117,26 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
     psql('CREATE DATABASE "site_api";', "postgres");
     applyMigrations();
     psql(`
-      INSERT INTO sites (id, name, slug) VALUES
-        ('paris', 'Paris', 'paris'), ('lyon', 'Lyon', 'lyon');
+      INSERT INTO organizations (id, name, slug, kind) VALUES
+        ('org_client_paris', 'Paris client', 'client-paris', 'client'),
+        ('org_client_lyon', 'Lyon client', 'client-lyon', 'client'),
+        ('org_msp_default', 'Default MSP', 'msp-default', 'msp');
+      INSERT INTO sites (id, client_organization_id, name, slug) VALUES
+        ('paris', 'org_client_paris', 'Paris', 'paris'),
+        ('lyon', 'org_client_lyon', 'Lyon', 'lyon');
       INSERT INTO console_users (id, email, google_subject) VALUES
         ('usr_paris', 'paris@example.com', 'sub-paris'),
         ('usr_lyon', 'lyon@example.com', 'sub-lyon');
-      INSERT INTO site_memberships (user_id, site_id, role)
-        VALUES ('usr_paris', 'paris', 'operator'), ('usr_lyon', 'lyon', 'admin');
+      INSERT INTO organization_memberships (user_id, organization_id)
+        VALUES ('usr_paris', 'org_msp_default'), ('usr_lyon', 'org_client_lyon');
+      INSERT INTO site_memberships (user_id, site_id, organization_id, role)
+        VALUES ('usr_paris', 'paris', 'org_msp_default', 'operator'),
+               ('usr_lyon', 'lyon', 'org_client_lyon', 'admin');
+      INSERT INTO msp_mandates
+        (id, operator_organization_id, client_organization_id, site_id)
+        VALUES ('mandate_paris', 'org_msp_default', 'org_client_paris', 'paris');
+      INSERT INTO msp_mandate_assignments (mandate_id, user_id, organization_id)
+        VALUES ('mandate_paris', 'usr_paris', 'org_msp_default');
       INSERT INTO agents (id, site_id, owner_user_id, author_user_id, name, slug, instructions) VALUES
         ('agt_paris', 'paris', 'usr_paris', 'usr_paris', 'Paris agent', 'paris-agent', 'Paris'),
         ('agt_lyon', 'lyon', 'usr_lyon', 'usr_lyon', 'Lyon agent', 'lyon-agent', 'Lyon');

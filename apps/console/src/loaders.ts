@@ -16,10 +16,11 @@ import {
   fetchStorage,
   fetchThreads,
 } from "@/lib/api";
+import { readPersonaCapabilities } from "@/lib/persona-capabilities";
 
 export async function loadDashboard() {
   const [agents, threads, activity] = await Promise.all([
-    fetchAgents(),
+    readPersonaCapabilities().has("agent.read") ? fetchAgents() : Promise.resolve([]),
     // `mission` et pas tout : l'Aperçu compte des missions, pas des chats.
     fetchThreads("mission"),
     fetchActivity(30),

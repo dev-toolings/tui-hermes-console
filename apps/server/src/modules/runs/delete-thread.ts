@@ -56,7 +56,13 @@ export async function deleteThread(
   const [thread] = await db
     .select({ id: threads.id })
     .from(threads)
-    .where(and(eq(threads.siteId, context.siteId), eq(threads.id, threadId)))
+    .where(and(
+      eq(threads.siteId, context.siteId),
+      eq(threads.id, threadId),
+      context.mandateProjectId
+        ? eq(threads.projectId, context.mandateProjectId)
+        : undefined,
+    ))
     .limit(1);
   if (!thread) {
     await auditScopedMiss(context, { action: "thread.delete", resourceType: "thread", resourceId: threadId });
@@ -73,7 +79,13 @@ export async function deleteThread(
       hermesResponseId: runs.hermesResponseId,
     })
     .from(runs)
-    .where(and(eq(runs.siteId, context.siteId), eq(runs.threadId, threadId)));
+    .where(and(
+      eq(runs.siteId, context.siteId),
+      eq(runs.threadId, threadId),
+      context.mandateProjectId
+        ? eq(runs.projectId, context.mandateProjectId)
+        : undefined,
+    ));
 
   let cancelledRuns = 0;
   for (const run of runRows) {
@@ -146,7 +158,13 @@ export async function deleteThread(
     }
   }
 
-  await db.delete(threads).where(and(eq(threads.siteId, context.siteId), eq(threads.id, threadId)));
+  await db.delete(threads).where(and(
+    eq(threads.siteId, context.siteId),
+    eq(threads.id, threadId),
+    context.mandateProjectId
+      ? eq(threads.projectId, context.mandateProjectId)
+      : undefined,
+  ));
 
   return { threadId, cancelledRuns, hermesSessionsDeleted, workdirsPurged };
 }

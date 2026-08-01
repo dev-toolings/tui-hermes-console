@@ -10,6 +10,8 @@ export type AuthSite = {
   name: string;
   slug: string;
   role: SiteMembershipRole;
+  organizationId: string;
+  clientOrganizationId: string;
 };
 
 export type AuthSiteContext = {
@@ -17,6 +19,13 @@ export type AuthSiteContext = {
   memberships: AuthSite[];
   selectionRequired: boolean;
   membershipRequired: boolean;
+  capabilities: string[];
+  authorization?: {
+    actorOrganizationId: string;
+    clientOrganizationId: string;
+    mandateId: string | null;
+    projectId: string | null;
+  } | null;
 };
 
 export type SiteAccessBlock = "membership" | "selection" | null;

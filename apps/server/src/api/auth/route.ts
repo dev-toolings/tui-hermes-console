@@ -1,7 +1,8 @@
 import { apiErrorResponse } from "@/modules/api/errors";
 import { assertSameOriginMutation } from "@/modules/api/same-origin";
 import { consoleSetupRequired } from "@/modules/setup/service";
-import { AuthError, assertCsrf, beginGoogleLogin, clearSessionHeaders, completeGoogleLogin, deleteSession, getSession, oidcStateClearingHeader, resolveSiteRequirement, selectSessionSite } from "@/modules/auth/service";
+import { AuthError, assertCsrf, beginGoogleLogin, clearSessionHeaders, completeGoogleLogin, deleteSession, getSession, oidcStateClearingHeader, requireSiteRequestContext, resolveSiteRequirement, selectSessionSite, type SiteRequestContext } from "@/modules/auth/service";
+import { siteCapabilitiesForRole } from "@/modules/auth/site-authorization";
 import { z } from "zod";
 import {
   CURRENT_AI_DISCLOSURE,
@@ -34,6 +35,7 @@ function failure(request: Request) {
 export function authStatusPayload(
   session: AuthSession | null,
   setupRequired: boolean,
+  requestContext: SiteRequestContext | null = null,
 ) {
   const consentRequired = session
     ? !hasCurrentAiDisclosureConsent(session)
@@ -59,6 +61,17 @@ export function authStatusPayload(
       ? {
           ...resolveSiteRequirement(session.memberships, session.siteId),
           memberships: session.memberships,
+          capabilities: requestContext
+            ? siteCapabilitiesForRole(requestContext.role)
+            : [],
+          authorization: requestContext
+            ? {
+                actorOrganizationId: requestContext.actorOrganizationId,
+                clientOrganizationId: requestContext.clientOrganizationId,
+                mandateId: requestContext.mandateId,
+                projectId: requestContext.mandateProjectId,
+              }
+            : null,
         }
       : null,
   };
@@ -91,8 +104,14 @@ export async function GET(request: Request) {
       }
     }
     const session = await getSession(request);
+    const requirement = session
+      ? resolveSiteRequirement(session.memberships, session.siteId)
+      : null;
+    const requestContext = session && requirement?.activeSite
+      ? await requireSiteRequestContext(session)
+      : null;
     return Response.json(
-      authStatusPayload(session, await consoleSetupRequired()),
+      authStatusPayload(session, await consoleSetupRequired(), requestContext),
       { headers: { "cache-control": "no-store" } },
     );
   } catch (error) {

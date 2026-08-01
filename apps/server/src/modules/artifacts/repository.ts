@@ -10,9 +10,17 @@ import { open, opendir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
-import { artifacts, runs, siteMemberships, type ArtifactDirection } from "@/db/schema";
+import {
+  artifacts,
+  mspMandateAssignments,
+  mspMandates,
+  runs,
+  siteMemberships,
+  sites,
+  type ArtifactDirection,
+} from "@/db/schema";
 import type { SiteRequestContext, SiteScope } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
 import { auditOwnershipCreation } from "@/modules/ownership/audit";
@@ -59,6 +67,10 @@ export class ArtifactError extends Error {
 
 function isRequesterScope(scope: SiteScope): scope is SiteRequestContext {
   return "role" in scope && scope.role === "requester" && "userId" in scope;
+}
+
+function isSiteRequestScope(scope: SiteScope): scope is SiteRequestContext {
+  return "mandateProjectId" in scope;
 }
 
 export async function depositInputFile(
@@ -323,6 +335,9 @@ export async function listArtifactsForRun(
         ? and(
             eq(artifacts.siteId, scope.siteId),
             eq(artifacts.runId, runId),
+            isSiteRequestScope(scope) && scope.mandateProjectId
+              ? eq(artifacts.projectId, scope.mandateProjectId)
+              : undefined,
             eq(artifacts.direction, direction),
             isRequesterScope(scope)
               ? eq(artifacts.ownerUserId, scope.userId)
@@ -331,6 +346,9 @@ export async function listArtifactsForRun(
         : and(
             eq(artifacts.siteId, scope.siteId),
             eq(artifacts.runId, runId),
+            isSiteRequestScope(scope) && scope.mandateProjectId
+              ? eq(artifacts.projectId, scope.mandateProjectId)
+              : undefined,
             isRequesterScope(scope)
               ? eq(artifacts.ownerUserId, scope.userId)
               : undefined,
@@ -347,6 +365,9 @@ export async function listAllArtifacts(scope: SiteRequestContext, limit = 50): P
     .from(artifacts)
     .where(and(
       eq(artifacts.siteId, scope.siteId),
+      scope.mandateProjectId
+        ? eq(artifacts.projectId, scope.mandateProjectId)
+        : undefined,
       scope.role === "requester" ? eq(artifacts.ownerUserId, scope.userId) : undefined,
     ))
     .orderBy(desc(artifacts.createdAt))
@@ -361,6 +382,9 @@ export async function getArtifact(context: SiteRequestContext, fileId: string) {
     .where(and(
       eq(artifacts.siteId, context.siteId),
       eq(artifacts.id, fileId),
+      context.mandateProjectId
+        ? eq(artifacts.projectId, context.mandateProjectId)
+        : undefined,
       context.role === "requester" ? eq(artifacts.ownerUserId, context.userId) : undefined,
     ))
     .limit(1);
@@ -432,8 +456,10 @@ async function insertArtifact(input: {
           projectId: runs.projectId,
           ownerUserId: runs.ownerUserId,
           authorUserId: runs.authorUserId,
+          clientOrganizationId: sites.clientOrganizationId,
         })
         .from(runs)
+        .innerJoin(sites, eq(sites.id, runs.siteId))
         .where(and(eq(runs.siteId, input.siteId), eq(runs.id, input.runId)))
         .limit(1);
       if (!runSnapshot) {
@@ -446,7 +472,11 @@ async function insertArtifact(input: {
         candidateActorUserId,
       ])].sort();
       const membershipRows = await tx
-        .select({ userId: siteMemberships.userId, role: siteMemberships.role })
+        .select({
+          userId: siteMemberships.userId,
+          role: siteMemberships.role,
+          organizationId: siteMemberships.organizationId,
+        })
         .from(siteMemberships)
         .where(and(
           eq(siteMemberships.siteId, runSnapshot.siteId),
@@ -455,6 +485,9 @@ async function insertArtifact(input: {
         .orderBy(asc(siteMemberships.userId))
         .for("update");
       const memberships = new Map(membershipRows.map((row) => [row.userId, row.role]));
+      const membershipOrganizations = new Map(
+        membershipRows.map((row) => [row.userId, row.organizationId]),
+      );
       const ownerRole = memberships.get(runSnapshot.ownerUserId);
       if (!ownerRole) {
         throw new Error("Le propriétaire du run n'a plus de membership active pour auditer l'artefact.");
@@ -473,6 +506,64 @@ async function insertArtifact(input: {
       }
       if (audit.requestedContext && actorRole !== audit.requestedContext.role) {
         throw new Error("Le rôle de l'auteur de l'artefact a changé pendant la requête.");
+      }
+
+      const actorOrganizationId =
+        audit.requestedContext?.actorOrganizationId ??
+        membershipOrganizations.get(actorUserId);
+      if (!actorOrganizationId) {
+        throw new Error("L'organisation de l'auteur de l'artefact est introuvable.");
+      }
+
+      // Les sorties Hermes sont parfois enregistrées hors contexte HTTP. Dans
+      // ce cas le run reste la source d'identité de l'auteur, mais un opérateur
+      // ne peut pas faire écrire un audit v2 sans retrouver son mandat actif.
+      // On privilégie un mandat projet, puis un mandat site; toute ambiguïté
+      // est refusée plutôt que d'émettre une preuve incomplète.
+      let mandateId = audit.requestedContext?.mandateId ?? null;
+      let mandateProjectId = audit.requestedContext?.mandateProjectId ?? null;
+      if (!audit.requestedContext && actorRole === "operator") {
+        const nowForMandate = new Date();
+        const candidates = await tx
+          .select({
+            id: mspMandates.id,
+            projectId: mspMandates.projectId,
+          })
+          .from(mspMandateAssignments)
+          .innerJoin(
+            mspMandates,
+            eq(mspMandates.id, mspMandateAssignments.mandateId),
+          )
+          .where(and(
+            eq(mspMandateAssignments.userId, actorUserId),
+            eq(mspMandateAssignments.organizationId, actorOrganizationId),
+            isNull(mspMandateAssignments.revokedAt),
+            or(
+              isNull(mspMandateAssignments.expiresAt),
+              gt(mspMandateAssignments.expiresAt, nowForMandate),
+            ),
+            eq(mspMandates.operatorOrganizationId, actorOrganizationId),
+            eq(mspMandates.clientOrganizationId, runSnapshot.clientOrganizationId),
+            eq(mspMandates.siteId, runSnapshot.siteId),
+            isNull(mspMandates.revokedAt),
+            lte(mspMandates.startsAt, nowForMandate),
+            or(isNull(mspMandates.expiresAt), gt(mspMandates.expiresAt, nowForMandate)),
+          ));
+        const exact = runSnapshot.projectId
+          ? candidates.filter((candidate) => candidate.projectId === runSnapshot.projectId)
+          : [];
+        const applicable = exact.length > 0
+          ? exact
+          : candidates.filter((candidate) => candidate.projectId === null);
+        if (applicable.length !== 1) {
+          throw new Error(
+            applicable.length === 0
+              ? "Aucun mandat MSP actif ne couvre la sortie Hermes."
+              : "Plusieurs mandats MSP actifs couvrent la sortie Hermes.",
+          );
+        }
+        mandateId = applicable[0].id;
+        mandateProjectId = applicable[0].projectId;
       }
 
       const [lockedRun] = await tx
@@ -506,6 +597,13 @@ async function insertArtifact(input: {
         siteId: lockedRun.siteId,
         userId: actorUserId,
         role: actorRole,
+        actorOrganizationId:
+          actorOrganizationId,
+        clientOrganizationId:
+          audit.requestedContext?.clientOrganizationId ??
+          runSnapshot.clientOrganizationId,
+        mandateId,
+        mandateProjectId,
         correlationId: audit.correlationId,
       }, {
         resourceType: "artifact",
@@ -546,6 +644,9 @@ async function resolveRunScope(
     .where(and(
       eq(runs.siteId, scope.siteId),
       eq(runs.id, runId),
+      isSiteRequestScope(scope) && scope.mandateProjectId
+        ? eq(runs.projectId, scope.mandateProjectId)
+        : undefined,
       isRequesterScope(scope)
         ? eq(runs.ownerUserId, scope.userId)
         : undefined,

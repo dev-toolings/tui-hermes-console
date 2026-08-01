@@ -10,7 +10,7 @@ import {
   SidebarMenuItem,
 } from "@boardui/ui";
 import { Link, usePathname } from "@/lib/router";
-import { PRIMARY_NAV, activeNavHref } from "./nav-config";
+import { PRIMARY_NAV, activeNavHref, navForCapabilities } from "./nav-config";
 
 /**
  * Bloc principal du rail, dans la disposition `nav-main` de dashboard-01 :
@@ -18,14 +18,22 @@ import { PRIMARY_NAV, activeNavHref } from "./nav-config";
  * navigation. Le « Quick Create » du bloc devient « Nouvelle mission », et le
  * bouton courrier devient l'entrée de la palette ⌘K.
  */
-export function NavMain({ onOpenPalette }: { onOpenPalette: () => void }) {
+export function NavMain({
+  onOpenPalette,
+  capabilities,
+}: {
+  onOpenPalette: () => void;
+  capabilities: ReadonlySet<string>;
+}) {
   const pathname = usePathname();
-  const activeHref = activeNavHref(PRIMARY_NAV, pathname);
+  const navigation = navForCapabilities(PRIMARY_NAV, capabilities);
+  const activeHref = activeNavHref(navigation, pathname);
 
   return (
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-2">
         <SidebarMenu>
+          {capabilities.has("thread.create") ? (
           <SidebarMenuItem className="flex items-center gap-2">
             <SidebarMenuButton
               asChild
@@ -48,10 +56,11 @@ export function NavMain({ onOpenPalette }: { onOpenPalette: () => void }) {
               <span className="sr-only">Recherche rapide</span>
             </Button>
           </SidebarMenuItem>
+          ) : null}
         </SidebarMenu>
 
         <SidebarMenu>
-          {PRIMARY_NAV.map((item) => (
+          {navigation.map((item) => (
             <SidebarMenuItem key={item.href}>
               <SidebarMenuButton
                 asChild

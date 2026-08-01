@@ -49,10 +49,31 @@ export type SiteMembershipRole =
   | "approver"
   | "auditor";
 
+export type OrganizationKind = "client" | "msp";
+
+export const organizations = pgTable(
+  "organizations",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    kind: text("kind").notNull().$type<OrganizationKind>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("organizations_slug_idx").on(table.slug),
+    check("organizations_kind_check", sql`${table.kind} IN ('client', 'msp')`),
+  ],
+);
+
 export const sites = pgTable(
   "sites",
   {
     id: text("id").primaryKey(),
+    clientOrganizationId: text("client_organization_id")
+      .notNull()
+      .references(() => organizations.id),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -180,6 +201,23 @@ export const consoleUsers = pgTable("console_users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const organizationMemberships = pgTable(
+  "organization_memberships",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => consoleUsers.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.organizationId] }),
+    index("organization_memberships_organization_idx").on(table.organizationId),
+  ],
+);
+
 export const siteMemberships = pgTable(
   "site_memberships",
   {
@@ -189,12 +227,20 @@ export const siteMemberships = pgTable(
     siteId: text("site_id")
       .notNull()
       .references(() => sites.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id),
     role: text("role").notNull().$type<SiteMembershipRole>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     primaryKey({ columns: [table.userId, table.siteId] }),
+    foreignKey({
+      columns: [table.userId, table.organizationId],
+      foreignColumns: [organizationMemberships.userId, organizationMemberships.organizationId],
+      name: "site_memberships_user_organization_membership_fk",
+    }),
     uniqueIndex("site_memberships_actor_scope_idx").on(
       table.userId,
       table.siteId,
@@ -205,6 +251,74 @@ export const siteMemberships = pgTable(
       sql`${table.role} IN ('admin', 'operator', 'requester', 'approver', 'auditor')`,
     ),
     index("site_memberships_site_role_idx").on(table.siteId, table.role),
+  ],
+);
+
+export const mspMandates = pgTable(
+  "msp_mandates",
+  {
+    id: text("id").primaryKey(),
+    operatorOrganizationId: text("operator_organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    clientOrganizationId: text("client_organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    projectId: text("project_id"),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.siteId, table.projectId],
+      foreignColumns: [projects.siteId, projects.id],
+      name: "msp_mandates_site_project_fk",
+    }),
+    index("msp_mandates_scope_idx").on(
+      table.siteId,
+      table.projectId,
+      table.operatorOrganizationId,
+    ),
+    check(
+      "msp_mandates_distinct_organizations_check",
+      sql`${table.operatorOrganizationId} <> ${table.clientOrganizationId}`,
+    ),
+    check(
+      "msp_mandates_time_window_check",
+      sql`${table.expiresAt} IS NULL OR ${table.expiresAt} > ${table.startsAt}`,
+    ),
+  ],
+);
+
+export const mspMandateAssignments = pgTable(
+  "msp_mandate_assignments",
+  {
+    mandateId: text("mandate_id")
+      .notNull()
+      .references(() => mspMandates.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => consoleUsers.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mandateId, table.userId] }),
+    foreignKey({
+      columns: [table.userId, table.organizationId],
+      foreignColumns: [organizationMemberships.userId, organizationMemberships.organizationId],
+      name: "msp_mandate_assignments_user_organization_fk",
+    }),
+    index("msp_mandate_assignments_user_idx").on(table.userId, table.organizationId),
   ],
 );
 
@@ -232,6 +346,13 @@ export const auditLedgerEntries = pgTable(
       .references(() => sites.id),
     actorUserId: text("actor_user_id").notNull(),
     actorRole: text("actor_role").notNull().$type<SiteMembershipRole>(),
+    // Les entrées historiques v1 n'avaient pas de snapshot organisationnel.
+    // Elles restent vérifiables sans être réécrites; les nouvelles écritures
+    // v2 les renseignent toujours via appendAuditEntry.
+    actorOrganizationId: text("actor_organization_id").references(() => organizations.id),
+    clientOrganizationId: text("client_organization_id").references(() => organizations.id),
+    mandateId: text("mandate_id").references(() => mspMandates.id),
+    envelopeVersion: integer("envelope_version").notNull().default(1),
     action: text("action").notNull(),
     resourceType: text("resource_type").notNull(),
     resourceId: text("resource_id").notNull(),
@@ -277,6 +398,10 @@ export const auditLedgerEntries = pgTable(
     check(
       "audit_ledger_decision_check",
       sql`${table.decision} IN ('allowed', 'denied')`,
+    ),
+    check(
+      "audit_ledger_envelope_version_check",
+      sql`${table.envelopeVersion} IN (1, 2)`,
     ),
     check(
       "audit_ledger_reason_code_check",

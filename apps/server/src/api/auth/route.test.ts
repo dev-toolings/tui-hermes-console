@@ -14,7 +14,14 @@ function session(overrides: Partial<AuthSession> = {}): AuthSession {
     siteId: "paris",
     role: "operator",
     memberships: [
-      { id: "paris", name: "Paris", slug: "paris", role: "operator" },
+      {
+        id: "paris",
+        name: "Paris",
+        slug: "paris",
+        role: "operator",
+        organizationId: "org_msp",
+        clientOrganizationId: "org_client_paris",
+      },
     ],
     aiDisclosureVersion: CURRENT_AI_DISCLOSURE.version,
     aiDisclosureAcceptedAt: new Date("2026-08-01T10:00:00.000Z"),

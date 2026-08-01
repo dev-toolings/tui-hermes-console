@@ -1,14 +1,18 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { and, asc, count, eq, gt, lt, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, isNull, lte, lt, or, sql } from "drizzle-orm";
 import {
   consoleAuthTransactions,
   consoleSessions,
   consoleUsers,
+  mspMandateAssignments,
+  mspMandates,
+  organizationMemberships,
   siteMemberships,
   sites,
   type SiteMembershipRole,
 } from "@/db/schema";
 import { getDatabase } from "@/db/client";
+import { appendAuditEntry } from "@/modules/audit/service";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 const AUTH_TRANSACTION_TTL_MS = 1000 * 60 * 10;
@@ -37,11 +41,17 @@ export type SiteMembershipSummary = {
   name: string;
   slug: string;
   role: SiteMembershipRole;
+  organizationId: string;
+  clientOrganizationId: string;
 };
 export type SiteScope = { siteId: string };
 export type SiteRequestContext = SiteScope & {
   userId: string;
   role: SiteMembershipRole;
+  actorOrganizationId: string;
+  clientOrganizationId: string;
+  mandateId: string | null;
+  mandateProjectId: string | null;
   correlationId: string;
 };
 
@@ -144,6 +154,8 @@ async function listMemberships(
       name: sites.name,
       slug: sites.slug,
       role: siteMemberships.role,
+      organizationId: siteMemberships.organizationId,
+      clientOrganizationId: sites.clientOrganizationId,
     })
     .from(siteMemberships)
     .innerJoin(sites, eq(sites.id, siteMemberships.siteId))
@@ -164,10 +176,10 @@ export function resolveSiteRequirement(
   } as const;
 }
 
-export function requireSiteRequestContext(
+export async function requireSiteRequestContext(
   session: AuthSession,
   correlationId = randomUUID(),
-): SiteRequestContext {
+): Promise<SiteRequestContext> {
   const requirement = resolveSiteRequirement(session.memberships, session.siteId);
   if (requirement.membershipRequired) {
     throw new AuthError(
@@ -183,12 +195,241 @@ export function requireSiteRequestContext(
       "SITE_SELECTION_REQUIRED",
     );
   }
+  const activeSite = requirement.activeSite;
+  if (activeSite.role !== "operator") {
+    if (activeSite.organizationId !== activeSite.clientOrganizationId) {
+      await denyAndRevokeOrganizationSession(
+        session,
+        activeSite,
+        correlationId,
+        "CLIENT_ORGANIZATION_REQUIRED",
+      );
+      throw new AuthError(
+        "L’affiliation active ne correspond pas à l’organisation cliente.",
+        403,
+        "CLIENT_ORGANIZATION_REQUIRED",
+      );
+    }
+    return {
+      siteId: activeSite.id,
+      userId: session.userId,
+      role: activeSite.role,
+      actorOrganizationId: activeSite.organizationId,
+      clientOrganizationId: activeSite.clientOrganizationId,
+      mandateId: null,
+      mandateProjectId: null,
+      correlationId,
+    };
+  }
+
+  if (activeSite.organizationId === activeSite.clientOrganizationId) {
+    await denyAndRevokeOrganizationSession(
+      session,
+      activeSite,
+      correlationId,
+      "MSP_ORGANIZATION_REQUIRED",
+    );
+    throw new AuthError(
+      "Un opérateur doit agir pour une organisation MSP mandatée.",
+      403,
+      "MSP_ORGANIZATION_REQUIRED",
+    );
+  }
+  const mandates = await findActiveAssignedMandates(
+    session.userId,
+    activeSite,
+  );
+  if (mandates.length === 0) {
+    await denyAndRevokeOrganizationSession(
+      session,
+      activeSite,
+      correlationId,
+      "MSP_MANDATE_REQUIRED",
+    );
+    throw new AuthError(
+      "Aucun mandat MSP actif n’autorise cet accès.",
+      403,
+      "MSP_MANDATE_REQUIRED",
+    );
+  }
+  const siteWide = mandates.filter((mandate) => mandate.projectId === null);
+  const selected = siteWide.length === 1 && mandates.length === 1
+    ? siteWide[0]
+    : mandates.length === 1
+      ? mandates[0]
+      : null;
+  if (!selected) {
+    throw new AuthError(
+      "Sélectionnez un mandat MSP avant de poursuivre.",
+      409,
+      "MSP_MANDATE_SELECTION_REQUIRED",
+    );
+  }
   return {
     siteId: requirement.activeSite.id,
     userId: session.userId,
     role: requirement.activeSite.role,
+    actorOrganizationId: activeSite.organizationId,
+    clientOrganizationId: activeSite.clientOrganizationId,
+    mandateId: selected.id,
+    mandateProjectId: selected.projectId,
     correlationId,
   };
+}
+
+async function findActiveAssignedMandates(
+  userId: string,
+  membership: SiteMembershipSummary,
+) {
+  const now = new Date();
+  return getDatabase()
+    .select({ id: mspMandates.id, projectId: mspMandates.projectId })
+    .from(mspMandates)
+    .innerJoin(
+      mspMandateAssignments,
+      and(
+        eq(mspMandateAssignments.mandateId, mspMandates.id),
+        eq(mspMandateAssignments.userId, userId),
+        eq(
+          mspMandateAssignments.organizationId,
+          membership.organizationId,
+        ),
+      ),
+    )
+    .where(
+      and(
+        eq(mspMandates.siteId, membership.id),
+        eq(
+          mspMandates.operatorOrganizationId,
+          membership.organizationId,
+        ),
+        eq(
+          mspMandates.clientOrganizationId,
+          membership.clientOrganizationId,
+        ),
+        lte(mspMandates.startsAt, now),
+        isNull(mspMandates.revokedAt),
+        or(isNull(mspMandates.expiresAt), gt(mspMandates.expiresAt, now)),
+        isNull(mspMandateAssignments.revokedAt),
+        or(
+          isNull(mspMandateAssignments.expiresAt),
+          gt(mspMandateAssignments.expiresAt, now),
+        ),
+      ),
+    )
+    .orderBy(asc(mspMandates.id));
+}
+
+async function revokeInvalidOrganizationSession(session: AuthSession) {
+  await getDatabase()
+    .delete(consoleSessions)
+    .where(eq(consoleSessions.tokenHash, session.tokenHash));
+}
+
+async function denyAndRevokeOrganizationSession(
+  session: AuthSession,
+  membership: SiteMembershipSummary,
+  correlationId: string,
+  reasonCode:
+    | "CLIENT_ORGANIZATION_REQUIRED"
+    | "MSP_ORGANIZATION_REQUIRED"
+    | "MSP_MANDATE_REQUIRED",
+) {
+  // La session dérivée est invalidée avant toute réponse et même si le ledger
+  // devient indisponible. La tentative, elle, reste fail-closed si son audit
+  // ne peut pas être persisté.
+  await revokeInvalidOrganizationSession(session);
+  try {
+    await appendAuditEntry({
+      eventId: randomUUID(),
+      actorSiteId: membership.id,
+      targetSiteId: membership.id,
+      actorUserId: session.userId,
+      actorRole: membership.role,
+      actorOrganizationId: membership.organizationId,
+      clientOrganizationId: membership.clientOrganizationId,
+      mandateId: null,
+      action: "site.access",
+      resourceType: "site_authorization",
+      resourceId: membership.id,
+      decision: "denied",
+      reasonCode,
+      beforeState: {
+        role: membership.role,
+        actorOrganizationId: membership.organizationId,
+        clientOrganizationId: membership.clientOrganizationId,
+      },
+      afterState: {
+        role: membership.role,
+        actorOrganizationId: membership.organizationId,
+        clientOrganizationId: membership.clientOrganizationId,
+      },
+      correlationId,
+      occurredAt: new Date(),
+    });
+  } catch (error) {
+    console.error("MSP/client denial audit failed", {
+      siteId: membership.id,
+      userId: session.userId,
+      reasonCode,
+      correlationId,
+      error,
+    });
+    throw new AuthError(
+      "Le refus d’accès n’a pas pu être inscrit dans le journal d’audit.",
+      503,
+      "AUDIT_UNAVAILABLE",
+    );
+  }
+}
+
+/**
+ * Revalide un contexte long-lived (SSE/polling) sans faire confiance au
+ * snapshot de session. Une révocation de membership, mandat ou assignment
+ * devient donc visible avant le prochain événement émis.
+ */
+export async function isSiteRequestContextActive(
+  context: SiteRequestContext,
+): Promise<boolean> {
+  const [membership] = await getDatabase()
+    .select({
+      role: siteMemberships.role,
+      organizationId: siteMemberships.organizationId,
+      clientOrganizationId: sites.clientOrganizationId,
+    })
+    .from(siteMemberships)
+    .innerJoin(sites, eq(sites.id, siteMemberships.siteId))
+    .where(
+      and(
+        eq(siteMemberships.userId, context.userId),
+        eq(siteMemberships.siteId, context.siteId),
+        eq(siteMemberships.organizationId, context.actorOrganizationId),
+        eq(siteMemberships.role, context.role),
+      ),
+    )
+    .limit(1);
+  if (
+    !membership ||
+    membership.clientOrganizationId !== context.clientOrganizationId
+  ) return false;
+  if (context.role !== "operator") {
+    return context.mandateId === null &&
+      membership.organizationId === membership.clientOrganizationId;
+  }
+  if (!context.mandateId) return false;
+  const mandates = await findActiveAssignedMandates(context.userId, {
+    id: context.siteId,
+    name: "",
+    slug: "",
+    role: context.role,
+    organizationId: context.actorOrganizationId,
+    clientOrganizationId: context.clientOrganizationId,
+  });
+  return mandates.some(
+    (mandate) =>
+      mandate.id === context.mandateId &&
+      mandate.projectId === context.mandateProjectId,
+  );
 }
 
 export async function beginGoogleLogin() {
@@ -290,7 +531,7 @@ export async function completeGoogleLogin(request: Request, code: string, state:
           );
         }
         const availableSites = await tx
-          .select({ id: sites.id })
+          .select({ id: sites.id, organizationId: sites.clientOrganizationId })
           .from(sites)
           .orderBy(asc(sites.id))
           .limit(2);
@@ -301,9 +542,14 @@ export async function completeGoogleLogin(request: Request, code: string, state:
             "SITE_BOOTSTRAP_AMBIGUOUS",
           );
         }
+        await tx.insert(organizationMemberships).values({
+          userId,
+          organizationId: availableSites[0]!.organizationId,
+        }).onConflictDoNothing();
         await tx.insert(siteMemberships).values({
           userId,
           siteId: availableSites[0]!.id,
+          organizationId: availableSites[0]!.organizationId,
           role: "admin",
         });
         memberships = await listMemberships(tx, userId);
@@ -396,6 +642,7 @@ export async function selectSessionSite(request: Request, siteId: string) {
       "AUTH_UNAVAILABLE",
     );
   }
+  await requireSiteRequestContext(refreshed!);
   return activeSite;
 }
 

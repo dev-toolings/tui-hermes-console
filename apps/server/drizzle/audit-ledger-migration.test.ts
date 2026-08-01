@@ -69,9 +69,17 @@ describeWithDocker("audit ledger migration on PostgreSQL", () => {
     applyJournal("audit_ledger");
     psql("audit_ledger", migration("0018_audit_ledger_foundations"));
     psql("audit_ledger", `
-      INSERT INTO sites (id, name, slug) VALUES ('paris', 'Paris', 'paris'), ('lyon', 'Lyon', 'lyon');
+      INSERT INTO organizations (id, name, slug, kind) VALUES
+        ('org_client_paris', 'Paris client', 'client-paris', 'client'),
+        ('org_client_lyon', 'Lyon client', 'client-lyon', 'client');
+      INSERT INTO sites (id, client_organization_id, name, slug)
+        VALUES ('paris', 'org_client_paris', 'Paris', 'paris'),
+               ('lyon', 'org_client_lyon', 'Lyon', 'lyon');
       INSERT INTO console_users (id, email, google_subject) VALUES ('usr_admin', 'admin@example.com', 'sub-admin');
-      INSERT INTO site_memberships (user_id, site_id, role) VALUES ('usr_admin', 'paris', 'admin');
+      INSERT INTO organization_memberships (user_id, organization_id)
+        VALUES ('usr_admin', 'org_client_paris');
+      INSERT INTO site_memberships (user_id, site_id, organization_id, role)
+        VALUES ('usr_admin', 'paris', 'org_client_paris', 'admin');
       INSERT INTO audit_ledger_entries
         (event_id, actor_site_id, target_site_id, actor_user_id, actor_role, action,
          resource_type, resource_id, decision, reason_code, before_state, after_state,
@@ -119,9 +127,17 @@ describeWithDocker("audit ledger migration on PostgreSQL", () => {
     psql("postgres", 'CREATE DATABASE "audit_service";');
     applyJournal("audit_service");
     psql("audit_service", `
-      INSERT INTO sites (id, name, slug) VALUES ('paris', 'Paris', 'paris'), ('lyon', 'Lyon', 'lyon');
+      INSERT INTO organizations (id, name, slug, kind) VALUES
+        ('org_client_paris', 'Paris client', 'client-paris', 'client'),
+        ('org_client_lyon', 'Lyon client', 'client-lyon', 'client');
+      INSERT INTO sites (id, client_organization_id, name, slug)
+        VALUES ('paris', 'org_client_paris', 'Paris', 'paris'),
+               ('lyon', 'org_client_lyon', 'Lyon', 'lyon');
       INSERT INTO console_users (id, email, google_subject) VALUES ('usr_admin', 'admin2@example.com', 'sub-admin-2');
-      INSERT INTO site_memberships (user_id, site_id, role) VALUES ('usr_admin', 'paris', 'admin');
+      INSERT INTO organization_memberships (user_id, organization_id)
+        VALUES ('usr_admin', 'org_client_paris');
+      INSERT INTO site_memberships (user_id, site_id, organization_id, role)
+        VALUES ('usr_admin', 'paris', 'org_client_paris', 'admin');
     `);
     const client = postgres(`postgres://postgres@127.0.0.1:${hostPort}/audit_service`, { prepare: false });
     const database = drizzle(client, { schema });
@@ -131,6 +147,9 @@ describeWithDocker("audit ledger migration on PostgreSQL", () => {
       targetSiteId: "lyon",
       actorUserId: "usr_admin",
       actorRole: "admin" as const,
+      actorOrganizationId: "org_client_paris",
+      clientOrganizationId: "org_client_paris",
+      mandateId: null,
       action: "cross_site.request_denied",
       resourceType: "agent",
       resourceId: "agt-1",

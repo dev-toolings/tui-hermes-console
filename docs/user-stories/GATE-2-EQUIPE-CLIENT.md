@@ -70,6 +70,12 @@
   est auditée.
 - **Preuves :** `P-E2E`, `P-SEC`, parcours multi-comptes, contrôle des flux SSE et artefacts.
 - **État initial :** `PROPOSÉE`.
+- **État courant au 2026-08-01 :** `IMPLÉMENTÉE` et vérifiée localement par P-CODE/P-INT ;
+  non `ACCEPTÉE` tant que la P-E2E navigateur multi-compte, la P-SEC partenaire, la revue finale,
+  la revalidation/arrêt d’un run actif après révocation et la dépendance Gate 1 ne sont pas
+  clôturées ; le filtrage UI initial des capabilities est corrigé localement mais reste à prouver
+  en navigateur.
+- **Preuve datée :** [`2026-08-01-gate-2-msp-client.md`](evidence/2026-08-01-gate-2-msp-client.md).
 
 ## US-G2-005 — Appliquer des policies par ressource
 

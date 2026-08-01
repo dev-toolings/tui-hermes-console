@@ -42,6 +42,10 @@ import * as threadEvents from "@/api/threads/[threadId]/events/route";
 import * as threadMessages from "@/api/threads/[threadId]/messages/route";
 import * as siteMembership from "@/api/site/memberships/[userId]/route";
 import * as siteMemberships from "@/api/site/memberships/route";
+import * as siteMandates from "@/api/site/mandates/route";
+import * as siteMandate from "@/api/site/mandates/[mandateId]/route";
+import * as siteMandateAssignments from "@/api/site/mandates/[mandateId]/assignments/route";
+import * as siteMandateAssignment from "@/api/site/mandates/[mandateId]/assignments/[userId]/route";
 import * as ownership from "@/api/ownership/[resourceType]/[resourceId]/route";
 import type { SiteAction } from "@/modules/auth/site-authorization";
 
@@ -92,6 +96,26 @@ export const ROUTES: RouteDefinition[] = [
     path: "/api/site/memberships/:userId",
     module: siteMembership,
     access: siteAccess({ PUT: "membership.manage" }),
+  },
+  {
+    path: "/api/site/mandates",
+    module: siteMandates,
+    access: siteAccess({ GET: "membership.manage", POST: "membership.manage" }),
+  },
+  {
+    path: "/api/site/mandates/:mandateId",
+    module: siteMandate,
+    access: siteAccess({ DELETE: "membership.manage" }),
+  },
+  {
+    path: "/api/site/mandates/:mandateId/assignments",
+    module: siteMandateAssignments,
+    access: siteAccess({ POST: "membership.manage" }),
+  },
+  {
+    path: "/api/site/mandates/:mandateId/assignments/:userId",
+    module: siteMandateAssignment,
+    access: siteAccess({ DELETE: "membership.manage" }),
   },
   {
     path: "/api/ownership/:resourceType/:resourceId",

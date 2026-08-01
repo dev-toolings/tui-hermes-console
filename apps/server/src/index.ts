@@ -83,7 +83,7 @@ app.use("/api/*", async (c, next) => {
     if (!session) {
       return c.json({ error: { code: "AUTH_REQUIRED", message: "Authentification requise." } }, 401);
     }
-    c.set("siteContext", requireSiteRequestContext(session));
+    c.set("siteContext", await requireSiteRequestContext(session));
     if (!["GET", "HEAD"].includes(c.req.method)) {
       assertSameOriginMutation(c.req.raw);
       assertCsrf(c.req.raw, session);

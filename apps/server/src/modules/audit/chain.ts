@@ -1,7 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { AuditDecision, SiteMembershipRole } from "@/db/schema";
 
-const AUDIT_HMAC_DOMAIN = "hermes-console/audit-ledger/v1\0";
+const AUDIT_HMAC_DOMAIN_V1 = "hermes-console/audit-ledger/v1\0";
+const AUDIT_HMAC_DOMAIN_V2 = "hermes-console/audit-ledger/v2\0";
 
 export type AuditJsonValue =
   | null
@@ -17,6 +18,10 @@ export interface AuditHashPayload {
   targetSiteId: string;
   actorUserId: string;
   actorRole: SiteMembershipRole;
+  actorOrganizationId?: string | null;
+  clientOrganizationId?: string | null;
+  mandateId?: string | null;
+  envelopeVersion?: 1 | 2;
   action: string;
   resourceType: string;
   resourceId: string;
@@ -90,10 +95,23 @@ export function computeAuditEntryHash(
   key?: string,
 ): string {
   const hmacKey = resolveAuditHmacKey(key);
+  const version = payload.envelopeVersion ?? 1;
+  const canonicalPayload = version === 1 ? v1Payload(payload) : payload;
   return createHmac("sha256", hmacKey)
-    .update(AUDIT_HMAC_DOMAIN, "utf8")
-    .update(canonicalizeAuditValue(payload), "utf8")
+    .update(version === 1 ? AUDIT_HMAC_DOMAIN_V1 : AUDIT_HMAC_DOMAIN_V2, "utf8")
+    .update(canonicalizeAuditValue(canonicalPayload), "utf8")
     .digest("hex");
+}
+
+function v1Payload(payload: AuditHashPayload): AuditHashPayload {
+  const {
+    actorOrganizationId: _actorOrganizationId,
+    clientOrganizationId: _clientOrganizationId,
+    mandateId: _mandateId,
+    envelopeVersion: _envelopeVersion,
+    ...legacy
+  } = payload;
+  return legacy;
 }
 
 export function assertAuditChain(

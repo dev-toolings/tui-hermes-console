@@ -19,8 +19,12 @@ import { RuntimeStatusCard } from "./runtime-status-card";
 
 export function AppSidebar({
   onOpenPalette,
+  capabilities,
   ...props
-}: ComponentProps<typeof Sidebar> & { onOpenPalette: () => void }) {
+}: ComponentProps<typeof Sidebar> & {
+  onOpenPalette: () => void;
+  capabilities: ReadonlySet<string>;
+}) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
@@ -39,9 +43,9 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        <NavMain onOpenPalette={onOpenPalette} />
-        <NavDocuments />
-        <NavSecondary className="mt-auto" />
+        <NavMain onOpenPalette={onOpenPalette} capabilities={capabilities} />
+        <NavDocuments capabilities={capabilities} />
+        <NavSecondary capabilities={capabilities} className="mt-auto" />
       </SidebarContent>
 
       <SidebarFooter>

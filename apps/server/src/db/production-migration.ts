@@ -13,6 +13,10 @@ const MUTABLE_APPLICATION_TABLES = [
   "console_setup",
   "console_users",
   "messages",
+  "msp_mandate_assignments",
+  "msp_mandates",
+  "organization_memberships",
+  "organizations",
   "projects",
   "run_events",
   "runs",
@@ -291,8 +295,9 @@ export async function reconcileRuntimePrivileges(
 
   await owner`
     GRANT EXECUTE ON FUNCTION public.append_audit_ledger_entry(
-      text, text, text, text, text, text, text, text, text, text, jsonb, jsonb,
-      text, timestamp with time zone, timestamp with time zone, bigint, text, text
+      text, text, text, text, text, text, text, text, integer, text, text, text,
+      text, text, jsonb, jsonb, text, timestamp with time zone,
+      timestamp with time zone, bigint, text, text
     ) TO ${role}
   `;
 

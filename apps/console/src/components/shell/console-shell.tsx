@@ -10,6 +10,7 @@ import { RunPageChromeProvider } from "@/components/run/run-page-chrome";
 import { AppSidebar } from "./app-sidebar";
 import { CommandPalette } from "./command-palette";
 import { SiteHeader } from "./site-header";
+import { readPersonaCapabilities } from "@/lib/persona-capabilities";
 
 /**
  * Coque de la Console, sur le shell shadcn (`SidebarProvider` / `Sidebar` /
@@ -53,6 +54,7 @@ function ConsoleShellFrame({ children }: { children: ReactNode }) {
    */
   const [chatRailOpen, setChatRailOpen] = useState(false);
   const appearance = hermesAppearance.useAppearance();
+  const capabilities = readPersonaCapabilities();
   hermesAppearance.useApplyUiScale(appearance.uiScale);
 
   useEffect(() => {
@@ -92,6 +94,7 @@ function ConsoleShellFrame({ children }: { children: ReactNode }) {
       <AppSidebar
         variant={layout === "inset" ? "inset" : "sidebar"}
         onOpenPalette={() => setPaletteOpen(true)}
+        capabilities={capabilities}
       />
       <SidebarInset
         // Le chat gère sa propre largeur (3 panneaux) : le brider à la largeur
@@ -115,7 +118,11 @@ function ConsoleShellFrame({ children }: { children: ReactNode }) {
           {children}
         </div>
       </SidebarInset>
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        capabilities={capabilities}
+      />
     </SidebarProvider>
   );
 }

@@ -102,6 +102,10 @@ export function canPerformSiteAction(
   return SITE_ROLE_PERMISSIONS[role].has(action);
 }
 
+export function siteCapabilitiesForRole(role: SiteMembershipRole): SiteAction[] {
+  return SITE_ACTIONS.filter((action) => canPerformSiteAction(role, action));
+}
+
 type AuthorizationDependencies = {
   append?: (input: Parameters<typeof appendAuditEntry>[0]) => Promise<unknown>;
 };
@@ -183,6 +187,9 @@ export async function denySiteAction(
       targetSiteId: context.siteId,
       actorUserId: context.userId,
       actorRole: context.role,
+      actorOrganizationId: context.actorOrganizationId,
+      clientOrganizationId: context.clientOrganizationId,
+      mandateId: context.mandateId,
       action: denial.action,
       resourceType: denial.resourceType,
       resourceId: denial.resourceId,

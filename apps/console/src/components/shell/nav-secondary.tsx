@@ -10,7 +10,7 @@ import {
 } from "@boardui/ui";
 import { Link, usePathname } from "@/lib/router";
 import { cn } from "@/lib/cn";
-import { SECONDARY_NAV, activeNavHref } from "./nav-config";
+import { SECONDARY_NAV, activeNavHref, navForCapabilities } from "./nav-config";
 import { useRuntimeStatus } from "./use-runtime-status";
 
 /**
@@ -18,16 +18,20 @@ import { useRuntimeStatus } from "./use-runtime-status";
  * elle remplace la carte de statut de l'ancien rail, qui disparaissait
  * entièrement en mode icône.
  */
-export function NavSecondary({ ...props }: ComponentProps<typeof SidebarGroup>) {
+export function NavSecondary({
+  capabilities,
+  ...props
+}: ComponentProps<typeof SidebarGroup> & { capabilities: ReadonlySet<string> }) {
   const pathname = usePathname();
-  const activeHref = activeNavHref(SECONDARY_NAV, pathname);
+  const navigation = navForCapabilities(SECONDARY_NAV, capabilities);
+  const activeHref = activeNavHref(navigation, pathname);
   const runtime = useRuntimeStatus();
 
   return (
     <SidebarGroup {...props}>
       <SidebarGroupContent>
         <SidebarMenu>
-          {SECONDARY_NAV.map((item) => {
+          {navigation.map((item) => {
             const isRuntime = item.href === "/settings/runtime";
             return (
               <SidebarMenuItem key={item.href}>

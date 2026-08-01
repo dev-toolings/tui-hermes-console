@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { requiresSetupRedirect } from "./route-tree";
 
+const site = (id: string, role: "operator" | "auditor" = "operator") => ({
+  id,
+  name: id === "paris" ? "Paris" : "Lyon",
+  slug: id,
+  role,
+  organizationId: role === "operator" ? "org_msp" : `org_client_${id}`,
+  clientOrganizationId: `org_client_${id}`,
+});
+
 describe("Console access routing", () => {
   test("redirects authenticated users whose individual consent is outdated", () => {
     expect(
@@ -9,10 +18,11 @@ describe("Console access routing", () => {
         setupRequired: false,
         consentRequired: true,
         siteContext: {
-          activeSite: { id: "paris", name: "Paris", slug: "paris", role: "operator" },
-          memberships: [{ id: "paris", name: "Paris", slug: "paris", role: "operator" }],
+          activeSite: site("paris"),
+          memberships: [site("paris")],
           selectionRequired: false,
           membershipRequired: false,
+          capabilities: ["run.read"],
         },
       }),
     ).toBe(true);
@@ -25,10 +35,11 @@ describe("Console access routing", () => {
         setupRequired: false,
         consentRequired: false,
         siteContext: {
-          activeSite: { id: "paris", name: "Paris", slug: "paris", role: "operator" },
-          memberships: [{ id: "paris", name: "Paris", slug: "paris", role: "operator" }],
+          activeSite: site("paris"),
+          memberships: [site("paris")],
           selectionRequired: false,
           membershipRequired: false,
+          capabilities: ["run.read"],
         },
       }),
     ).toBe(false);
@@ -43,11 +54,12 @@ describe("Console access routing", () => {
         siteContext: {
           activeSite: null,
           memberships: [
-            { id: "paris", name: "Paris", slug: "paris", role: "operator" },
-            { id: "lyon", name: "Lyon", slug: "lyon", role: "auditor" },
+            site("paris"),
+            site("lyon", "auditor"),
           ],
           selectionRequired: true,
           membershipRequired: false,
+          capabilities: [],
         },
       }),
     ).toBe(true);

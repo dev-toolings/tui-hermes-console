@@ -12,6 +12,10 @@ const context = (role: SiteMembershipRole) => ({
   siteId: "paris",
   userId: `usr_${role}`,
   role,
+  actorOrganizationId: role === "operator" ? "org_msp" : "org_client",
+  clientOrganizationId: "org_client",
+  mandateId: role === "operator" ? "mandate_paris" : null,
+  mandateProjectId: null,
   correlationId: `req_${role}`,
 });
 

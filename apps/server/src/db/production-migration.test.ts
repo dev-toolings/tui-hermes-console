@@ -172,15 +172,26 @@ describeWithDocker("production owner/runtime PostgreSQL boundary", () => {
     const ownerClient = postgres(ownerUrl, { prepare: false });
     try {
       await runtimeClient`
-        INSERT INTO sites (id, name, slug) VALUES ('paris', 'Paris', 'paris'), ('lyon', 'Lyon', 'lyon')
+        INSERT INTO organizations (id, name, slug, kind) VALUES
+          ('org_client_paris', 'Client Paris', 'client-paris', 'client'),
+          ('org_client_lyon', 'Client Lyon', 'client-lyon', 'client')
+      `;
+      await runtimeClient`
+        INSERT INTO sites (id, client_organization_id, name, slug) VALUES
+          ('paris', 'org_client_paris', 'Paris', 'paris'),
+          ('lyon', 'org_client_lyon', 'Lyon', 'lyon')
       `;
       await runtimeClient`
         INSERT INTO console_users (id, email, google_subject)
         VALUES ('usr_admin', 'admin@example.com', 'sub-admin')
       `;
       await runtimeClient`
-        INSERT INTO site_memberships (user_id, site_id, role)
-        VALUES ('usr_admin', 'paris', 'admin')
+        INSERT INTO organization_memberships (user_id, organization_id)
+        VALUES ('usr_admin', 'org_client_paris')
+      `;
+      await runtimeClient`
+        INSERT INTO site_memberships (user_id, site_id, organization_id, role)
+        VALUES ('usr_admin', 'paris', 'org_client_paris', 'admin')
       `;
 
       const entry = await appendAuditEntry(
@@ -190,6 +201,9 @@ describeWithDocker("production owner/runtime PostgreSQL boundary", () => {
           targetSiteId: "lyon",
           actorUserId: "usr_admin",
           actorRole: "admin",
+          actorOrganizationId: "org_client_paris",
+          clientOrganizationId: "org_client_paris",
+          mandateId: null,
           action: "agent.read",
           resourceType: "agent",
           resourceId: "agt-1",
@@ -263,14 +277,14 @@ describeWithDocker("production owner/runtime PostgreSQL boundary", () => {
         ownerPsql(`
           SELECT prosecdef::text || ':' || proconfig[1]
           FROM pg_proc
-          WHERE oid = 'public.append_audit_ledger_entry(text,text,text,text,text,text,text,text,text,text,jsonb,jsonb,text,timestamptz,timestamptz,bigint,text,text)'::regprocedure;
+          WHERE oid = 'public.append_audit_ledger_entry(text,text,text,text,text,text,text,text,integer,text,text,text,text,text,jsonb,jsonb,text,timestamptz,timestamptz,bigint,text,text)'::regprocedure;
         `),
       ).toBe("true:search_path=pg_catalog, public");
       expect(
         ownerPsql(`
           SET ROLE ${runtimeRole};
           SELECT has_function_privilege(current_user,
-            'public.append_audit_ledger_entry(text,text,text,text,text,text,text,text,text,text,jsonb,jsonb,text,timestamptz,timestamptz,bigint,text,text)',
+            'public.append_audit_ledger_entry(text,text,text,text,text,text,text,text,integer,text,text,text,text,text,jsonb,jsonb,text,timestamptz,timestamptz,bigint,text,text)',
             'EXECUTE')::text;
         `),
       ).toBe("true");
@@ -301,7 +315,8 @@ describeWithDocker("production owner/runtime PostgreSQL boundary", () => {
     try {
       await migrate(drizzle(ownerClient), { migrationsFolder: legacyMigrations });
       await ownerClient`
-        INSERT INTO sites (id, name, slug) VALUES ('paris', 'Paris', 'paris'), ('lyon', 'Lyon', 'lyon')
+        INSERT INTO sites (id, name, slug) VALUES
+          ('paris', 'Paris', 'paris'), ('lyon', 'Lyon', 'lyon')
       `;
       await ownerClient`
         INSERT INTO console_users (id, email, google_subject)
@@ -346,6 +361,29 @@ describeWithDocker("production owner/runtime PostgreSQL boundary", () => {
            'corr-upgrade', ${occurredAt}::timestamptz, ${recordedAt}::timestamptz,
            1, NULL, ${entryHash})
       `;
+
+      await ownerClient.unsafe(`
+        CREATE TABLE msp_organization_bootstrap (
+          id text PRIMARY KEY, name text NOT NULL, slug text NOT NULL, kind text NOT NULL
+        );
+        INSERT INTO msp_organization_bootstrap (id, name, slug, kind) VALUES
+          ('org_client_paris', 'Client Paris', 'client-paris', 'client'),
+          ('org_client_lyon', 'Client Lyon', 'client-lyon', 'client'),
+          ('org_client_legacy_default', 'Legacy client', 'client-legacy-default', 'client');
+        CREATE TABLE msp_client_bootstrap (
+          site_id text PRIMARY KEY, client_organization_id text NOT NULL
+        );
+        INSERT INTO msp_client_bootstrap VALUES
+          ('paris', 'org_client_paris'),
+          ('lyon', 'org_client_lyon'),
+          ('legacy-default', 'org_client_legacy_default');
+        CREATE TABLE msp_membership_bootstrap (
+          user_id text NOT NULL, site_id text NOT NULL, organization_id text NOT NULL,
+          PRIMARY KEY (user_id, site_id)
+        );
+        INSERT INTO msp_membership_bootstrap VALUES
+          ('usr_upgrade', 'paris', 'org_client_paris');
+      `);
 
       await ownerClient.unsafe(`
         CREATE ROLE ${upgradeRole} LOGIN PASSWORD '${upgradePassword}' SUPERUSER CREATEDB CREATEROLE
@@ -433,6 +471,9 @@ describeWithDocker("production owner/runtime PostgreSQL boundary", () => {
             targetSiteId: "lyon",
             actorUserId: "usr_upgrade",
             actorRole: "admin",
+            actorOrganizationId: "org_client_paris",
+            clientOrganizationId: "org_client_paris",
+            mandateId: null,
             action: "agent.update",
             resourceType: "agent",
             resourceId: "agt-1",

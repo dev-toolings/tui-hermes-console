@@ -15,23 +15,26 @@ import {
   useSidebar,
 } from "@boardui/ui";
 import { Link, usePathname } from "@/lib/router";
-import { DOCUMENTS_NAV, activeNavHref } from "./nav-config";
+import { DOCUMENTS_NAV, activeNavHref, navForCapabilities } from "./nav-config";
 
 /**
  * Groupe intermédiaire du rail, dans la disposition `nav-documents` du bloc :
  * un `SidebarGroupLabel`, des entrées avec action au survol, et le groupe
  * entier masqué en mode icône.
  */
-export function NavDocuments() {
+export function NavDocuments({ capabilities }: { capabilities: ReadonlySet<string> }) {
   const { isMobile } = useSidebar();
   const pathname = usePathname();
-  const activeHref = activeNavHref(DOCUMENTS_NAV, pathname);
+  const navigation = navForCapabilities(DOCUMENTS_NAV, capabilities);
+  const activeHref = activeNavHref(navigation, pathname);
+
+  if (navigation.length === 0) return null;
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
       <SidebarGroupLabel>Documents</SidebarGroupLabel>
       <SidebarMenu>
-        {DOCUMENTS_NAV.map((item) => (
+        {navigation.map((item) => (
           <SidebarMenuItem key={item.href}>
             <SidebarMenuButton asChild isActive={activeHref === item.href}>
               <Link href={item.href}>

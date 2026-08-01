@@ -26,6 +26,9 @@ export function isConnectorType(value: string): value is ConnectorType {
 export async function listConnectors(context: SiteRequestContext): Promise<ConnectorPublicDto[]> {
   const rows = await getDatabase().select().from(connectors).where(and(
     eq(connectors.siteId, context.siteId),
+    context.mandateProjectId
+      ? eq(connectors.projectId, context.mandateProjectId)
+      : undefined,
     context.role === "requester" ? eq(connectors.ownerUserId, context.userId) : undefined,
   ));
   return rows.map(toPublicDto);
@@ -35,6 +38,9 @@ export async function getConnector(context: SiteRequestContext, type: ConnectorT
   const [row] = await getDatabase().select().from(connectors).where(and(
     eq(connectors.siteId, context.siteId),
     eq(connectors.type, type),
+    context.mandateProjectId
+      ? eq(connectors.projectId, context.mandateProjectId)
+      : undefined,
     context.role === "requester" ? eq(connectors.ownerUserId, context.userId) : undefined,
   )).limit(1);
   return row ? toPublicDto(row) : null;

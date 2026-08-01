@@ -5,6 +5,7 @@ import { MissionsKanban } from "@/components/missions/missions-kanban";
 import { MissionsTable } from "@/components/missions/missions-table";
 import { toMissionRows } from "@/components/missions/mission-row";
 import { useRouter } from "@/lib/router";
+import { readPersonaCapabilities } from "@/lib/persona-capabilities";
 import type { MissionsData } from "@/loaders";
 
 export type MissionsView = "kanban" | "table";
@@ -28,6 +29,10 @@ export function MissionsScreen({
   view: MissionsView;
 }) {
   const router = useRouter();
+  const capabilities = readPersonaCapabilities();
+  const canCreate = capabilities.has("thread.create");
+  const canCancel = capabilities.has("run.cancel");
+  const canRetry = capabilities.has("run.retry");
   const rows = toMissionRows(data.threads);
 
   return (
@@ -50,16 +55,18 @@ export function MissionsScreen({
               <ToggleGroupItem value="kanban">Kanban</ToggleGroupItem>
               <ToggleGroupItem value="table">Tableau</ToggleGroupItem>
             </ToggleGroup>
-            <ButtonLink href="/runs/new" variant="primary">
-              <PlusIcon className="size-4" />
-              Nouvelle mission
-            </ButtonLink>
+            {canCreate ? (
+              <ButtonLink href="/runs/new" variant="primary">
+                <PlusIcon className="size-4" />
+                Nouvelle mission
+              </ButtonLink>
+            ) : null}
           </div>
         }
       />
 
       {view === "kanban" ? (
-        <MissionsKanban rows={rows} />
+        <MissionsKanban rows={rows} canCreate={canCreate} canCancel={canCancel} canRetry={canRetry} />
       ) : (
         <Card>
           <CardSurface className="overflow-hidden p-0">

@@ -20,13 +20,14 @@ export type NavItem = {
   href: string;
   icon: LucideIcon;
   badge?: string;
+  requiredCapability?: string;
 };
 
 export const PRIMARY_NAV = [
-  { label: "Aperçu", href: "/", icon: LayoutDashboardIcon },
-  { label: "Chat", href: "/chat", icon: MessageSquareIcon },
-  { label: "Agents", href: "/agents", icon: BotIcon },
-  { label: "Missions", href: "/runs", icon: ActivityIcon },
+  { label: "Aperçu", href: "/", icon: LayoutDashboardIcon, requiredCapability: "run.read" },
+  { label: "Chat", href: "/chat", icon: MessageSquareIcon, requiredCapability: "thread.read" },
+  { label: "Agents", href: "/agents", icon: BotIcon, requiredCapability: "agent.read" },
+  { label: "Missions", href: "/runs", icon: ActivityIcon, requiredCapability: "run.read" },
 ] satisfies NavItem[];
 
 /**
@@ -35,16 +36,28 @@ export const PRIMARY_NAV = [
  * accompagnés d'entrées inventées.
  */
 export const DOCUMENTS_NAV = [
-  { label: "Artefacts", href: "/artifacts", icon: FileBoxIcon },
+  { label: "Artefacts", href: "/artifacts", icon: FileBoxIcon, requiredCapability: "artifact.read" },
 ] satisfies NavItem[];
 
 export const SECONDARY_NAV = [
-  { label: "Paramètres", href: "/settings", icon: SettingsIcon },
-  { label: "Aide", href: "/support", icon: CircleHelpIcon },
+  // Les paramètres racine chargent encore des endpoints installation-global
+  // (runtime/chiffrement) que les rôles site ne peuvent pas appeler. Ne pas
+  // afficher ce lien tant qu'un capability installation-admin n'est pas livré.
+  { label: "Paramètres", href: "/settings", icon: SettingsIcon, requiredCapability: "installation.admin" },
+  { label: "Aide", href: "/support", icon: CircleHelpIcon, requiredCapability: "run.read" },
 ] satisfies NavItem[];
 
 /** Toutes les destinations, pour la palette ⌘K. */
 export const ALL_NAV = [...PRIMARY_NAV, ...DOCUMENTS_NAV, ...SECONDARY_NAV] satisfies NavItem[];
+
+export function navForCapabilities<T extends NavItem>(
+  items: readonly T[],
+  capabilities: ReadonlySet<string>,
+): T[] {
+  return items.filter(
+    (item) => !item.requiredCapability || capabilities.has(item.requiredCapability),
+  );
+}
 
 export function navItemMatches(item: NavItem, pathname: string): boolean {
   return item.href === "/"

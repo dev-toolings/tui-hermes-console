@@ -6,6 +6,7 @@ import {
   artifacts,
   connectors,
   consoleUsers,
+  organizationMemberships,
   runs,
   siteMemberships,
   threads,
@@ -41,7 +42,10 @@ export async function setSiteMembershipRole(
     );
 
     const [actorMembership] = await tx
-      .select({ role: siteMemberships.role })
+      .select({
+        role: siteMemberships.role,
+        organizationId: siteMemberships.organizationId,
+      })
       .from(siteMemberships)
       .where(
         and(
@@ -51,7 +55,11 @@ export async function setSiteMembershipRole(
       )
       .for("update");
 
-    if (!actorMembership || actorMembership.role !== "admin") {
+    if (
+      !actorMembership ||
+      actorMembership.role !== "admin" ||
+      actorMembership.organizationId !== context.clientOrganizationId
+    ) {
       if (!actorMembership) {
         throw new AuthError(
           "Le contrôle du rôle courant n’est plus disponible.",
@@ -100,7 +108,10 @@ export async function setSiteMembershipRole(
       .where(eq(consoleUsers.id, targetUserId))
       .limit(1);
     const [existing] = await tx
-      .select({ role: siteMemberships.role })
+      .select({
+        role: siteMemberships.role,
+        organizationId: siteMemberships.organizationId,
+      })
       .from(siteMemberships)
       .where(
         and(
@@ -124,6 +135,24 @@ export async function setSiteMembershipRole(
           "Le compte à rattacher est introuvable.",
           404,
           "MEMBERSHIP_USER_NOT_FOUND",
+        ),
+      };
+    }
+
+    if (role === "operator" && existing?.role !== "operator") {
+      await appendMembershipAudit(tx, {
+        context,
+        targetUserId,
+        decision: "denied",
+        reasonCode: "MSP_ASSIGNMENT_REQUIRED",
+        beforeRole: existing?.role ?? null,
+        afterRole: existing?.role ?? null,
+      });
+      return {
+        error: new AuthError(
+          "Un opérateur MSP doit être affilié à une organisation, un mandat et une affectation explicites.",
+          409,
+          "MSP_ASSIGNMENT_REQUIRED",
         ),
       };
     }
@@ -200,16 +229,24 @@ export async function setSiteMembershipRole(
       }
     }
 
+    const organizationId = role === "operator"
+      ? existing!.organizationId
+      : context.clientOrganizationId;
+    await tx
+      .insert(organizationMemberships)
+      .values({ userId: targetUserId, organizationId })
+      .onConflictDoNothing();
     const [membership] = await tx
       .insert(siteMemberships)
       .values({
         userId: targetUserId,
         siteId: context.siteId,
+        organizationId,
         role,
       })
       .onConflictDoUpdate({
         target: [siteMemberships.userId, siteMemberships.siteId],
-        set: { role, updatedAt: new Date() },
+        set: { role, organizationId, updatedAt: new Date() },
       })
       .returning({
         userId: siteMemberships.userId,
@@ -247,6 +284,7 @@ export async function listSiteMemberships(context: SiteRequestContext) {
       email: consoleUsers.email,
       name: consoleUsers.displayName,
       role: siteMemberships.role,
+      organizationId: siteMemberships.organizationId,
     })
     .from(siteMemberships)
     .innerJoin(consoleUsers, eq(consoleUsers.id, siteMemberships.userId))
@@ -272,6 +310,9 @@ async function appendMembershipAudit(
       targetSiteId: input.context.siteId,
       actorUserId: input.context.userId,
       actorRole: input.context.role,
+      actorOrganizationId: input.context.actorOrganizationId,
+      clientOrganizationId: input.context.clientOrganizationId,
+      mandateId: input.context.mandateId,
       action: "membership.manage",
       resourceType: "site_membership",
       resourceId: input.targetUserId,

@@ -26,6 +26,8 @@ function session(
         name: "Legacy site",
         slug: "legacy-default",
         role: "admin",
+        organizationId: "org_client_legacy-default",
+        clientOrganizationId: "org_client_legacy-default",
       },
     ],
     aiDisclosureVersion: CURRENT_AI_DISCLOSURE.version,

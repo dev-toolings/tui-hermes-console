@@ -48,7 +48,7 @@ nécessaires pour la vendre comme produit B2B.
 |---|---|---|---|
 | Unité métier | Session, mission, résultat, artefact | Mission gouvernée et attribuée | Chat générique |
 | Runtime | Un Hermes direct ou SSH | Plusieurs installations clientes enrôlées | Runtime universel day-1 |
-| Utilisateurs | Emails Google allowlistés, tout partagé | Rôles et périmètres par site/projet | « Multi-user » sans autorisation |
+| Utilisateurs | Emails Google allowlistés, périmètres client/MSP implémentés localement mais non acceptés | Rôles et périmètres par site/projet prouvés E2E | « Multi-user » sans autorisation |
 | Contrôle humain | UI d’approbation dépendante de Hermes | Policy fail-closed avant action sensible | Présenter l’UI actuelle comme barrière |
 | Trace | Événements techniques de run | Audit immuable acteur/action/décision | Refaire Langfuse |
 | Données | Postgres + fichiers locaux/SFTP | Custody, rétention, export et restauration | Promesse de souveraineté absolue |
@@ -89,8 +89,9 @@ Job-to-be-done :
 > « Je déploie un agent chez mon client, je contrôle ce qu’il peut faire, et je peux prouver qui a
 > demandé quoi, ce qui a été exécuté et ce qui a été livré. »
 
-Une installation par client permet un pilote avant le multi-tenant. Elle ne remplace pas le futur
-RBAC : aujourd’hui, tous les comptes allowlistés d’une installation voient le même état.
+Une installation par client permet un pilote avant le multi-tenant. Le RBAC, l’ownership et la
+séparation client/MSP existent maintenant localement ; ils ne valent pas encore acceptation B2B tant
+que la P-E2E multi-compte, la P-SEC partenaire et la Gate 1 ne sont pas clôturées.
 
 ### 3.2 Segment secondaire — IT/Ops de PME
 
@@ -243,8 +244,9 @@ Précisions :
 
 ### 6.3 Capacités absentes
 
-- organisation/tenant et séparation MSP/client complète ; ownership métier est implémenté côté
-  backend/DB/UI, mais reste non accepté avant P-E2E et revue ;
+- séparation organisationnelle MSP/client, mandats site/projet et affectations individuelles :
+  implémentés côté backend/DB/UI et vérifiés localement, mais non acceptés avant P-E2E multi-compte,
+  P-SEC partenaire et revue ; la sélection interactive entre plusieurs mandats reste à livrer ;
 - site/projet comme frontière technique : implémenté et vérifié localement, mais non accepté avant Gate 1 ;
 - preuve navigateur multi-compte et décision de Gate sur le propriétaire agent/session/mission,
   connecteur ou artefact ;
@@ -342,8 +344,13 @@ L’adapter reste le seul point de couplage au protocole.
 
 ### 8.1 Modèle actuel
 
-- console_users : identité Google ; les memberships portent les rôles de site, appliqués par la
-  matrice RBAC serveur versionnée ;
+- console_users : identité Google ; les memberships portent les rôles de site et l’organisation
+  active, appliqués par la matrice RBAC serveur versionnée ;
+- organizations, organization_memberships : affiliations locales client/MSP, distinctes des claims
+  Google et sans prétendre qualifier juridiquement une entreprise ;
+- msp_mandates, msp_mandate_assignments : délégation coarse au niveau site ou projet, avec fenêtre
+  temporelle, révocation et affectation individuelle obligatoire ; aucun outil, chemin, connecteur,
+  modèle ou budget n’est évalué ici (G2-005) ;
 - console_sessions : token opaque hashé, CSRF, expiration et site actif sélectionné ;
 - sites, projects, site_memberships : frontière technique site/projet ;
 - console_setup : état global de l’installation ;
@@ -359,16 +366,21 @@ L’adapter reste le seul point de couplage au protocole.
 ### 8.2 Conséquence B2B
 
 Les ressources métier portent désormais un site, éventuellement un projet, un owner et un auteur.
-Un requester ne lit et ne modifie que ses ressources ; un operator garde la visibilité de site et
-ne transfère que ses propres ressources ; admin peut transférer une ressource vers un owner
-`admin/operator/requester`. Le transfert thread est atomique avec runs et artefacts, l'audit est
-append-only, et les caches UI changent de namespace par utilisateur/site. La P-E2E navigateur, la
-revue Gate et l'autorité `installation_admin` restent à livrer.
+Un requester client ne lit et ne modifie que ses ressources ; un operator MSP doit cumuler RBAC,
+affiliation MSP, mandat actif et affectation individuelle ; un approver reste client-scoped.
+Le transfert thread est atomique avec runs et artefacts, l'audit append-only snapshotte les deux
+organisations et le mandat, et les caches UI changent de namespace par utilisateur/site/contexte.
+La P-E2E navigateur, la revue Gate, la sélection interactive de mandats multiples et l'autorité
+`installation_admin` restent à livrer. Une révocation ferme les nouvelles requêtes et les flux
+long-lived, mais le runner Hermes d'un run déjà lancé n'est pas encore aborté ; le filtrage initial
+des capacités UI est livré mais non encore prouvé en navigateur, et le provisioning initial MSP
+reste bootstrap-only.
 
 Le `run_events` actuel reste un ledger technique, distinct du ledger d'audit :
 
-- l'audit append-only existe séparément, mais son attribution complète dépend encore du moteur de
-  policy et du RBAC ;
+- l'audit append-only existe séparément, avec enveloppes historiques v1 et nouvelles enveloppes v2
+  snapshotant organisation cliente, organisation opératrice et mandat ; les policies détaillées
+  restent G2-005 ;
 - aucun export expurgé accepté ni rétention par policy ;
 
 Ajouter davantage d’utilisateurs sans modèle d’autorisation élargirait le risque. Le RBAC et
@@ -405,7 +417,7 @@ Donc :
 La politique de sécurité officielle Hermes confirme que l’isolation OS est la frontière réelle et
 que les heuristiques in-process, dont l’approbation, ne constituent pas un confinement.
 
-### 9.3 Authentification livrée, autorisation absente
+### 9.3 Authentification livrée, autorisation locale implémentée
 
 Livré :
 
@@ -416,13 +428,14 @@ Livré :
 - cookies HttpOnly/Secure sous HTTPS et CSRF sur les mutations ;
 - rate limit mémoire sur les tentatives.
 
-Limites :
+Limites d’authentification et de gouvernance :
 
 - Google uniquement ;
 - allowlist configurée en environnement ;
-- aucun rôle ni périmètre ;
+- aucun OIDC générique, SAML ou SCIM : G2-006 reste proposé ;
+- P-E2E navigateur, P-SEC partenaire et revue Gate non exécutées ;
 - rate limit local au process ;
-- pas de MFA policy, SAML, SCIM ni conditional access géré par la Console ;
+- pas de MFA policy ni de conditional access géré par la Console ;
 - aucun E2E OIDC réel. Un test de tamper a flaké une fois puis les reruns isolé et global ont passé.
 
 ### 9.4 SSH

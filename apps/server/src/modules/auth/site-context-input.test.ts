@@ -12,6 +12,10 @@ const siteContext = {
   siteId: "paris",
   userId: "usr",
   role: "operator" as const,
+  actorOrganizationId: "org_msp",
+  clientOrganizationId: "org_client_paris",
+  mandateId: "mandate_paris",
+  mandateProjectId: null,
   correlationId: "req",
 };
 

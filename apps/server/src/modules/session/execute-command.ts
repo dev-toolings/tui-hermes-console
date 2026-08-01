@@ -56,6 +56,9 @@ export async function executeSessionCommand(input: {
   const [thread] = await db.select().from(threads).where(and(
     eq(threads.siteId, input.context.siteId),
     eq(threads.id, input.threadId),
+    input.context.mandateProjectId
+      ? eq(threads.projectId, input.context.mandateProjectId)
+      : undefined,
     input.context.role === "requester"
       ? eq(threads.ownerUserId, input.context.userId)
       : undefined,
@@ -155,7 +158,13 @@ export async function executeSessionCommand(input: {
       await db
         .update(threads)
         .set({ model: command.model, updatedAt: now })
-        .where(and(eq(threads.siteId, input.context.siteId), eq(threads.id, input.threadId)));
+        .where(and(
+          eq(threads.siteId, input.context.siteId),
+          eq(threads.id, input.threadId),
+          input.context.mandateProjectId
+            ? eq(threads.projectId, input.context.mandateProjectId)
+            : undefined,
+        ));
       if (thread.agentId) {
         await updateAgent(input.context, thread.agentId, { model: command.model });
       }
@@ -215,7 +224,13 @@ export async function applyAgentToThread(context: SiteRequestContext, threadId: 
       source: "mission",
       updatedAt: now,
     })
-    .where(and(eq(threads.siteId, context.siteId), eq(threads.id, threadId)));
+    .where(and(
+      eq(threads.siteId, context.siteId),
+      eq(threads.id, threadId),
+      context.mandateProjectId
+        ? eq(threads.projectId, context.mandateProjectId)
+        : undefined,
+    ));
 }
 
 async function syncThreadFromAgent(context: SiteRequestContext, threadId: string, agent: AgentDto) {
@@ -254,6 +269,9 @@ export async function getSessionConnectorGaps(context: SiteRequestContext, threa
   const [thread] = await db.select().from(threads).where(and(
     eq(threads.siteId, context.siteId),
     eq(threads.id, threadId),
+    context.mandateProjectId
+      ? eq(threads.projectId, context.mandateProjectId)
+      : undefined,
     context.role === "requester" ? eq(threads.ownerUserId, context.userId) : undefined,
   )).limit(1);
   if (!thread) return [];

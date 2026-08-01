@@ -51,6 +51,9 @@ export async function transferResourceOwnership(
       }).from(agents).where(and(
         eq(agents.siteId, context.siteId),
         eq(agents.id, resourceId),
+        context.mandateProjectId
+          ? eq(agents.projectId, context.mandateProjectId)
+          : undefined,
       )).for("update");
     } else if (resourceType === "connector") {
       [resource] = await tx.select({
@@ -62,6 +65,9 @@ export async function transferResourceOwnership(
       }).from(connectors).where(and(
         eq(connectors.siteId, context.siteId),
         eq(connectors.id, resourceId),
+        context.mandateProjectId
+          ? eq(connectors.projectId, context.mandateProjectId)
+          : undefined,
       )).for("update");
     } else {
       [resource] = await tx.select({
@@ -73,6 +79,9 @@ export async function transferResourceOwnership(
       }).from(threads).where(and(
         eq(threads.siteId, context.siteId),
         eq(threads.id, resourceId),
+        context.mandateProjectId
+          ? eq(threads.projectId, context.mandateProjectId)
+          : undefined,
       )).for("update");
     }
     if (!resource) return null;
@@ -88,14 +97,22 @@ export async function transferResourceOwnership(
     }
 
     const [actorMembership] = await tx
-      .select({ role: siteMemberships.role })
+      .select({
+        role: siteMemberships.role,
+        organizationId: siteMemberships.organizationId,
+      })
       .from(siteMemberships)
       .where(and(
         eq(siteMemberships.siteId, context.siteId),
         eq(siteMemberships.userId, context.userId),
+        eq(siteMemberships.organizationId, context.actorOrganizationId),
       ))
       .for("update");
-    if (!actorMembership || actorMembership.role !== context.role) return null;
+    if (
+      !actorMembership ||
+      actorMembership.role !== context.role ||
+      actorMembership.organizationId !== context.actorOrganizationId
+    ) return null;
 
     const [targetOwner] = await tx
       .select({ userId: siteMemberships.userId, role: siteMemberships.role })
@@ -150,6 +167,9 @@ export async function transferResourceOwnership(
       targetSiteId: context.siteId,
       actorUserId: context.userId,
       actorRole: context.role,
+      actorOrganizationId: context.actorOrganizationId,
+      clientOrganizationId: context.clientOrganizationId,
+      mandateId: context.mandateId,
       action: "ownership.transfer",
       resourceType,
       resourceId: resource.id,

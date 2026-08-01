@@ -4,14 +4,25 @@ import { ChevronRightIcon, SearchIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { useRouter } from "@/lib/router";
-import { ALL_NAV } from "./nav-config";
+import { ALL_NAV, navForCapabilities } from "./nav-config";
 
-export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function CommandPalette({
+  open,
+  onClose,
+  capabilities,
+}: {
+  open: boolean;
+  onClose: () => void;
+  capabilities: ReadonlySet<string>;
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const items = useMemo(() => ALL_NAV, []);
+  const items = useMemo(
+    () => navForCapabilities(ALL_NAV, capabilities),
+    [capabilities],
+  );
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("fr");
     return normalized

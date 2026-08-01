@@ -6,6 +6,8 @@ const paris = {
   name: "Paris",
   slug: "paris",
   role: "operator" as const,
+  organizationId: "org_msp",
+  clientOrganizationId: "org_client_paris",
 };
 
 describe("auth site context", () => {
@@ -15,6 +17,7 @@ describe("auth site context", () => {
       memberships: [paris],
       selectionRequired: false,
       membershipRequired: false,
+      capabilities: ["run.read"],
     };
 
     expect(siteAccessBlock(context)).toBeNull();
@@ -27,6 +30,7 @@ describe("auth site context", () => {
         memberships: [],
         selectionRequired: false,
         membershipRequired: true,
+        capabilities: [],
       }),
     ).toBe("membership");
     expect(
@@ -35,6 +39,7 @@ describe("auth site context", () => {
         memberships: [paris, { ...paris, id: "lyon", slug: "lyon", name: "Lyon" }],
         selectionRequired: true,
         membershipRequired: false,
+        capabilities: [],
       }),
     ).toBe("selection");
   });

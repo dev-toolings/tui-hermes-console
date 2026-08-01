@@ -21,6 +21,9 @@ const sessions = {
   requester: { userId: "usr_requester", token: "token-requester", csrf: "csrf-requester" },
   approver: { userId: "usr_approver", token: "token-approver", csrf: "csrf-approver" },
   auditor: { userId: "usr_auditor", token: "token-auditor", csrf: "csrf-auditor" },
+  target: { userId: "usr_target", token: "token-target", csrf: "csrf-target" },
+  unassigned: { userId: "usr_unassigned", token: "token-unassigned", csrf: "csrf-unassigned" },
+  projectOperator: { userId: "usr_project_operator", token: "token-project-operator", csrf: "csrf-project-operator" },
 } as const;
 
 type Role = keyof typeof sessions;
@@ -63,7 +66,7 @@ function sqlString(value: string) {
 }
 
 function applyMigrations() {
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 21)) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= 22)) {
     psql(readFileSync(join(import.meta.dir, `${entry.tag}.sql`), "utf8"));
   }
 }
@@ -189,8 +192,17 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
     const { encryptSecret } = await import("@/lib/crypto");
     const encryptedRuntimeToken = encryptSecret("runtime-token");
     psql(`
-      INSERT INTO sites (id, name, slug) VALUES
-        ('paris', 'Paris', 'paris'), ('lyon', 'Lyon', 'lyon');
+      INSERT INTO organizations (id, name, slug, kind) VALUES
+        ('org_client_paris', 'Paris client', 'client-paris', 'client'),
+        ('org_client_lyon', 'Lyon client', 'client-lyon', 'client'),
+        ('org_msp_default', 'Default MSP', 'msp-default', 'msp'),
+        ('org_msp_neighbor', 'Neighbor MSP', 'msp-neighbor', 'msp');
+      INSERT INTO sites (id, client_organization_id, name, slug) VALUES
+        ('paris', 'org_client_paris', 'Paris', 'paris'),
+        ('lyon', 'org_client_lyon', 'Lyon', 'lyon');
+      INSERT INTO projects (id, site_id, name, slug) VALUES
+        ('prj_paris_a', 'paris', 'Paris A', 'paris-a'),
+        ('prj_paris_b', 'paris', 'Paris B', 'paris-b');
       INSERT INTO console_users
         (id, email, google_subject, ai_disclosure_version, ai_disclosure_accepted_at) VALUES
         ('usr_admin', 'admin@example.com', 'sub-admin', '2026-08-01.v2', now()),
@@ -199,15 +211,46 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
         ('usr_approver', 'approver@example.com', 'sub-approver', '2026-08-01.v2', now()),
         ('usr_auditor', 'auditor@example.com', 'sub-auditor', '2026-08-01.v2', now()),
         ('usr_target', 'target@example.com', 'sub-target', '2026-08-01.v2', now()),
+        ('usr_unassigned', 'unassigned@example.com', 'sub-unassigned', '2026-08-01.v2', now()),
+        ('usr_project_operator', 'projectOperator@example.com', 'sub-project-operator', '2026-08-01.v2', now()),
         ('usr_lyon', 'lyon@example.com', 'sub-lyon', '2026-08-01.v2', now());
-      INSERT INTO site_memberships (user_id, site_id, role) VALUES
-        ('usr_admin', 'paris', 'admin'),
-        ('usr_operator', 'paris', 'operator'),
-        ('usr_requester', 'paris', 'requester'),
-        ('usr_approver', 'paris', 'approver'),
-        ('usr_auditor', 'paris', 'auditor'),
-        ('usr_target', 'paris', 'operator'),
-        ('usr_lyon', 'lyon', 'admin');
+      INSERT INTO organization_memberships (user_id, organization_id) VALUES
+        ('usr_admin', 'org_client_paris'),
+        ('usr_operator', 'org_msp_default'),
+        ('usr_operator', 'org_msp_neighbor'),
+        ('usr_requester', 'org_client_paris'),
+        ('usr_approver', 'org_client_paris'),
+        ('usr_auditor', 'org_client_paris'),
+        ('usr_target', 'org_msp_default'),
+        ('usr_unassigned', 'org_msp_default'),
+        ('usr_project_operator', 'org_msp_default'),
+        ('usr_lyon', 'org_client_lyon');
+      INSERT INTO site_memberships (user_id, site_id, organization_id, role) VALUES
+        ('usr_admin', 'paris', 'org_client_paris', 'admin'),
+        ('usr_operator', 'paris', 'org_msp_default', 'operator'),
+        ('usr_requester', 'paris', 'org_client_paris', 'requester'),
+        ('usr_approver', 'paris', 'org_client_paris', 'approver'),
+        ('usr_auditor', 'paris', 'org_client_paris', 'auditor'),
+        ('usr_target', 'paris', 'org_msp_default', 'operator'),
+        ('usr_unassigned', 'paris', 'org_msp_default', 'operator'),
+        ('usr_project_operator', 'paris', 'org_msp_default', 'operator'),
+        ('usr_lyon', 'lyon', 'org_client_lyon', 'admin');
+      INSERT INTO msp_mandates
+        (id, operator_organization_id, client_organization_id, site_id)
+      VALUES ('mandate_paris', 'org_msp_default', 'org_client_paris', 'paris');
+      INSERT INTO msp_mandates
+        (id, operator_organization_id, client_organization_id, site_id)
+      VALUES ('mandate_neighbor', 'org_msp_neighbor', 'org_client_paris', 'paris');
+      INSERT INTO msp_mandates
+        (id, operator_organization_id, client_organization_id, site_id, project_id)
+      VALUES ('mandate_project_a', 'org_msp_default', 'org_client_paris', 'paris', 'prj_paris_a');
+      INSERT INTO msp_mandate_assignments (mandate_id, user_id, organization_id) VALUES
+        ('mandate_paris', 'usr_operator', 'org_msp_default'),
+        ('mandate_paris', 'usr_target', 'org_msp_default');
+      INSERT INTO msp_mandate_assignments (mandate_id, user_id, organization_id)
+      VALUES ('mandate_neighbor', 'usr_operator', 'org_msp_neighbor');
+      INSERT INTO msp_mandate_assignments (mandate_id, user_id, organization_id)
+      VALUES ('mandate_project_a', 'usr_project_operator', 'org_msp_default');
       INSERT INTO console_sessions
         (token_hash, user_id, site_id, csrf_token, expires_at) VALUES
         ${Object.values(sessions)
@@ -232,11 +275,19 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
       INSERT INTO agents (id, site_id, owner_user_id, author_user_id, name, slug, instructions) VALUES
         ('agt_paris', 'paris', 'usr_admin', 'usr_admin', 'Paris agent', 'paris-agent', 'Paris'),
         ('agt_lyon', 'lyon', 'usr_lyon', 'usr_lyon', 'Lyon agent', 'lyon-agent', 'Lyon');
+      INSERT INTO agents
+        (id, site_id, project_id, owner_user_id, author_user_id, name, slug, instructions) VALUES
+        ('agt_project_a', 'paris', 'prj_paris_a', 'usr_project_operator', 'usr_project_operator', 'Project A agent', 'project-a-agent', 'A'),
+        ('agt_project_b', 'paris', 'prj_paris_b', 'usr_admin', 'usr_admin', 'Project B agent', 'project-b-agent', 'B');
       INSERT INTO threads
         (id, site_id, owner_user_id, author_user_id, title, agent_id, agent_name, instructions, hermes_conversation) VALUES
         ('thr_shared', 'paris', 'usr_admin', 'usr_admin', 'Shared', 'agt_paris', 'Paris agent', 'Paris', 'console:shared'),
         ('thr_operator', 'paris', 'usr_operator', 'usr_operator', 'Operator run', 'agt_paris', 'Paris agent', 'Paris', 'console:operator'),
         ('thr_approval', 'paris', 'usr_admin', 'usr_approver', 'Approval run', 'agt_paris', 'Paris agent', 'Paris', 'console:approval');
+      INSERT INTO threads
+        (id, site_id, project_id, owner_user_id, author_user_id, title, agent_id, agent_name, instructions, hermes_conversation) VALUES
+        ('thr_project_a', 'paris', 'prj_paris_a', 'usr_project_operator', 'usr_project_operator', 'Project A', 'agt_project_a', 'Project A agent', 'A', 'console:project-a'),
+        ('thr_project_b', 'paris', 'prj_paris_b', 'usr_admin', 'usr_admin', 'Project B', 'agt_project_b', 'Project B agent', 'B', 'console:project-b');
       INSERT INTO runs
         (id, site_id, owner_user_id, author_user_id, thread_id, input, status, hermes_response_id) VALUES
         ('run_operator', 'paris', 'usr_operator', 'usr_operator', 'thr_operator', 'Cancel me', 'running', NULL),
@@ -484,6 +535,15 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
       globalThis.fetch = originalFetch;
     }
     expect(runtimeCalls.some((url) => url.endsWith("/v1/runs/hermes-approval/approval"))).toBe(true);
+    expect(
+      psql(`SELECT actor_organization_id || ':' || client_organization_id || ':' ||
+          coalesce(mandate_id, 'none') || ':' || envelope_version || ':' || reason_code
+        FROM audit_ledger_entries
+        WHERE action = 'run.approve' AND resource_id = 'run_approval'
+        ORDER BY sequence DESC LIMIT 1;`),
+    ).toBe(
+      "org_client_paris:org_client_paris:none:2:RUN_APPROVAL_ALLOWED",
+    );
 
     const cancelled = await appFetch(
       authenticatedRequest("operator", "/api/runs/run_operator/cancel", {
@@ -502,6 +562,53 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
     expect(new Set(auditBody.entries.map(({ targetSiteId }) => targetSiteId))).toEqual(
       new Set(["paris"]),
     );
+  });
+
+  test("a multi-organization user acts only through the organization selected by the site membership", async () => {
+    const response = await appFetch(authenticatedRequest("operator", "/api/auth"));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      siteContext: {
+        authorization: {
+          actorOrganizationId: string;
+          clientOrganizationId: string;
+          mandateId: string | null;
+        };
+        capabilities: string[];
+      };
+    };
+    expect(body.siteContext.authorization).toEqual({
+      actorOrganizationId: "org_msp_default",
+      clientOrganizationId: "org_client_paris",
+      mandateId: "mandate_paris",
+      projectId: null,
+    });
+    expect(body.siteContext.capabilities).toContain("thread.create");
+    expect(body.siteContext.authorization.mandateId).not.toBe("mandate_neighbor");
+  });
+
+  test("a project mandate never expands into site-wide resource visibility", async () => {
+    const agents = await appFetch(
+      authenticatedRequest("projectOperator", "/api/agents"),
+    );
+    expect(agents.status).toBe(200);
+    const agentBody = (await agents.json()) as { agents: Array<{ id: string }> };
+    expect(agentBody.agents.map((agent) => agent.id)).toEqual(["agt_project_a"]);
+
+    const threads = await appFetch(
+      authenticatedRequest("projectOperator", "/api/threads"),
+    );
+    expect(threads.status).toBe(200);
+    const threadBody = (await threads.json()) as { threads: Array<{ id: string }> };
+    expect(threadBody.threads.map((thread) => thread.id)).toEqual(["thr_project_a"]);
+
+    const foreign = await appFetch(
+      authenticatedRequest("projectOperator", "/api/threads/thr_project_b"),
+    );
+    expect(foreign.status).toBe(404);
+    expect(await payload(foreign)).toEqual({
+      error: { code: "THREAD_NOT_FOUND", message: "Conversation introuvable." },
+    });
   });
 
   test("the same session reloads an admin-assigned role and ignores forged role headers", async () => {
@@ -571,5 +678,122 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
       });
     }
     expect(businessSnapshot()).toBe(before);
+  });
+
+  test("client admins create, assign, and revoke an MSP mandate through the site API", async () => {
+    const created = await appFetch(
+      authenticatedRequest("admin", "/api/site/mandates", {
+        method: "POST",
+        body: { operatorOrganizationId: "org_msp_default" },
+      }),
+    );
+    expect(created.status).toBe(201);
+    const createdBody = await payload(created) as { mandate: { id: string } };
+    const mandateId = createdBody.mandate.id;
+    expect(mandateId).toStartWith("mandate_");
+
+    const assigned = await appFetch(
+      authenticatedRequest("admin", `/api/site/mandates/${mandateId}/assignments`, {
+        method: "POST",
+        body: { userId: "usr_target" },
+      }),
+    );
+    expect(assigned.status).toBe(201);
+
+    const revokedAssignment = await appFetch(
+      authenticatedRequest("admin", `/api/site/mandates/${mandateId}/assignments/usr_target`, {
+        method: "DELETE",
+      }),
+    );
+    expect(revokedAssignment.status).toBe(200);
+
+    const revoked = await appFetch(
+      authenticatedRequest("admin", `/api/site/mandates/${mandateId}`, {
+        method: "DELETE",
+      }),
+    );
+    expect(revoked.status).toBe(200);
+    expect(
+      psql(`SELECT count(*) FROM audit_ledger_entries
+        WHERE action IN ('msp_mandate.create', 'msp_mandate.assignment.add',
+                         'msp_mandate.assignment.revoke', 'msp_mandate.revoke')
+          AND resource_id = '${mandateId}';`),
+    ).toBe("4");
+  });
+
+  test("a revoked MSP assignment invalidates the session before returning and audits the denial", async () => {
+    const before = await appFetch(authenticatedRequest("target", "/api/threads"));
+    expect(before.status).toBe(200);
+    const stream = await appFetch(
+      authenticatedRequest("target", "/api/threads/thr_shared/events"),
+    );
+    expect(stream.status).toBe(200);
+    const reader = stream.body!.getReader();
+
+    psql(`UPDATE msp_mandate_assignments
+      SET revoked_at = now()
+      WHERE mandate_id = 'mandate_paris' AND user_id = 'usr_target';`);
+
+    const closesAfterRevocation = async () => {
+      for (;;) {
+        const chunk = await reader.read();
+        if (chunk.done) return true;
+      }
+    };
+    expect(
+      await Promise.race([
+        closesAfterRevocation(),
+        Bun.sleep(5_000).then(() => false),
+      ]),
+    ).toBe(true);
+
+    const denied = await appFetch(
+      authenticatedRequest("target", "/api/threads/thr_shared"),
+    );
+    expect(denied.status).toBe(403);
+    expect(await payload(denied)).toEqual({
+      error: {
+        code: "MSP_MANDATE_REQUIRED",
+        message: "Aucun mandat MSP actif n’autorise cet accès.",
+      },
+    });
+    expect(
+      psql(`SELECT count(*) FROM console_sessions
+        WHERE token_hash = '${createHash("sha256").update(sessions.target.token).digest("hex")}';`),
+    ).toBe("0");
+    expect(
+      psql(`SELECT actor_organization_id || ':' || client_organization_id || ':' ||
+          coalesce(mandate_id, 'none') || ':' || decision || ':' || reason_code
+        FROM audit_ledger_entries
+        WHERE actor_user_id = 'usr_target' AND action = 'site.access'
+        ORDER BY sequence DESC LIMIT 1;`),
+    ).toBe(
+      "org_msp_default:org_client_paris:none:denied:MSP_MANDATE_REQUIRED",
+    );
+
+    const after = await appFetch(
+      authenticatedRequest("target", "/api/threads/thr_shared"),
+    );
+    expect(after.status).toBe(401);
+  });
+
+  test("an MSP affiliation without an individual assignment grants no site access", async () => {
+    const denied = await appFetch(
+      authenticatedRequest("unassigned", "/api/threads/thr_shared"),
+    );
+    expect(denied.status).toBe(403);
+    expect(await payload(denied)).toMatchObject({
+      error: { code: "MSP_MANDATE_REQUIRED" },
+    });
+    expect(
+      psql(`SELECT count(*) FROM audit_ledger_entries
+        WHERE actor_user_id = 'usr_unassigned'
+          AND decision = 'denied'
+          AND reason_code = 'MSP_MANDATE_REQUIRED';`),
+    ).toBe("1");
+    expect(
+      psql(`SELECT count(*) FROM console_sessions
+        WHERE token_hash = '${createHash("sha256").update(sessions.unassigned.token).digest("hex")}';`),
+    ).toBe("0");
   });
 });

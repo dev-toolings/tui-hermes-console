@@ -145,8 +145,13 @@ describeWithDocker("explicit resource ownership through Hono and PostgreSQL", ()
     process.env.GOOGLE_ALLOWED_EMAILS = "admin@example.com,operator@example.com,alice@example.com,bob@example.com";
 
     psql(`
-      INSERT INTO sites (id, name, slug) VALUES
-        ('paris', 'Paris', 'paris'), ('lyon', 'Lyon', 'lyon');
+      INSERT INTO organizations (id, name, slug, kind) VALUES
+        ('org_client_paris', 'Paris client', 'client-paris', 'client'),
+        ('org_client_lyon', 'Lyon client', 'client-lyon', 'client'),
+        ('org_msp_default', 'Default MSP', 'default-msp', 'msp');
+      INSERT INTO sites (id, client_organization_id, name, slug) VALUES
+        ('paris', 'org_client_paris', 'Paris', 'paris'),
+        ('lyon', 'org_client_lyon', 'Lyon', 'lyon');
       INSERT INTO console_users
         (id, email, google_subject, ai_disclosure_version, ai_disclosure_accepted_at) VALUES
         ('usr_admin', 'admin@example.com', 'sub-admin', '2026-08-01.v2', now()),
@@ -157,15 +162,29 @@ describeWithDocker("explicit resource ownership through Hono and PostgreSQL", ()
         ('usr_race', 'race@example.com', 'sub-race', '2026-08-01.v2', now()),
         ('usr_auditor', 'auditor@example.com', 'sub-auditor', '2026-08-01.v2', now()),
         ('usr_lyon', 'lyon@example.com', 'sub-lyon', '2026-08-01.v2', now());
-      INSERT INTO site_memberships (user_id, site_id, role) VALUES
-        ('usr_admin', 'paris', 'admin'),
-        ('usr_operator', 'paris', 'operator'),
-        ('usr_alice', 'paris', 'requester'),
-        ('usr_bob', 'paris', 'requester'),
-        ('usr_author', 'paris', 'requester'),
-        ('usr_race', 'paris', 'requester'),
-        ('usr_auditor', 'paris', 'auditor'),
-        ('usr_lyon', 'lyon', 'admin');
+      INSERT INTO organization_memberships (user_id, organization_id) VALUES
+        ('usr_admin', 'org_client_paris'),
+        ('usr_operator', 'org_msp_default'),
+        ('usr_alice', 'org_client_paris'),
+        ('usr_bob', 'org_client_paris'),
+        ('usr_author', 'org_client_paris'),
+        ('usr_race', 'org_client_paris'),
+        ('usr_auditor', 'org_client_paris'),
+        ('usr_lyon', 'org_client_lyon');
+      INSERT INTO site_memberships (user_id, site_id, organization_id, role) VALUES
+        ('usr_admin', 'paris', 'org_client_paris', 'admin'),
+        ('usr_operator', 'paris', 'org_msp_default', 'operator'),
+        ('usr_alice', 'paris', 'org_client_paris', 'requester'),
+        ('usr_bob', 'paris', 'org_client_paris', 'requester'),
+        ('usr_author', 'paris', 'org_client_paris', 'requester'),
+        ('usr_race', 'paris', 'org_client_paris', 'requester'),
+        ('usr_auditor', 'paris', 'org_client_paris', 'auditor'),
+        ('usr_lyon', 'lyon', 'org_client_lyon', 'admin');
+      INSERT INTO msp_mandates
+        (id, operator_organization_id, client_organization_id, site_id)
+      VALUES ('mandate_paris', 'org_msp_default', 'org_client_paris', 'paris');
+      INSERT INTO msp_mandate_assignments (mandate_id, user_id, organization_id)
+        VALUES ('mandate_paris', 'usr_operator', 'org_msp_default');
       INSERT INTO console_sessions
         (token_hash, user_id, site_id, csrf_token, expires_at) VALUES
         ${Object.values(sessions).map(({ userId, token, csrf }) =>
@@ -315,8 +334,21 @@ describeWithDocker("explicit resource ownership through Hono and PostgreSQL", ()
 
   test("runtime output artifacts keep ownership creation history", async () => {
     const outputDir = runOutputDir("run_bob");
+    const operatorOutputDir = runOutputDir("run_operator_output");
     await mkdir(outputDir, { recursive: true });
+    await mkdir(operatorOutputDir, { recursive: true });
     await writeFile(`${outputDir}/generated.txt`, "generated output");
+    psql(`
+      INSERT INTO threads
+        (id, site_id, owner_user_id, author_user_id, title, agent_id, agent_name, instructions, hermes_conversation)
+      VALUES
+        ('thr_operator_output', 'paris', 'usr_bob', 'usr_operator', 'Operator output', 'agt_bob', 'Bob agent', 'Operator output', 'console:operator-output');
+      INSERT INTO runs
+        (id, site_id, owner_user_id, author_user_id, thread_id, input, status)
+      VALUES
+        ('run_operator_output', 'paris', 'usr_bob', 'usr_operator', 'thr_operator_output', 'Operator output', 'completed');
+    `);
+    await writeFile(`${operatorOutputDir}/operator-generated.txt`, "operator generated output");
     try {
       const created = await scanOutputArtifacts({ siteId: "paris" }, "run_bob");
       expect(created).toHaveLength(1);
@@ -327,6 +359,16 @@ describeWithDocker("explicit resource ownership through Hono and PostgreSQL", ()
           AND after_state->>'authorUserId' = 'usr_author'
           AND actor_user_id = 'usr_author'
           AND reason_code = 'RESOURCE_CREATED';`)).toBe("1");
+
+      const operatorCreated = await scanOutputArtifacts({ siteId: "paris" }, "run_operator_output");
+      expect(operatorCreated).toHaveLength(1);
+      expect(psql(`SELECT actor_organization_id || ':' || client_organization_id || ':' || mandate_id
+        FROM audit_ledger_entries
+        WHERE action = 'ownership.create'
+          AND resource_type = 'artifact'
+          AND resource_id = '${operatorCreated[0]!.id}';`)).toBe(
+        "org_msp_default:org_client_paris:mandate_paris",
+      );
 
       // Output delivery is asynchronous: the immutable author may have been
       // revoked before Hermes writes its files. The active owner remains the
@@ -342,6 +384,7 @@ describeWithDocker("explicit resource ownership through Hono and PostgreSQL", ()
           AND reason_code = 'RESOURCE_OUTPUT_DELIVERED_AFTER_AUTHOR_REVOCATION';`)).toBe("1");
     } finally {
       await rm(outputDir, { recursive: true, force: true });
+      await rm(operatorOutputDir, { recursive: true, force: true });
     }
   });
 
@@ -349,8 +392,10 @@ describeWithDocker("explicit resource ownership through Hono and PostgreSQL", ()
     psql(`
       INSERT INTO console_users (id, email, google_subject)
         VALUES ('usr_artifact_race', 'artifact-race@example.com', 'sub-artifact-race');
-      INSERT INTO site_memberships (user_id, site_id, role)
-        VALUES ('usr_artifact_race', 'paris', 'requester');
+      INSERT INTO organization_memberships (user_id, organization_id)
+        VALUES ('usr_artifact_race', 'org_client_paris');
+      INSERT INTO site_memberships (user_id, site_id, organization_id, role)
+        VALUES ('usr_artifact_race', 'paris', 'org_client_paris', 'requester');
       INSERT INTO threads
         (id, site_id, owner_user_id, author_user_id, title, agent_id, agent_name, instructions, hermes_conversation)
       VALUES

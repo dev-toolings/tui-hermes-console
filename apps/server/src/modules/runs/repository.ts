@@ -36,7 +36,11 @@ import {
   pullRunOutputs,
   RemoteSyncError,
 } from "@/modules/artifacts/remote-sync";
-import type { SiteRequestContext, SiteScope } from "@/modules/auth/service";
+import {
+  isSiteRequestContextActive,
+  type SiteRequestContext,
+  type SiteScope,
+} from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
 import { auditOwnershipCreation } from "@/modules/ownership/audit";
 
@@ -54,6 +58,10 @@ const TERMINAL_STATUSES: ProductRunStatus[] = [
 
 function isRequesterScope(scope: SiteScope): scope is SiteRequestContext {
   return "role" in scope && scope.role === "requester" && "userId" in scope;
+}
+
+function isSiteRequestScope(scope: SiteScope): scope is SiteRequestContext {
+  return "mandateProjectId" in scope;
 }
 
 export class ProductRepositoryError extends Error {
@@ -93,6 +101,19 @@ export async function createThreadWithRun(context: SiteRequestContext, input: {
   }
 
   const db = getDatabase();
+  const projectId = context.mandateProjectId ?? input.projectId ?? null;
+  if (
+    context.mandateProjectId &&
+    input.projectId &&
+    input.projectId !== context.mandateProjectId
+  ) {
+    await auditScopedMiss(context, {
+      action: "thread.create",
+      resourceType: "project",
+      resourceId: input.projectId,
+    });
+    throw new ProductRepositoryError("THREAD_NOT_FOUND", "Projet introuvable.");
+  }
   const threadId = makeId("thr");
   const runId = makeId("run");
   const messageId = makeId("msg");
@@ -104,7 +125,7 @@ export async function createThreadWithRun(context: SiteRequestContext, input: {
       siteId: context.siteId,
       ownerUserId: context.userId,
       authorUserId: context.userId,
-      projectId: input.projectId ?? null,
+      projectId,
       title: makeTitle(input.message),
       source: input.source,
       agentId: input.agentId ?? null,
@@ -122,7 +143,7 @@ export async function createThreadWithRun(context: SiteRequestContext, input: {
       siteId: context.siteId,
       ownerUserId: context.userId,
       authorUserId: context.userId,
-      projectId: input.projectId ?? null,
+      projectId,
       threadId,
       input: input.message,
       status: "pending",
@@ -139,14 +160,14 @@ export async function createThreadWithRun(context: SiteRequestContext, input: {
     await auditOwnershipCreation(tx, context, {
       resourceType: "thread",
       resourceId: threadId,
-      projectId: input.projectId ?? null,
+      projectId,
       ownerUserId: context.userId,
       authorUserId: context.userId,
     });
     await auditOwnershipCreation(tx, context, {
       resourceType: "run",
       resourceId: runId,
-      projectId: input.projectId ?? null,
+      projectId,
       ownerUserId: context.userId,
       authorUserId: context.userId,
     });
@@ -177,6 +198,9 @@ export async function createRunForThread(context: SiteRequestContext, threadId: 
       .where(and(
         eq(threads.siteId, context.siteId),
         eq(threads.id, threadId),
+        context.mandateProjectId
+          ? eq(threads.projectId, context.mandateProjectId)
+          : undefined,
         context.role === "requester" ? eq(threads.ownerUserId, context.userId) : undefined,
       ))
       .for("update");
@@ -250,6 +274,9 @@ export async function discardUnstartedRun(scope: SiteScope, runId: string) {
     .where(and(
       eq(runs.siteId, scope.siteId),
       eq(runs.id, runId),
+      isSiteRequestScope(scope) && scope.mandateProjectId
+        ? eq(runs.projectId, scope.mandateProjectId)
+        : undefined,
       isRequesterScope(scope) ? eq(runs.ownerUserId, scope.userId) : undefined,
     ))
     .limit(1);
@@ -326,6 +353,9 @@ export async function getRunActivity(scope: SiteRequestContext, days = 30): Prom
     .where(and(
       eq(runs.siteId, scope.siteId),
       gt(runs.createdAt, since),
+      scope.mandateProjectId
+        ? eq(runs.projectId, scope.mandateProjectId)
+        : undefined,
       scope.role === "requester" ? eq(runs.ownerUserId, scope.userId) : undefined,
     ))
     .orderBy(asc(runs.createdAt));
@@ -795,6 +825,9 @@ export async function getRunCancelTarget(
     .where(and(
       eq(runs.siteId, scope.siteId),
       eq(runs.id, runId),
+      isSiteRequestScope(scope) && scope.mandateProjectId
+        ? eq(runs.projectId, scope.mandateProjectId)
+        : undefined,
       isRequesterScope(scope) ? eq(runs.ownerUserId, scope.userId) : undefined,
     ))
     .limit(1);
@@ -841,6 +874,9 @@ export async function getThreadSnapshot(
     .where(and(
       eq(threads.siteId, context.siteId),
       eq(threads.id, threadId),
+      context.mandateProjectId
+        ? eq(threads.projectId, context.mandateProjectId)
+        : undefined,
       context.role === "requester" ? eq(threads.ownerUserId, context.userId) : undefined,
     ))
     .limit(1);
@@ -960,6 +996,9 @@ export async function listThreadEventsAfter(
     .where(and(
       eq(runs.siteId, scope.siteId),
       eq(runs.threadId, threadId),
+      scope.mandateProjectId
+        ? eq(runs.projectId, scope.mandateProjectId)
+        : undefined,
       scope.role === "requester" ? eq(runs.ownerUserId, scope.userId) : undefined,
       gt(runEvents.id, cursor),
     ))
@@ -976,12 +1015,16 @@ export async function canReadThreadEvents(
   context: SiteRequestContext,
   threadId: string,
 ) {
+  if (!(await isSiteRequestContextActive(context))) return false;
   const [thread] = await getDatabase()
     .select({ id: threads.id })
     .from(threads)
     .where(and(
       eq(threads.siteId, context.siteId),
       eq(threads.id, threadId),
+      context.mandateProjectId
+        ? eq(threads.projectId, context.mandateProjectId)
+        : undefined,
       context.role === "requester" ? eq(threads.ownerUserId, context.userId) : undefined,
     ))
     .limit(1);
@@ -1008,18 +1051,27 @@ export async function listThreads(scope: SiteRequestContext, options?: {
         .from(threads)
         .where(and(
           eq(threads.siteId, scope.siteId),
+          scope.mandateProjectId
+            ? eq(threads.projectId, scope.mandateProjectId)
+            : undefined,
           eq(threads.source, options.source),
           scope.role === "requester" ? eq(threads.ownerUserId, scope.userId) : undefined,
         ))
         .orderBy(desc(threads.updatedAt))
     : db.select().from(threads).where(and(
         eq(threads.siteId, scope.siteId),
+        scope.mandateProjectId
+          ? eq(threads.projectId, scope.mandateProjectId)
+          : undefined,
         scope.role === "requester" ? eq(threads.ownerUserId, scope.userId) : undefined,
       )).orderBy(desc(threads.updatedAt));
   const [threadRows, runRows] = await Promise.all([
     threadQuery,
     db.select().from(runs).where(and(
       eq(runs.siteId, scope.siteId),
+      scope.mandateProjectId
+        ? eq(runs.projectId, scope.mandateProjectId)
+        : undefined,
       scope.role === "requester" ? eq(runs.ownerUserId, scope.userId) : undefined,
     )).orderBy(desc(runs.createdAt)),
   ]);

@@ -11,6 +11,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 - [01-08-2026 — ownership explicite](2026-08-01-gate-2-ownership.md) : preuve migration,
   ownership requester, transfert atomique, SSE/artefacts et rollback ; P-E2E et acceptation
   produit encore ouvertes.
+- [01-08-2026 — séparation MSP/client](2026-08-01-gate-2-msp-client.md) : organisations,
+  mandats site/projet, affectations, audit v2, révocation live et CRUD admin ; P-E2E, P-SEC
+  multi-compte et acceptation Gate encore ouverts.
 - [31-07-2026 — diagnostic SSH/SFTP sur VPS existant](2026-07-31-gate-1-ssh-vps-diagnostic.md) :
   preuve partielle, US-G1-008 `BLOQUÉE`.
 

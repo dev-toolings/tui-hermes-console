@@ -78,7 +78,17 @@ const SR_INSTRUCTIONS = {
     "Entrée pour valider, Échap pour abandonner.",
 };
 
-export function MissionsKanban({ rows }: { rows: MissionRow[] }) {
+export function MissionsKanban({
+  rows,
+  canCreate = true,
+  canCancel = true,
+  canRetry = true,
+}: {
+  rows: MissionRow[];
+  canCreate?: boolean;
+  canCancel?: boolean;
+  canRetry?: boolean;
+}) {
   const router = useRouter();
   /**
    * L'ordre choisi à la souris, comme dans la data-table de l'Aperçu : un
@@ -120,7 +130,7 @@ export function MissionsKanban({ rows }: { rows: MissionRow[] }) {
   /** Voies ouvertes pendant le geste : la voie d'origine, plus les actions légales. */
   function laneOpen(lane: LaneId) {
     if (!activeRow) return true;
-    return laneOf(activeRow.status) === lane || dropAction(activeRow.status, lane) !== null;
+    return laneOf(activeRow.status) === lane || permittedDropAction(activeRow.status, lane, canCancel, canRetry) !== null;
   }
 
   async function apply(action: DropAction, row: MissionRow) {
@@ -166,7 +176,7 @@ export function MissionsKanban({ rows }: { rows: MissionRow[] }) {
       return;
     }
 
-    const action = dropAction(row.status, target);
+    const action = permittedDropAction(row.status, target, canCancel, canRetry);
     if (!action) return;
     // L'annulation coupe une mission en vol : un geste parasite ne doit pas
     // suffire. La relance, elle, n'enlève rien — elle part directement.
@@ -190,10 +200,12 @@ export function MissionsKanban({ rows }: { rows: MissionRow[] }) {
         <p className="mt-1 text-[0.75rem] text-muted-foreground">
           Lancez une mission depuis un agent pour peupler l’historique PostgreSQL.
         </p>
-        <ButtonLink href="/runs/new" variant="primary" className="mt-4 inline-flex">
-          <PlusIcon className="size-4" />
-          Nouvelle mission
-        </ButtonLink>
+        {canCreate ? (
+          <ButtonLink href="/runs/new" variant="primary" className="mt-4 inline-flex">
+            <PlusIcon className="size-4" />
+            Nouvelle mission
+          </ButtonLink>
+        ) : null}
       </div>
     );
   }
@@ -216,8 +228,9 @@ export function MissionsKanban({ rows }: { rows: MissionRow[] }) {
               rows={byLane.get(lane.id)!}
               open={laneOpen(lane.id)}
               dragging={activeRow !== null}
-              dropHint={activeRow ? dropHintFor(activeRow, lane.id) : null}
+              dropHint={activeRow ? dropHintFor(activeRow, lane.id, canCancel, canRetry) : null}
               pendingId={pendingId}
+              canCreate={canCreate}
             />
           ))}
         </div>
@@ -269,10 +282,27 @@ export function MissionsKanban({ rows }: { rows: MissionRow[] }) {
 }
 
 /** Ce que le dépôt ferait, affiché en surimpression quand la voie est visée. */
-function dropHintFor(row: MissionRow, lane: LaneId) {
-  const action = dropAction(row.status, lane);
+function dropHintFor(
+  row: MissionRow,
+  lane: LaneId,
+  canCancel: boolean,
+  canRetry: boolean,
+) {
+  const action = permittedDropAction(row.status, lane, canCancel, canRetry);
   if (!action) return null;
   return action === "cancel" ? "Annuler la mission" : "Relancer la mission";
+}
+
+function permittedDropAction(
+  status: MissionRow["status"],
+  lane: LaneId,
+  canCancel: boolean,
+  canRetry: boolean,
+) {
+  const action = dropAction(status, lane);
+  if (action === "cancel" && !canCancel) return null;
+  if (action === "retry" && !canRetry) return null;
+  return action;
 }
 
 function BoardColumn({
@@ -282,6 +312,7 @@ function BoardColumn({
   dragging,
   dropHint,
   pendingId,
+  canCreate,
 }: {
   lane: Lane;
   rows: MissionRow[];
@@ -289,6 +320,7 @@ function BoardColumn({
   dragging: boolean;
   dropHint: string | null;
   pendingId: string | null;
+  canCreate: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: lane.id,
@@ -321,16 +353,18 @@ function BoardColumn({
           </span>
           <span className="text-[0.75rem] tabular-nums text-muted-foreground">{rows.length}</span>
         </div>
-        <div className="flex items-center gap-1">
-          <ButtonLink
-            href="/runs/new"
-            variant="ghost"
-            className="size-6 rounded-full p-0 text-muted-foreground"
-          >
-            <PlusIcon className="size-3.5" />
-            <span className="sr-only">Nouvelle mission</span>
-          </ButtonLink>
-        </div>
+        {canCreate ? (
+          <div className="flex items-center gap-1">
+            <ButtonLink
+              href="/runs/new"
+              variant="ghost"
+              className="size-6 rounded-full p-0 text-muted-foreground"
+            >
+              <PlusIcon className="size-3.5" />
+              <span className="sr-only">Nouvelle mission</span>
+            </ButtonLink>
+          </div>
+        ) : null}
       </div>
 
       <div className="relative min-h-[200px] flex-1 rounded-lg">

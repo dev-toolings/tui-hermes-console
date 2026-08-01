@@ -24,10 +24,13 @@ import type { AgentDto } from "@console/core/types/api";
 export async function listAgents(context: SiteRequestContext, options?: { includeArchived?: boolean }): Promise<AgentDto[]> {
   const query = getDatabase().select().from(agents);
   const owner = context.role === "requester" ? eq(agents.ownerUserId, context.userId) : undefined;
+  const mandateProject = context.mandateProjectId
+    ? eq(agents.projectId, context.mandateProjectId)
+    : undefined;
   const rows = await (
     options?.includeArchived
-      ? query.where(and(eq(agents.siteId, context.siteId), owner)).orderBy(desc(agents.updatedAt))
-      : query.where(and(eq(agents.siteId, context.siteId), owner, isNull(agents.archivedAt))).orderBy(desc(agents.updatedAt))
+      ? query.where(and(eq(agents.siteId, context.siteId), mandateProject, owner)).orderBy(desc(agents.updatedAt))
+      : query.where(and(eq(agents.siteId, context.siteId), mandateProject, owner, isNull(agents.archivedAt))).orderBy(desc(agents.updatedAt))
   );
 
   return Promise.all(rows.map(toAgentDto));
@@ -37,6 +40,9 @@ export async function getAgent(context: SiteRequestContext, agentId: string): Pr
   const [row] = await getDatabase().select().from(agents).where(and(
     eq(agents.siteId, context.siteId),
     eq(agents.id, agentId),
+    context.mandateProjectId
+      ? eq(agents.projectId, context.mandateProjectId)
+      : undefined,
     context.role === "requester" ? eq(agents.ownerUserId, context.userId) : undefined,
   )).limit(1);
   if (!row) {
@@ -168,6 +174,9 @@ export async function resolveActiveAgentRef(context: SiteRequestContext, target:
           eq(agents.name, normalized),
         ),
         eq(agents.siteId, context.siteId),
+        context.mandateProjectId
+          ? eq(agents.projectId, context.mandateProjectId)
+          : undefined,
         isNull(agents.archivedAt),
       ),
     )
@@ -180,6 +189,9 @@ export async function resolveActiveAgentRef(context: SiteRequestContext, target:
     .from(agents)
     .where(and(
       eq(agents.siteId, context.siteId),
+      context.mandateProjectId
+        ? eq(agents.projectId, context.mandateProjectId)
+        : undefined,
       isNull(agents.archivedAt),
       context.role === "requester" ? eq(agents.ownerUserId, context.userId) : undefined,
     ))

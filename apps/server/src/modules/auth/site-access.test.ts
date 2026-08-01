@@ -5,6 +5,10 @@ const context = {
   siteId: "paris",
   userId: "usr_operator",
   role: "operator" as const,
+  actorOrganizationId: "org_msp",
+  clientOrganizationId: "org_client",
+  mandateId: "mandate_paris",
+  mandateProjectId: null,
   correlationId: "req_123",
 };
 

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
   APPROVAL_CHOICES,
@@ -15,6 +15,7 @@ import { isRunActive, resumeAgentRun } from "./runner";
 import type { SiteRequestContext } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
 import { denySiteAction } from "@/modules/auth/site-authorization";
+import { appendAuditEntry } from "@/modules/audit/service";
 
 const bodySchema = z.object({
   choice: z.enum(APPROVAL_CHOICES),
@@ -83,6 +84,25 @@ export async function respondRunApproval(
   }
 
   const approved = choice !== "deny";
+  await appendAuditEntry({
+    eventId: randomUUID(),
+    actorSiteId: context.siteId,
+    targetSiteId: context.siteId,
+    actorUserId: context.userId,
+    actorRole: context.role,
+    actorOrganizationId: context.actorOrganizationId,
+    clientOrganizationId: context.clientOrganizationId,
+    mandateId: context.mandateId,
+    action: "run.approve",
+    resourceType: "run",
+    resourceId: runId,
+    decision: "allowed",
+    reasonCode: "RUN_APPROVAL_ALLOWED",
+    beforeState: { status: run.status },
+    afterState: { choice, approved },
+    correlationId: context.correlationId,
+    occurredAt: new Date(),
+  });
   const runtime = await dependencies.resolveRuntime();
   await dependencies.respondRemote({
     hermesRunId: run.hermesResponseId,

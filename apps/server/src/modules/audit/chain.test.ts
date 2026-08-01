@@ -19,6 +19,10 @@ function payload(
     targetSiteId: "site-paris",
     actorUserId: "user-1",
     actorRole: "admin",
+    actorOrganizationId: "org-client-paris",
+    clientOrganizationId: "org-client-paris",
+    mandateId: null,
+    envelopeVersion: 2,
     action: "agent.updated",
     resourceType: "agent",
     resourceId: "agt-1",
@@ -42,6 +46,9 @@ describe("audit ledger HMAC chain", () => {
       await expect(
         appendAuditEntry({
           ...payload(1, null),
+          actorOrganizationId: "org-client-paris",
+          clientOrganizationId: "org-client-paris",
+          mandateId: null,
           occurredAt: new Date("2026-08-01T10:00:01.000Z"),
         }),
       ).rejects.toThrow("APP_ENCRYPTION_KEY_MISSING");

@@ -102,6 +102,8 @@ test("resolves zero, one, and multiple memberships without choosing arbitrarily"
     name: "Paris",
     slug: "paris",
     role: "operator" as const,
+    organizationId: "org_msp",
+    clientOrganizationId: "org_client_paris",
   };
   expect(resolveSiteRequirement([paris], "paris")).toEqual({
     activeSite: paris,
@@ -114,6 +116,8 @@ test("resolves zero, one, and multiple memberships without choosing arbitrarily"
     name: "Lyon",
     slug: "lyon",
     role: "auditor" as const,
+    organizationId: "org_client_lyon",
+    clientOrganizationId: "org_client_lyon",
   };
   expect(resolveSiteRequirement([paris, lyon], null)).toEqual({
     activeSite: null,
