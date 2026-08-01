@@ -9,6 +9,7 @@ import {
   canonicalJson,
   createScratchRollbackPlan,
   hashManifest,
+  MAX_DR_PAYLOAD_BYTES,
   rollbackState,
   serializeDrBundle,
   verifyDrBundle,
@@ -93,6 +94,13 @@ describe("G1-006D2 disaster-recovery bundle contract", () => {
     delete archiveUnsigned.bundleSha256;
     archiveTamper.bundleSha256 = createHash("sha256").update(canonicalJson(archiveUnsigned), "utf8").digest("hex");
     await expectCode(() => verifyDrBundle(JSON.stringify(archiveTamper)), "DR_BUNDLE_ARCHIVE_MISMATCH");
+  });
+
+  test("rejects a manifest that exceeds the bounded payload quota", async () => {
+    const serialized = fixture();
+    const oversized = JSON.parse(serialized.body) as { manifest: { database: { byteSize: number } } };
+    oversized.manifest.database.byteSize = MAX_DR_PAYLOAD_BYTES + 1;
+    await expectCode(() => verifyDrBundle(JSON.stringify(oversized)), "DR_BUNDLE_INVALID");
   });
 
   test("rejects secret-shaped metadata and empty captures", async () => {

@@ -13,6 +13,11 @@ export const DR_BUNDLE_VERSION = 1 as const;
 export const DR_BUNDLE_TYPE = "hermes_console_disaster_recovery" as const;
 export const DR_BUNDLE_DATABASE_FORMAT = "pg_dump" as const;
 export const DR_BUNDLE_FILES_FORMAT = "tar" as const;
+export const MAX_DR_PAYLOAD_BYTES = 100 * 1024 * 1024;
+export const MAX_DR_BUNDLE_BYTES = 220 * 1024 * 1024;
+export const MAX_DR_MIGRATIONS = 2_000;
+export const MAX_DR_TABLES = 2_000;
+export const MAX_DR_FILES = 100_000;
 
 export type DrBundleBytes = string | Uint8Array;
 
@@ -41,20 +46,20 @@ const manifestSchema = z.object({
   generatedAt: z.string().datetime({ offset: true }),
   schema: z.object({
     migrationCount: z.number().int().nonnegative(),
-    migrations: z.array(migrationSchema),
+    migrations: z.array(migrationSchema).max(MAX_DR_MIGRATIONS),
   }).strict(),
   database: z.object({
     format: z.literal(DR_BUNDLE_DATABASE_FORMAT),
-    byteSize: z.number().int().positive(),
+    byteSize: z.number().int().positive().max(MAX_DR_PAYLOAD_BYTES),
     sha256: sha256Schema,
-    tableCounts: z.array(tableCountSchema),
+    tableCounts: z.array(tableCountSchema).max(MAX_DR_TABLES),
   }).strict(),
   files: z.object({
     format: z.literal(DR_BUNDLE_FILES_FORMAT),
-    byteSize: z.number().int().positive(),
+    byteSize: z.number().int().positive().max(MAX_DR_PAYLOAD_BYTES),
     sha256: sha256Schema,
-    fileCount: z.number().int().nonnegative(),
-    totalBytes: z.number().int().nonnegative(),
+    fileCount: z.number().int().nonnegative().max(MAX_DR_FILES),
+    totalBytes: z.number().int().nonnegative().max(MAX_DR_PAYLOAD_BYTES),
   }).strict(),
 }).strict();
 
@@ -63,8 +68,8 @@ const bundleSchema = z.object({
   type: z.literal(DR_BUNDLE_TYPE),
   manifest: manifestSchema,
   manifestSha256: sha256Schema,
-  databaseDumpBase64: z.string().min(4).regex(BASE64_RE),
-  filesArchiveBase64: z.string().min(4).regex(BASE64_RE),
+  databaseDumpBase64: z.string().min(4).max(Math.ceil(MAX_DR_PAYLOAD_BYTES * 4 / 3) + 4).regex(BASE64_RE),
+  filesArchiveBase64: z.string().min(4).max(Math.ceil(MAX_DR_PAYLOAD_BYTES * 4 / 3) + 4).regex(BASE64_RE),
   bundleSha256: sha256Schema,
 }).strict();
 
@@ -77,6 +82,7 @@ export type DrBundleErrorCode =
   | "DR_BUNDLE_MANIFEST_MISMATCH"
   | "DR_BUNDLE_DUMP_MISMATCH"
   | "DR_BUNDLE_ARCHIVE_MISMATCH"
+  | "DR_BUNDLE_TOO_LARGE"
   | "DR_BUNDLE_SECRET_FIELD"
   | "DR_BUNDLE_TARGET_NOT_EMPTY"
   | "DR_BUNDLE_ROLLBACK_REQUIRED";
@@ -206,6 +212,9 @@ export function serializeDrBundle(input: {
     bundleSha256: digest(Buffer.from(canonicalJson(unsigned), "utf8")),
   } satisfies DrBundleDocument;
   const body = canonicalJson(document);
+  if (Buffer.byteLength(body, "utf8") > MAX_DR_BUNDLE_BYTES) {
+    throw new DrBundleError("DR_BUNDLE_TOO_LARGE", "Disaster-recovery bundle exceeds the maximum size.");
+  }
   return { document, body, sha256: digest(Buffer.from(body, "utf8")) };
 }
 
@@ -224,6 +233,9 @@ export type VerifiedDrBundle = {
 export function verifyDrBundle(input: DrBundleBytes, expectedSha256?: string): VerifiedDrBundle {
   const raw = asBytes(input);
   const rawSha256 = digest(raw);
+  if (raw.byteLength > MAX_DR_BUNDLE_BYTES) {
+    throw new DrBundleError("DR_BUNDLE_TOO_LARGE", "Disaster-recovery bundle exceeds the maximum size.");
+  }
   if (expectedSha256 !== undefined) {
     if (!SHA256_RE.test(expectedSha256) || rawSha256 !== expectedSha256) {
       throw new DrBundleError("DR_BUNDLE_DIGEST_MISMATCH", "Bundle digest does not match the expected SHA-256.");
@@ -286,6 +298,7 @@ function assertPayloadMatchesManifest(
 ) {
   if (
     databaseDump.byteLength === 0 ||
+    databaseDump.byteLength > MAX_DR_PAYLOAD_BYTES ||
     manifest.database.byteSize !== databaseDump.byteLength ||
     manifest.database.sha256 !== digest(databaseDump)
   ) {
@@ -293,6 +306,7 @@ function assertPayloadMatchesManifest(
   }
   if (
     filesArchive.byteLength === 0 ||
+    filesArchive.byteLength > MAX_DR_PAYLOAD_BYTES ||
     manifest.files.byteSize !== filesArchive.byteLength ||
     manifest.files.sha256 !== digest(filesArchive)
   ) {

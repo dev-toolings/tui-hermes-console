@@ -27,6 +27,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 - [01-08-2026 — restauration business-export scratch](2026-08-01-gate-1-lifecycle-business-export-scratch.md) :
   G1-006D-local restaure un export métier vers PostgreSQL/fichiers scratch et refuse les cibles
   altérées ou occupées ; ce n’est pas un backup disaster-recovery ni une preuve P-OPS.
+- [01-08-2026 — backup/restore disaster-recovery local](2026-08-01-gate-1-lifecycle-dr-local.md) :
+  G1-006D2-local restaure un dump PostgreSQL et une archive `files-data` vers une cible éphémère,
+  vérifie les SHA-256 et refuse les altérations/cibles occupées ; aucune preuve externe P-OPS/P-SEC.
 - [01-08-2026 — durabilité Compose des artefacts](2026-08-01-gate-1-artifact-durability-local.md) :
   remplacement réel du conteneur Console, volume `files-data` conservé et refus d’intégrité ;
   même hôte uniquement, P-OPS production et reprise après sinistre encore ouvertes.
