@@ -26,6 +26,7 @@
     "proof:g1-004a": "bun apps/server/scripts/prove-g1-004-local.ts",
     "proof:g1-004b": "bun test apps/server/src/modules/runs/respond-approval.test.ts apps/server/drizzle/site-context-api.integration.test.ts --max-concurrency=1",
     "proof:g1-004c": "bun test packages/console-core/src/lib/hermes-events-approval.test.ts packages/console-core/src/lib/thread-snapshot-mutations.test.ts apps/server/src/modules/runs/approval-requests.test.ts apps/server/src/modules/runs/respond-approval.test.ts apps/server/drizzle/approval-requests.test.ts apps/server/drizzle/approval-requests.integration.test.ts --max-concurrency=1",
+    "proof:g1-005b": "bun apps/server/scripts/prove-g1-005b-local.ts",
     "proof:g1-006-dr": "bun apps/server/scripts/prove-lifecycle-dr-local.ts",
     "proof:g1-006e": "bun test apps/server/src/modules/retention/purge.test.ts apps/server/drizzle/lifecycle-purge.integration.test.ts --max-concurrency=1",
     "proof:g1-003": "bun test apps/server/drizzle/ai-disclosure-consent.integration.test.ts",

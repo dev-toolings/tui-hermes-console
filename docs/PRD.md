@@ -546,6 +546,11 @@ inter-process, le redémarrage pendant `awaiting_approval`, la reprise après co
 variantes négatives contre PostgreSQL scratch et Hermes synthétique. Cette preuve ne ferme pas la
 P-E2E installation vierge ni Gate 1.
 
+Preuve locale complémentaire G1-005B : `bun run proof:g1-005b` passe l’export d’audit Hono sur
+PostgreSQL réel pour deux sites, vérifie hash/trailer et événement d’append, puis refuse rôle,
+CSRF, scope injecté, chaîne HMAC altérée et append indisponible sans corps NDJSON. Cette preuve
+reste P-INT locale et ne ferme ni la dépendance G1-004, ni P-SEC/P-E2E, ni Gate 1.
+
 Warnings connus :
 
 - TanStack Table incompatible avec une optimisation du compilateur React ;

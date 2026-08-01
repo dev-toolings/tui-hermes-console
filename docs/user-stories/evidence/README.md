@@ -20,6 +20,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
   locale pour US-G1-005 ; P-SEC/P-E2E et acceptation Gate encore ouvertes.
 - [01-08-2026 — policy de cycle de vie et aperçu dry-run](2026-08-01-gate-1-lifecycle-preview.md) :
   slice G1-006A local ; backup/restauration et acceptation Gate encore ouverts.
+- [01-08-2026 — export d’audit HTTP/PostgreSQL G1-005B](2026-08-01-gate-1-g1-005b-audit-export.md) :
+  P-INT locale sur Hono/PostgreSQL, isolation multi-site, HMAC/trailer et refus fail-closed ;
+  revue indépendante, P-SEC/P-E2E, G1-004 et Gate 1 restent ouverts.
 - [01-08-2026 — export métier vérifié](2026-08-01-gate-1-lifecycle-export.md) : slice G1-006B
   local ; backup/restauration et acceptation Gate encore ouverts.
 - [01-08-2026 — vérificateur relationnel de bundle](2026-08-01-gate-1-lifecycle-verifier.md) : slice
