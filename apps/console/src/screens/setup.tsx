@@ -808,7 +808,7 @@ function ConsentStep({
   );
 }
 
-function AiDisclosurePanel({
+export function AiDisclosurePanel({
   disclosure,
   accepted,
   checked,
@@ -821,6 +821,7 @@ function AiDisclosurePanel({
 }) {
   return (
     <section
+      role="region"
       aria-labelledby="ai-disclosure-title"
       className="mt-8 rounded-[12px] border border-white/11 bg-white/[0.035] p-5"
     >
@@ -829,16 +830,16 @@ function AiDisclosurePanel({
           <ShieldCheckIcon className="size-4" aria-hidden />
         </span>
         <div>
-          <p id="ai-disclosure-title" className="text-[0.8125rem] font-medium text-white/91">
+          <h2 id="ai-disclosure-title" className="text-[0.8125rem] font-medium text-white/91">
             {disclosure.title}
-          </p>
+          </h2>
           <p className="mt-1 font-mono text-[0.5625rem] uppercase tracking-[0.13em] text-white/38">
             Version {disclosure.version}
           </p>
         </div>
       </div>
-      <p className="mt-4 text-[0.75rem] leading-5 text-white/59">{disclosure.summary}</p>
-      <ul className="mt-3 space-y-2 text-[0.75rem] leading-5 text-white/55">
+      <p id="ai-disclosure-summary" className="mt-4 text-[0.75rem] leading-5 text-white/59">{disclosure.summary}</p>
+      <ul id="ai-disclosure-items" className="mt-3 space-y-2 text-[0.75rem] leading-5 text-white/55">
         {disclosure.items.map((item) => (
           <li key={item} className="flex gap-2">
             <span className="mt-[0.52rem] size-1 shrink-0 rounded-full bg-white/35" aria-hidden />
@@ -852,11 +853,13 @@ function AiDisclosurePanel({
           Version actuelle déjà acceptée pour votre compte.
         </p>
       ) : (
-        <label className="mt-4 flex cursor-pointer items-start gap-3 border-t border-white/9 pt-4 text-[0.75rem] leading-5 text-white/76">
+        <label htmlFor="ai-disclosure-consent" className="mt-4 flex cursor-pointer items-start gap-3 border-t border-white/9 pt-4 text-[0.75rem] leading-5 text-white/76">
           <input
+            id="ai-disclosure-consent"
             type="checkbox"
             checked={checked}
             onChange={(event) => onCheckedChange(event.target.checked)}
+            aria-describedby="ai-disclosure-summary ai-disclosure-items"
             className="mt-0.5 size-4 rounded border-white/20 accent-[oklch(0.62_0.19_251)]"
           />
           <span>J’ai lu cette notice et j’accepte le traitement de mes missions dans ce cadre.</span>
