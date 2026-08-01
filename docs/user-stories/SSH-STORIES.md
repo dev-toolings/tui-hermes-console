@@ -55,6 +55,7 @@ recovery, compte SSH de service, transports Hermes, cycle de vie des identités.
 - **Preuves :** `P-SEC`, algorithme/empreinte, codes de sortie et config effective.
 - **État courant :** `BLOQUÉE` — le refus est prouvé sur la cible diagnostiquée, mais la dépendance
   VPS vierge et la revue d'acceptation manquent.
+- **Preuve de contexte récente :** [diagnostic read-only du VPS 187.55.227.55 du 01-08-2026](evidence/2026-08-01-gate-1-ssh-vps-18755-diagnostic.md) — correspondance stricte locale confirmée, sans preuve fournisseur hors bande ; la cible est occupée et reste impropre à l'acceptation.
 
 ## US-G1-SSH-003 — Séparer admin et compte de service
 
