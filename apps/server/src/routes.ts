@@ -12,6 +12,7 @@
 
 import * as agents from "@/api/agents/route";
 import * as audit from "@/api/audit/route";
+import * as auditExports from "@/api/audit/exports/route";
 import * as auth from "@/api/auth/route";
 import * as agentDetail from "@/api/agents/[agentId]/route";
 import * as connectors from "@/api/connectors/route";
@@ -86,6 +87,11 @@ export const ROUTES: RouteDefinition[] = [
     path: "/api/audit",
     module: audit,
     access: siteAccess({ GET: "audit.read" }),
+  },
+  {
+    path: "/api/audit/exports",
+    module: auditExports,
+    access: siteAccess({ POST: "audit.export" }),
   },
   {
     path: "/api/site/memberships",

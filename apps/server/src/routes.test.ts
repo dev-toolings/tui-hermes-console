@@ -34,7 +34,7 @@ describe("route authorization inventory", () => {
     });
   });
 
-  test("registers membership management and audit read without an export endpoint", () => {
+  test("registers membership management, audit read and site-scoped export", () => {
     expect(
       ROUTES.find(({ path }) => path === "/api/site/memberships")?.access,
     ).toEqual({ boundary: "site", actions: { GET: "membership.manage" } });
@@ -46,6 +46,9 @@ describe("route authorization inventory", () => {
       boundary: "site",
       actions: { GET: "audit.read" },
     });
-    expect(ROUTES.some(({ path }) => path.includes("audit/export"))).toBe(false);
+    expect(ROUTES.find(({ path }) => path === "/api/audit/exports")?.access).toEqual({
+      boundary: "site",
+      actions: { POST: "audit.export" },
+    });
   });
 });
