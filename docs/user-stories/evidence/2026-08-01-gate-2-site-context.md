@@ -1,10 +1,14 @@
 # Preuve US-G2-001 — Isolation par site et projet
 
-**Date :** 2026-08-01  
-**Branche :** `feat/us-g2-001-site-context`  
-**Commit de référence :** `75075bc`  
-**État technique :** `VÉRIFIÉE`  
-**Décision de Gate :** non émise — Gate 1 n'est pas encore acceptée  
+**Date :** 2026-08-01
+
+**Branche :** `feat/us-g2-001-site-context`
+
+**Commit de référence :** `75075bc`
+
+**État technique :** `VÉRIFIÉE`
+
+**Décision de Gate :** non émise — Gate 1 n'est pas encore acceptée
 **Périmètre exclu :** US-G2-005 et US-G2-006
 
 ## Contrat vérifié
