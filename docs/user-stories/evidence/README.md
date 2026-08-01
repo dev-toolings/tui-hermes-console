@@ -24,6 +24,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
   local ; backup/restauration, purge et acceptation Gate encore ouverts.
 - [01-08-2026 — vérificateur relationnel de bundle](2026-08-01-gate-1-lifecycle-verifier.md) : slice
   G1-006C implémenté localement ; aucune preuve de backup/restauration réelle.
+- [01-08-2026 — restauration business-export scratch](2026-08-01-gate-1-lifecycle-business-export-scratch.md) :
+  G1-006D-local restaure un export métier vers PostgreSQL/fichiers scratch et refuse les cibles
+  altérées ou occupées ; ce n’est pas un backup disaster-recovery ni une preuve P-OPS.
 - [01-08-2026 — durabilité Compose des artefacts](2026-08-01-gate-1-artifact-durability-local.md) :
   remplacement réel du conteneur Console, volume `files-data` conservé et refus d’intégrité ;
   même hôte uniquement, P-OPS production et reprise après sinistre encore ouvertes.
