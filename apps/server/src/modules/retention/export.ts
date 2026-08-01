@@ -70,6 +70,37 @@ export function serializeLifecycleExport(payload: LifecycleExportPayload) {
   };
 }
 
+export type LifecycleExportSourceComparison = {
+  expectedRunIds: readonly string[];
+  actualRunIds: readonly string[];
+  expectedMessageCount: number;
+  actualMessageCount: number;
+  expectedArtifactCount: number;
+  actualArtifactCount: number;
+  expectedArtifactBytes: number;
+  actualArtifactBytes: number;
+  expectedArtifactHashes: readonly string[];
+  actualArtifactHashes: readonly string[];
+};
+
+/** Fails closed when a persisted preview no longer describes current rows. */
+export function assertLifecycleExportSourceMatches(
+  comparison: LifecycleExportSourceComparison,
+) {
+  const sorted = (values: readonly string[]) => [...values].map(String).sort();
+  if (
+    JSON.stringify(sorted(comparison.actualRunIds)) !==
+      JSON.stringify(sorted(comparison.expectedRunIds)) ||
+    comparison.actualMessageCount !== comparison.expectedMessageCount ||
+    comparison.actualArtifactCount !== comparison.expectedArtifactCount ||
+    comparison.actualArtifactBytes !== comparison.expectedArtifactBytes ||
+    JSON.stringify(sorted(comparison.actualArtifactHashes)) !==
+      JSON.stringify(sorted(comparison.expectedArtifactHashes))
+  ) {
+    throw sourceChanged();
+  }
+}
+
 export async function createLifecycleExport(
   context: SiteRequestContext,
   rawInput: unknown,
@@ -175,15 +206,18 @@ export async function createLifecycleExport(
       const expectedRunIds = [...item.runIds].map(String).sort();
       const expectedArtifactHashes = [...item.artifactHashes].map(String).sort();
       const itemArtifactBytes = itemArtifacts.reduce((sum, artifact) => sum + artifact.sizeBytes, 0);
-      if (
-        JSON.stringify(itemRuns) !== JSON.stringify(expectedRunIds) ||
-        itemMessages.length !== item.messageCount ||
-        itemArtifacts.length !== item.artifactCount ||
-        itemArtifactBytes !== item.artifactBytes ||
-        JSON.stringify(itemArtifactHashes) !== JSON.stringify(expectedArtifactHashes)
-      ) {
-        throw sourceChanged();
-      }
+      assertLifecycleExportSourceMatches({
+        expectedRunIds,
+        actualRunIds: itemRuns,
+        expectedMessageCount: item.messageCount,
+        actualMessageCount: itemMessages.length,
+        expectedArtifactCount: item.artifactCount,
+        actualArtifactCount: itemArtifacts.length,
+        expectedArtifactBytes: item.artifactBytes,
+        actualArtifactBytes: itemArtifactBytes,
+        expectedArtifactHashes,
+        actualArtifactHashes: itemArtifactHashes,
+      });
     }
 
     const expectedBytes = artifactRows.reduce((sum, artifact) => sum + artifact.sizeBytes, 0);
