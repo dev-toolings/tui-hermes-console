@@ -28,6 +28,7 @@ import {
 } from "@boardui/ui";
 import { useRouter } from "@/lib/router";
 import { selectSitePayload, type AuthSiteContext } from "@/lib/auth-site-context";
+import { setSessionCacheScope } from "@/lib/session-cache-scope";
 
 type AuthUser = {
   email: string;
@@ -115,6 +116,7 @@ export function NavUser() {
         return;
       }
       // Un reload complet ferme les SSE et purge tous les états dérivés du site précédent.
+      setSessionCacheScope(auth?.user.email, siteId);
       window.location.assign("/");
     } finally {
       setSwitchingSite(null);
@@ -128,7 +130,10 @@ export function NavUser() {
         method: "POST",
         headers: { "X-Hermes-Toast": "0", "X-CSRF-Token": decodeURIComponent(csrfToken() ?? "") },
       });
-      if (response.ok) router.replace("/setup");
+      if (response.ok) {
+        setSessionCacheScope(null, null);
+        router.replace("/setup");
+      }
     } finally {
       setSigningOut(false);
     }

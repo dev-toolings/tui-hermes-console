@@ -63,7 +63,7 @@ function sqlString(value: string) {
 }
 
 function applyMigrations() {
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 20)) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= 21)) {
     psql(readFileSync(join(import.meta.dir, `${entry.tag}.sql`), "utf8"));
   }
 }
@@ -229,19 +229,19 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
     await Bun.sleep(100);
 
     psql(`
-      INSERT INTO agents (id, site_id, name, slug, instructions) VALUES
-        ('agt_paris', 'paris', 'Paris agent', 'paris-agent', 'Paris'),
-        ('agt_lyon', 'lyon', 'Lyon agent', 'lyon-agent', 'Lyon');
+      INSERT INTO agents (id, site_id, owner_user_id, author_user_id, name, slug, instructions) VALUES
+        ('agt_paris', 'paris', 'usr_admin', 'usr_admin', 'Paris agent', 'paris-agent', 'Paris'),
+        ('agt_lyon', 'lyon', 'usr_lyon', 'usr_lyon', 'Lyon agent', 'lyon-agent', 'Lyon');
       INSERT INTO threads
-        (id, site_id, title, agent_id, agent_name, instructions, hermes_conversation) VALUES
-        ('thr_shared', 'paris', 'Shared', 'agt_paris', 'Paris agent', 'Paris', 'console:shared'),
-        ('thr_operator', 'paris', 'Operator run', 'agt_paris', 'Paris agent', 'Paris', 'console:operator'),
-        ('thr_approval', 'paris', 'Approval run', 'agt_paris', 'Paris agent', 'Paris', 'console:approval');
+        (id, site_id, owner_user_id, author_user_id, title, agent_id, agent_name, instructions, hermes_conversation) VALUES
+        ('thr_shared', 'paris', 'usr_admin', 'usr_admin', 'Shared', 'agt_paris', 'Paris agent', 'Paris', 'console:shared'),
+        ('thr_operator', 'paris', 'usr_operator', 'usr_operator', 'Operator run', 'agt_paris', 'Paris agent', 'Paris', 'console:operator'),
+        ('thr_approval', 'paris', 'usr_admin', 'usr_approver', 'Approval run', 'agt_paris', 'Paris agent', 'Paris', 'console:approval');
       INSERT INTO runs
-        (id, site_id, thread_id, input, status, hermes_response_id) VALUES
-        ('run_operator', 'paris', 'thr_operator', 'Cancel me', 'running', NULL),
-        ('run_approval', 'paris', 'thr_approval', 'Approve me', 'awaiting_approval', 'hermes-approval'),
-        ('run_denied', 'paris', 'thr_shared', 'Do not mutate', 'running', NULL);
+        (id, site_id, owner_user_id, author_user_id, thread_id, input, status, hermes_response_id) VALUES
+        ('run_operator', 'paris', 'usr_operator', 'usr_operator', 'thr_operator', 'Cancel me', 'running', NULL),
+        ('run_approval', 'paris', 'usr_admin', 'usr_approver', 'thr_approval', 'Approve me', 'awaiting_approval', 'hermes-approval'),
+        ('run_denied', 'paris', 'usr_admin', 'usr_admin', 'thr_shared', 'Do not mutate', 'running', NULL);
     `);
   }, 30_000);
 
@@ -264,17 +264,6 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
   test("forbidden role actions share one response, leave state unchanged, and are attributed", async () => {
     const before = businessSnapshot();
     const deniedRequests = [
-      authenticatedRequest("requester", "/api/agents", {
-        headers: { "x-site-role": "admin" },
-      }),
-      authenticatedRequest("requester", "/api/threads/thr_shared/messages", {
-        method: "POST",
-        body: { message: "forged request" },
-      }),
-      authenticatedRequest("requester", "/api/files", {
-        method: "POST",
-        body: { runId: "run_denied" },
-      }),
       authenticatedRequest("requester", "/api/site/memberships/usr_requester", {
         method: "PUT",
         body: { role: "admin" },
@@ -324,7 +313,7 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
         WHERE target_site_id = 'paris'
           AND decision = 'denied'
           AND reason_code = 'ROLE_PERMISSION_DENIED';`),
-    ).toBe("11");
+    ).toBe("8");
     expect(
       psql(`SELECT string_agg(DISTINCT actor_role, ',' ORDER BY actor_role)
         FROM audit_ledger_entries
@@ -524,26 +513,26 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
     expect(denied.status).toBe(403);
 
     const assigned = await appFetch(
-      authenticatedRequest("admin", "/api/site/memberships/usr_operator", {
+      authenticatedRequest("admin", "/api/site/memberships/usr_approver", {
         method: "PUT",
         body: { role: "auditor" },
       }),
     );
     expect(assigned.status).toBe(200);
     expect(await payload(assigned)).toMatchObject({
-      membership: { userId: "usr_operator", siteId: "paris", role: "auditor" },
+      membership: { userId: "usr_approver", siteId: "paris", role: "auditor" },
     });
 
-    const allowed = await appFetch(authenticatedRequest("operator", "/api/audit"));
+    const allowed = await appFetch(authenticatedRequest("approver", "/api/audit"));
     expect(allowed.status).toBe(200);
     expect(
       psql(`SELECT role FROM site_memberships
-        WHERE site_id = 'paris' AND user_id = 'usr_operator';`),
+        WHERE site_id = 'paris' AND user_id = 'usr_approver';`),
     ).toBe("auditor");
     expect(
       psql(`SELECT actor_role || ':' || decision || ':' || reason_code
         FROM audit_ledger_entries
-        WHERE action = 'membership.manage' AND resource_id = 'usr_operator'
+        WHERE action = 'membership.manage' AND resource_id = 'usr_approver'
         ORDER BY sequence DESC LIMIT 1;`),
     ).toBe("admin:allowed:SITE_ROLE_ASSIGNED");
   });

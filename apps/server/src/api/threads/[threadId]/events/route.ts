@@ -31,7 +31,7 @@ export async function GET(
       Number.isSafeInteger(requestedCursor) && requestedCursor >= 0 ? requestedCursor : 0;
 
     return dependencies.stream({
-      siteId: context.siteContext.siteId,
+      context: context.siteContext,
       threadId,
       cursor,
       signal: request.signal,

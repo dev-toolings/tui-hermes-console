@@ -6,6 +6,7 @@ import { resolveHermesRuntimeConfig } from "@/modules/runtime/config";
 import { deleteHermesSession, HermesRuntimeError } from "@/modules/runtime/hermes-adapter";
 import type { SiteRequestContext } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
+import { auditOwnershipCreation } from "@/modules/ownership/audit";
 
 export class AgentRepositoryError extends Error {
   constructor(
@@ -22,17 +23,22 @@ import type { AgentDto } from "@console/core/types/api";
 
 export async function listAgents(context: SiteRequestContext, options?: { includeArchived?: boolean }): Promise<AgentDto[]> {
   const query = getDatabase().select().from(agents);
+  const owner = context.role === "requester" ? eq(agents.ownerUserId, context.userId) : undefined;
   const rows = await (
     options?.includeArchived
-      ? query.where(eq(agents.siteId, context.siteId)).orderBy(desc(agents.updatedAt))
-      : query.where(and(eq(agents.siteId, context.siteId), isNull(agents.archivedAt))).orderBy(desc(agents.updatedAt))
+      ? query.where(and(eq(agents.siteId, context.siteId), owner)).orderBy(desc(agents.updatedAt))
+      : query.where(and(eq(agents.siteId, context.siteId), owner, isNull(agents.archivedAt))).orderBy(desc(agents.updatedAt))
   );
 
   return Promise.all(rows.map(toAgentDto));
 }
 
 export async function getAgent(context: SiteRequestContext, agentId: string): Promise<AgentDto> {
-  const [row] = await getDatabase().select().from(agents).where(and(eq(agents.siteId, context.siteId), eq(agents.id, agentId))).limit(1);
+  const [row] = await getDatabase().select().from(agents).where(and(
+    eq(agents.siteId, context.siteId),
+    eq(agents.id, agentId),
+    context.role === "requester" ? eq(agents.ownerUserId, context.userId) : undefined,
+  )).limit(1);
   if (!row) {
     await auditScopedMiss(context, { action: "agent.read", resourceType: "agent", resourceId: agentId });
     throw new AgentRepositoryError("AGENT_NOT_FOUND", "Agent introuvable.");
@@ -53,18 +59,29 @@ export async function createAgent(context: SiteRequestContext, input: {
   const id = makeId("agent");
   const slug = await uniqueSlug(context.siteId, slugify(input.name));
 
-  await db.insert(agents).values({
-    id,
-    siteId: context.siteId,
-    name: input.name,
-    slug,
-    description: input.description?.trim() || null,
-    instructions: input.instructions,
-    provider: input.provider?.trim() || null,
-    model: input.model?.trim() || null,
-    reasoningEffort: input.reasoningEffort?.trim() || null,
-    createdAt: now,
-    updatedAt: now,
+  await db.transaction(async (tx) => {
+    await tx.insert(agents).values({
+      id,
+      siteId: context.siteId,
+      ownerUserId: context.userId,
+      authorUserId: context.userId,
+      name: input.name,
+      slug,
+      description: input.description?.trim() || null,
+      instructions: input.instructions,
+      provider: input.provider?.trim() || null,
+      model: input.model?.trim() || null,
+      reasoningEffort: input.reasoningEffort?.trim() || null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await auditOwnershipCreation(tx, context, {
+      resourceType: "agent",
+      resourceId: id,
+      projectId: null,
+      ownerUserId: context.userId,
+      authorUserId: context.userId,
+    });
   });
 
   return getAgent(context, id);
@@ -161,7 +178,11 @@ export async function resolveActiveAgentRef(context: SiteRequestContext, target:
   const available = await db
     .select({ slug: agents.slug })
     .from(agents)
-    .where(and(eq(agents.siteId, context.siteId), isNull(agents.archivedAt)))
+    .where(and(
+      eq(agents.siteId, context.siteId),
+      isNull(agents.archivedAt),
+      context.role === "requester" ? eq(agents.ownerUserId, context.userId) : undefined,
+    ))
     .orderBy(desc(agents.updatedAt))
     .limit(10);
 

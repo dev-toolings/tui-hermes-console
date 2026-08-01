@@ -93,6 +93,10 @@ export const agents = pgTable(
     projectScope: text("project_scope")
       .notNull()
       .generatedAlwaysAs(sql`coalesce(project_id, '')`),
+    ownerUserId: text("owner_user_id").notNull(),
+    authorUserId: text("author_user_id")
+      .notNull()
+      .references(() => consoleUsers.id),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     description: text("description"),
@@ -117,7 +121,13 @@ export const agents = pgTable(
       foreignColumns: [projects.siteId, projects.id],
       name: "agents_site_project_id_projects_site_id_fk",
     }),
+    foreignKey({
+      columns: [table.ownerUserId, table.siteId],
+      foreignColumns: [siteMemberships.userId, siteMemberships.siteId],
+      name: "agents_owner_site_membership_fk",
+    }),
     index("agents_site_idx").on(table.siteId),
+    index("agents_site_owner_idx").on(table.siteId, table.ownerUserId),
     index("agents_archived_idx").on(table.archivedAt),
   ],
 );
@@ -357,6 +367,10 @@ export const connectors = pgTable(
       .notNull()
       .references(() => sites.id),
     projectId: text("project_id"),
+    ownerUserId: text("owner_user_id").notNull(),
+    authorUserId: text("author_user_id")
+      .notNull()
+      .references(() => consoleUsers.id),
     type: text("type").notNull().$type<ConnectorType>(),
     label: text("label").notNull(),
     email: text("email").notNull(),
@@ -379,7 +393,13 @@ export const connectors = pgTable(
       foreignColumns: [projects.siteId, projects.id],
       name: "connectors_site_project_id_projects_site_id_fk",
     }),
+    foreignKey({
+      columns: [table.ownerUserId, table.siteId],
+      foreignColumns: [siteMemberships.userId, siteMemberships.siteId],
+      name: "connectors_owner_site_membership_fk",
+    }),
     index("connectors_site_idx").on(table.siteId),
+    index("connectors_site_owner_idx").on(table.siteId, table.ownerUserId),
   ],
 );
 
@@ -394,6 +414,10 @@ export const threads = pgTable(
     projectScope: text("project_scope")
       .notNull()
       .generatedAlwaysAs(sql`coalesce(project_id, '')`),
+    ownerUserId: text("owner_user_id").notNull(),
+    authorUserId: text("author_user_id")
+      .notNull()
+      .references(() => consoleUsers.id),
     title: text("title").notNull(),
     agentId: text("agent_id").references(() => agents.id, { onDelete: "set null" }),
     agentName: text("agent_name").notNull(),
@@ -413,11 +437,22 @@ export const threads = pgTable(
       table.projectScope,
       table.id,
     ),
+    uniqueIndex("threads_site_project_scope_id_owner_idx").on(
+      table.siteId,
+      table.projectScope,
+      table.id,
+      table.ownerUserId,
+    ),
     uniqueIndex("threads_hermes_conversation_idx").on(table.hermesConversation),
     foreignKey({
       columns: [table.siteId, table.projectId],
       foreignColumns: [projects.siteId, projects.id],
       name: "threads_site_project_id_projects_site_id_fk",
+    }),
+    foreignKey({
+      columns: [table.ownerUserId, table.siteId],
+      foreignColumns: [siteMemberships.userId, siteMemberships.siteId],
+      name: "threads_owner_site_membership_fk",
     }),
     foreignKey({
       columns: [table.siteId, table.agentId],
@@ -432,6 +467,7 @@ export const threads = pgTable(
     index("threads_agent_idx").on(table.agentId),
     index("threads_source_idx").on(table.source),
     index("threads_site_idx").on(table.siteId),
+    index("threads_site_owner_idx").on(table.siteId, table.ownerUserId),
   ],
 );
 
@@ -446,6 +482,10 @@ export const runs = pgTable(
     projectScope: text("project_scope")
       .notNull()
       .generatedAlwaysAs(sql`coalesce(project_id, '')`),
+    ownerUserId: text("owner_user_id").notNull(),
+    authorUserId: text("author_user_id")
+      .notNull()
+      .references(() => consoleUsers.id),
     threadId: text("thread_id")
       .notNull()
       .references(() => threads.id, { onDelete: "cascade" }),
@@ -468,10 +508,21 @@ export const runs = pgTable(
       table.projectScope,
       table.id,
     ),
+    uniqueIndex("runs_site_project_scope_id_owner_idx").on(
+      table.siteId,
+      table.projectScope,
+      table.id,
+      table.ownerUserId,
+    ),
     foreignKey({
       columns: [table.siteId, table.projectId],
       foreignColumns: [projects.siteId, projects.id],
       name: "runs_site_project_id_projects_site_id_fk",
+    }),
+    foreignKey({
+      columns: [table.ownerUserId, table.siteId],
+      foreignColumns: [siteMemberships.userId, siteMemberships.siteId],
+      name: "runs_owner_site_membership_fk",
     }),
     foreignKey({
       columns: [table.siteId, table.threadId],
@@ -483,9 +534,20 @@ export const runs = pgTable(
       foreignColumns: [threads.siteId, threads.projectScope, threads.id],
       name: "runs_site_project_scope_thread_id_threads_scope_id_fk",
     }),
+    foreignKey({
+      columns: [table.siteId, table.projectScope, table.threadId, table.ownerUserId],
+      foreignColumns: [
+        threads.siteId,
+        threads.projectScope,
+        threads.id,
+        threads.ownerUserId,
+      ],
+      name: "runs_thread_owner_fk",
+    }),
     index("runs_thread_created_idx").on(table.threadId, table.createdAt),
     index("runs_status_idx").on(table.status),
     index("runs_site_idx").on(table.siteId),
+    index("runs_site_owner_idx").on(table.siteId, table.ownerUserId),
   ],
 );
 
@@ -500,6 +562,10 @@ export const artifacts = pgTable(
     projectScope: text("project_scope")
       .notNull()
       .generatedAlwaysAs(sql`coalesce(project_id, '')`),
+    ownerUserId: text("owner_user_id").notNull(),
+    authorUserId: text("author_user_id")
+      .notNull()
+      .references(() => consoleUsers.id),
     runId: text("run_id")
       .notNull()
       .references(() => runs.id, { onDelete: "cascade" }),
@@ -513,6 +579,11 @@ export const artifacts = pgTable(
   },
   (table) => [
     uniqueIndex("artifacts_site_id_idx").on(table.siteId, table.id),
+    foreignKey({
+      columns: [table.ownerUserId, table.siteId],
+      foreignColumns: [siteMemberships.userId, siteMemberships.siteId],
+      name: "artifacts_owner_site_membership_fk",
+    }),
     foreignKey({
       columns: [table.siteId, table.projectId],
       foreignColumns: [projects.siteId, projects.id],
@@ -528,9 +599,15 @@ export const artifacts = pgTable(
       foreignColumns: [runs.siteId, runs.projectScope, runs.id],
       name: "artifacts_site_project_scope_run_id_runs_scope_id_fk",
     }),
+    foreignKey({
+      columns: [table.siteId, table.projectScope, table.runId, table.ownerUserId],
+      foreignColumns: [runs.siteId, runs.projectScope, runs.id, runs.ownerUserId],
+      name: "artifacts_run_owner_fk",
+    }),
     index("artifacts_run_idx").on(table.runId),
     index("artifacts_run_direction_idx").on(table.runId, table.direction),
     index("artifacts_site_idx").on(table.siteId),
+    index("artifacts_site_owner_idx").on(table.siteId, table.ownerUserId),
   ],
 );
 

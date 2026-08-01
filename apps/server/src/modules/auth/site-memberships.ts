@@ -2,8 +2,13 @@ import { randomUUID } from "node:crypto";
 import { and, asc, count, eq, sql } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
 import {
+  agents,
+  artifacts,
+  connectors,
   consoleUsers,
+  runs,
   siteMemberships,
+  threads,
   type SiteMembershipRole,
 } from "@/db/schema";
 import { appendAuditEntryInTransaction } from "@/modules/audit/service";
@@ -147,6 +152,49 @@ export async function setSiteMembershipRole(
             "Le site doit conserver au moins un administrateur.",
             409,
             "LAST_SITE_ADMIN_REQUIRED",
+          ),
+        };
+      }
+    }
+
+    if (existing && (role === "approver" || role === "auditor")) {
+      const ownershipRows = await tx.execute<{ owns_resources: boolean }>(sql`
+        SELECT EXISTS (
+          SELECT 1 FROM ${agents}
+          WHERE ${agents.siteId} = ${context.siteId}
+            AND ${agents.ownerUserId} = ${targetUserId}
+          UNION ALL
+          SELECT 1 FROM ${connectors}
+          WHERE ${connectors.siteId} = ${context.siteId}
+            AND ${connectors.ownerUserId} = ${targetUserId}
+          UNION ALL
+          SELECT 1 FROM ${threads}
+          WHERE ${threads.siteId} = ${context.siteId}
+            AND ${threads.ownerUserId} = ${targetUserId}
+          UNION ALL
+          SELECT 1 FROM ${runs}
+          WHERE ${runs.siteId} = ${context.siteId}
+            AND ${runs.ownerUserId} = ${targetUserId}
+          UNION ALL
+          SELECT 1 FROM ${artifacts}
+          WHERE ${artifacts.siteId} = ${context.siteId}
+            AND ${artifacts.ownerUserId} = ${targetUserId}
+        ) AS owns_resources
+      `);
+      if (ownershipRows[0]?.owns_resources) {
+        await appendMembershipAudit(tx, {
+          context,
+          targetUserId,
+          decision: "denied",
+          reasonCode: "OWNED_RESOURCES_REQUIRE_TRANSFER",
+          beforeRole: existing.role,
+          afterRole: existing.role,
+        });
+        return {
+          error: new AuthError(
+            "Transférez les ressources possédées avant de modifier ce rôle.",
+            409,
+            "OWNED_RESOURCES_REQUIRE_TRANSFER",
           ),
         };
       }

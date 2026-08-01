@@ -35,6 +35,7 @@ import {
   prefetchThreadSnapshot,
   type ThreadPhase,
 } from "@/components/run/use-live-thread";
+import { scopedSessionStorageKey } from "@/lib/session-cache-scope";
 
 export type ChatSessionRow = {
   id: string;
@@ -57,7 +58,7 @@ const SESSIONS_STORAGE_KEY = "hermes-console:chat-sessions";
 function readStoredSessions(): ChatSessionRow[] | null {
   if (typeof sessionStorage === "undefined") return null;
   try {
-    const raw = sessionStorage.getItem(SESSIONS_STORAGE_KEY);
+    const raw = sessionStorage.getItem(scopedSessionStorageKey(SESSIONS_STORAGE_KEY));
     const parsed: unknown = raw ? JSON.parse(raw) : null;
     return Array.isArray(parsed) ? (parsed as ChatSessionRow[]) : null;
   } catch {
@@ -68,7 +69,7 @@ function readStoredSessions(): ChatSessionRow[] | null {
 function writeStoredSessions(sessions: ChatSessionRow[]) {
   if (typeof sessionStorage === "undefined") return;
   try {
-    sessionStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions.slice(0, 40)));
+    sessionStorage.setItem(scopedSessionStorageKey(SESSIONS_STORAGE_KEY), JSON.stringify(sessions.slice(0, 40)));
   } catch {
     // Quota plein : on retombe simplement sur le squelette au prochain refresh.
   }
@@ -668,4 +669,3 @@ function OpenClawSessionSidebar({
     </aside>
   );
 }
-

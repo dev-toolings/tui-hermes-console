@@ -42,6 +42,7 @@ import * as threadEvents from "@/api/threads/[threadId]/events/route";
 import * as threadMessages from "@/api/threads/[threadId]/messages/route";
 import * as siteMembership from "@/api/site/memberships/[userId]/route";
 import * as siteMemberships from "@/api/site/memberships/route";
+import * as ownership from "@/api/ownership/[resourceType]/[resourceId]/route";
 import type { SiteAction } from "@/modules/auth/site-authorization";
 
 export type RouteModule = Record<string, unknown>;
@@ -91,6 +92,11 @@ export const ROUTES: RouteDefinition[] = [
     path: "/api/site/memberships/:userId",
     module: siteMembership,
     access: siteAccess({ PUT: "membership.manage" }),
+  },
+  {
+    path: "/api/ownership/:resourceType/:resourceId",
+    module: ownership,
+    access: siteAccess({ PUT: "ownership.transfer" }),
   },
 
   {

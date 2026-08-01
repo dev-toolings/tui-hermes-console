@@ -1,7 +1,8 @@
 import { subscribeToThread } from "./event-bus";
-import { listThreadEventsAfter } from "./repository";
+import { canReadThreadEvents, listThreadEventsAfter } from "./repository";
 import type { StoredProductEvent } from "@console/core/modules/runs/types";
 import { isTerminalProductEvent } from "@console/core/lib/thread-snapshot-mutations";
+import type { SiteRequestContext } from "@/modules/auth/service";
 
 export const PRODUCT_EVENT_SSE_HEADERS = {
   "Cache-Control": "no-cache, no-transform",
@@ -23,7 +24,7 @@ export function encodeRunMetaSse(payload: { threadId: string; runId: string }) {
 }
 
 type StreamOptions = {
-  siteId: string;
+  context: SiteRequestContext;
   threadId: string;
   runId?: string;
   cursor?: number;
@@ -32,7 +33,7 @@ type StreamOptions = {
 };
 
 export function createProductEventStream({
-  siteId,
+  context,
   threadId,
   runId,
   cursor: initialCursor = 0,
@@ -46,6 +47,16 @@ export function createProductEventStream({
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let closed = false;
+      let unsubscribe: (() => void) | undefined;
+      let reconcile: ReturnType<typeof setInterval> | undefined;
+      let heartbeat: ReturnType<typeof setInterval> | undefined;
+      let onAbort: (() => void) | undefined;
+      cleanup = () => {
+        unsubscribe?.();
+        if (reconcile) clearInterval(reconcile);
+        if (heartbeat) clearInterval(heartbeat);
+        if (onAbort) signal.removeEventListener("abort", onAbort);
+      };
       const close = () => {
         if (closed) return;
         closed = true;
@@ -57,40 +68,58 @@ export function createProductEventStream({
         }
       };
 
-      const send = (event: StoredProductEvent) => {
+      const sendAuthorized = async (event: StoredProductEvent) => {
         if (closed || event.cursor <= cursor) return;
         if (runId && event.runId !== runId) return;
+        if (!(await canReadThreadEvents(context, threadId))) {
+          close();
+          return;
+        }
         cursor = event.cursor;
         controller.enqueue(encoder.encode(encodeProductEventSse(event)));
         if (closeOnTerminal && isTerminalProductEvent(event)) close();
+      };
+
+      let sendQueue = Promise.resolve();
+      const enqueue = (event: StoredProductEvent) => {
+        sendQueue = sendQueue.then(() => sendAuthorized(event));
+        return sendQueue;
+      };
+      const send = (event: StoredProductEvent) => {
+        void enqueue(event).catch(close);
       };
 
       if (runId) {
         controller.enqueue(encoder.encode(encodeRunMetaSse({ threadId, runId })));
       }
 
-      const unsubscribe = subscribeToThread(threadId, send);
-      for (const event of await listThreadEventsAfter({ siteId }, threadId, cursor)) send(event);
+      onAbort = () => close();
+      signal.addEventListener("abort", onAbort, { once: true });
+      unsubscribe = subscribeToThread(threadId, send);
+      try {
+        for (const event of await listThreadEventsAfter(context, threadId, cursor)) {
+          await enqueue(event);
+        }
+      } catch {
+        close();
+        return;
+      }
+      if (closed) return;
 
-      const reconcile = setInterval(async () => {
+      reconcile = setInterval(async () => {
         try {
-          for (const event of await listThreadEventsAfter({ siteId }, threadId, cursor)) send(event);
+          if (!(await canReadThreadEvents(context, threadId))) {
+            close();
+            return;
+          }
+          for (const event of await listThreadEventsAfter(context, threadId, cursor)) send(event);
         } catch {
           close();
         }
       }, 2_000);
-      const heartbeat = setInterval(() => {
+      heartbeat = setInterval(() => {
         if (!closed) controller.enqueue(encoder.encode(`: keepalive ${Date.now()}\n\n`));
       }, 15_000);
-
-      const onAbort = () => close();
-      signal.addEventListener("abort", onAbort, { once: true });
-      cleanup = () => {
-        unsubscribe();
-        clearInterval(reconcile);
-        clearInterval(heartbeat);
-        signal.removeEventListener("abort", onAbort);
-      };
     },
     cancel() {
       cleanup();

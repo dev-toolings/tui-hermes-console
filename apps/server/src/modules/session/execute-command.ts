@@ -52,21 +52,28 @@ export async function executeSessionCommand(input: {
   raw: string;
 }): Promise<SessionCommandResult> {
   const text = input.raw.trim();
-  await assertSiteAction(input.context, siteActionForSessionCommand(text));
+  const db = getDatabase();
+  const [thread] = await db.select().from(threads).where(and(
+    eq(threads.siteId, input.context.siteId),
+    eq(threads.id, input.threadId),
+    input.context.role === "requester"
+      ? eq(threads.ownerUserId, input.context.userId)
+      : undefined,
+  )).limit(1);
+  if (!thread) {
+    await auditScopedMiss(input.context, { action: "thread.command", resourceType: "thread", resourceId: input.threadId });
+    throw new ProductRepositoryError("THREAD_NOT_FOUND", "Session introuvable.");
+  }
 
+  // Même `/help` doit d'abord prouver l'accès au thread : aucune commande ne
+  // devient un oracle d'existence ou un chemin de lookup hors ownership.
+  await assertSiteAction(input.context, siteActionForSessionCommand(text));
   if (text === "/help" || text === "/commands") {
     return { handled: true, systemMessage: sessionCommandHelp() };
   }
 
   const command = parseSessionCommand(text);
   if (!command) return { handled: false };
-
-  const db = getDatabase();
-  const [thread] = await db.select().from(threads).where(and(eq(threads.siteId, input.context.siteId), eq(threads.id, input.threadId))).limit(1);
-  if (!thread) {
-    await auditScopedMiss(input.context, { action: "thread.command", resourceType: "thread", resourceId: input.threadId });
-    throw new ProductRepositoryError("THREAD_NOT_FOUND", "Session introuvable.");
-  }
 
   const isAgentCommand =
     command.kind === "agent_show" ||
@@ -244,7 +251,11 @@ function formatAgentSnapshotFromDto(agent: AgentDto) {
 
 export async function getSessionConnectorGaps(context: SiteRequestContext, threadId: string): Promise<ConnectorType[]> {
   const db = getDatabase();
-  const [thread] = await db.select().from(threads).where(and(eq(threads.siteId, context.siteId), eq(threads.id, threadId))).limit(1);
+  const [thread] = await db.select().from(threads).where(and(
+    eq(threads.siteId, context.siteId),
+    eq(threads.id, threadId),
+    context.role === "requester" ? eq(threads.ownerUserId, context.userId) : undefined,
+  )).limit(1);
   if (!thread) return [];
 
   let slug = thread.agentName.toLowerCase().replace(/\s+/g, "-");

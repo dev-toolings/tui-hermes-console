@@ -18,14 +18,13 @@ import {
 } from "@/lib/api";
 
 export async function loadDashboard() {
-  const [agents, threads, runtime, activity] = await Promise.all([
+  const [agents, threads, activity] = await Promise.all([
     fetchAgents(),
     // `mission` et pas tout : l'Aperçu compte des missions, pas des chats.
     fetchThreads("mission"),
-    fetchRuntime(),
     fetchActivity(30),
   ]);
-  return { agents, threads, runtime, activity };
+  return { agents, threads, activity };
 }
 export type DashboardData = Awaited<ReturnType<typeof loadDashboard>>;
 
@@ -55,8 +54,14 @@ export async function loadRuntime() {
 export type RuntimeData = Awaited<ReturnType<typeof loadRuntime>>;
 
 export async function loadSupport() {
-  const [runtime, probe] = await Promise.all([fetchRuntime(), fetchRuntimeProbe()]);
-  return { runtime, probe };
+  const [runtimeResult, probeResult] = await Promise.allSettled([
+    fetchRuntime(),
+    fetchRuntimeProbe(),
+  ]);
+  return {
+    runtime: runtimeResult.status === "fulfilled" ? runtimeResult.value : null,
+    probe: probeResult.status === "fulfilled" ? probeResult.value : null,
+  };
 }
 export type SupportData = Awaited<ReturnType<typeof loadSupport>>;
 

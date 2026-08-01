@@ -21,6 +21,7 @@ import { SettingsNav } from "@/components/settings/settings-nav";
 import { ChatSurfaceSkeleton } from "@/components/chat/chat-surface-skeleton";
 import { usePathname } from "@/lib/router";
 import { siteAccessBlock, type AuthSiteContext } from "@/lib/auth-site-context";
+import { setSessionCacheScope } from "@/lib/session-cache-scope";
 /**
  * Écrans de conversation, chargés à la demande.
  *
@@ -91,6 +92,7 @@ export type ConsoleAccessStatus = {
   authenticated: boolean;
   setupRequired: boolean;
   consentRequired: boolean;
+  user?: { email: string } | null;
   siteContext: AuthSiteContext | null;
 };
 
@@ -126,6 +128,7 @@ const consoleLayout = createRoute({
   beforeLoad: async () => {
     const response = await fetch("/api/auth", { cache: "no-store" });
     const auth = (await response.json()) as ConsoleAccessStatus;
+    setSessionCacheScope(auth.user?.email, auth.siteContext?.activeSite?.id);
     if (requiresSetupRedirect(auth)) {
       throw redirect({ to: "/setup", replace: true });
     }

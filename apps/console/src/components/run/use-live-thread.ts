@@ -14,6 +14,11 @@ import { consumeProductEventStream } from "@/lib/consume-product-event-stream";
 import { isSessionCommandMessage } from "@console/core/modules/session/commands";
 import { parseAgentMention } from "@console/core/modules/session/mentions";
 import {
+  getSessionCacheScope,
+  onSessionCacheScopeChange,
+  scopedSessionStorageKey,
+} from "@/lib/session-cache-scope";
+import {
   applyProductEventToSnapshot,
   isTerminalProductEvent,
   latestOpenApproval,
@@ -67,16 +72,21 @@ export type ThreadPhase = "cold" | "warm" | "ready";
  */
 const snapshotCache = new Map<string, CachedSnapshot>();
 
+function cacheKey(threadId: string) {
+  return `${getSessionCacheScope()}:${threadId}`;
+}
+
 function readSnapshotCache(threadId: string) {
-  return snapshotCache.get(threadId) ?? null;
+  return snapshotCache.get(cacheKey(threadId)) ?? null;
 }
 
 function writeSnapshotCache(threadId: string, value: Partial<CachedSnapshot>) {
-  const previous = snapshotCache.get(threadId);
+  const key = cacheKey(threadId);
+  const previous = snapshotCache.get(key);
   const thread = value.thread ?? previous?.thread;
   if (!thread) return; // rien à mettre en cache tant qu'aucun snapshot n'est arrivé
-  snapshotCache.delete(threadId); // ré-insérer garde l'ordre LRU
-  snapshotCache.set(threadId, { thread, gaps: value.gaps ?? previous?.gaps ?? [] });
+  snapshotCache.delete(key); // ré-insérer garde l'ordre LRU
+  snapshotCache.set(key, { thread, gaps: value.gaps ?? previous?.gaps ?? [] });
   while (snapshotCache.size > SNAPSHOT_CACHE_LIMIT) {
     const oldest = snapshotCache.keys().next().value;
     if (oldest === undefined) break;
@@ -85,7 +95,7 @@ function writeSnapshotCache(threadId: string, value: Partial<CachedSnapshot>) {
 }
 
 export function dropThreadSnapshotCache(threadId: string) {
-  snapshotCache.delete(threadId);
+  snapshotCache.delete(cacheKey(threadId));
   dropStoredChrome(threadId);
 }
 
@@ -114,7 +124,7 @@ const CHROME_ENTRY_MAX_CHARS = 32_000;
 function readChromeStore(): Record<string, CachedSnapshot> {
   if (typeof sessionStorage === "undefined") return {};
   try {
-    const raw = sessionStorage.getItem(CHROME_STORAGE_KEY);
+    const raw = sessionStorage.getItem(scopedSessionStorageKey(CHROME_STORAGE_KEY));
     const parsed: unknown = raw ? JSON.parse(raw) : null;
     return parsed && typeof parsed === "object"
       ? (parsed as Record<string, CachedSnapshot>)
@@ -142,7 +152,7 @@ function writeStoredChrome(threadId: string, { thread, gaps }: CachedSnapshot) {
     delete store[key];
   }
   try {
-    sessionStorage.setItem(CHROME_STORAGE_KEY, JSON.stringify(store));
+    sessionStorage.setItem(scopedSessionStorageKey(CHROME_STORAGE_KEY), JSON.stringify(store));
   } catch {
     // Quota plein : le squelette reste, c'est le comportement d'avant.
   }
@@ -154,7 +164,7 @@ function dropStoredChrome(threadId: string) {
   if (!(threadId in store)) return;
   delete store[threadId];
   try {
-    sessionStorage.setItem(CHROME_STORAGE_KEY, JSON.stringify(store));
+    sessionStorage.setItem(scopedSessionStorageKey(CHROME_STORAGE_KEY), JSON.stringify(store));
   } catch {
     // idem
   }
@@ -162,7 +172,7 @@ function dropStoredChrome(threadId: string) {
 
 /** Réchauffe le cache avant le clic (survol d'une session dans la sidebar). */
 export function prefetchThreadSnapshot(threadId: string) {
-  if (snapshotCache.has(threadId)) return;
+  if (snapshotCache.has(cacheKey(threadId))) return;
   void fetchThreadSnapshot(threadId)
     .then(({ thread, gaps }) => writeSnapshotCache(threadId, { thread, gaps }))
     .catch(() => undefined);
@@ -205,6 +215,8 @@ export function useLiveThread(threadId: string) {
    * message optimiste le ferait écraser par le premier fetch complet.
    */
   const completeRef = useRef(cached?.complete ?? false);
+
+  useEffect(() => onSessionCacheScopeChange(() => snapshotCache.clear()), []);
 
   const markComplete = useCallback(() => {
     completeRef.current = true;
@@ -658,7 +670,10 @@ async function fetchThreadSnapshot(threadId: string) {
   const response = await fetch(`/api/threads/${encodeURIComponent(threadId)}`, {
     cache: "no-store",
   });
-  if (!response.ok) throw new Error(await readApiError(response));
+  if (!response.ok) {
+    if (response.status === 403 || response.status === 404) dropThreadSnapshotCache(threadId);
+    throw new Error(await readApiError(response));
+  }
   const body = (await response.json()) as {
     thread: ThreadSnapshot;
     connectorGaps?: ConnectorType[];

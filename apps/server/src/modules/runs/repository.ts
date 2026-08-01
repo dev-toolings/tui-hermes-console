@@ -38,6 +38,7 @@ import {
 } from "@/modules/artifacts/remote-sync";
 import type { SiteRequestContext, SiteScope } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
+import { auditOwnershipCreation } from "@/modules/ownership/audit";
 
 const ACTIVE_STATUSES: ProductRunStatus[] = [
   "pending",
@@ -50,6 +51,10 @@ const TERMINAL_STATUSES: ProductRunStatus[] = [
   "failed",
   "cancelled",
 ];
+
+function isRequesterScope(scope: SiteScope): scope is SiteRequestContext {
+  return "role" in scope && scope.role === "requester" && "userId" in scope;
+}
 
 export class ProductRepositoryError extends Error {
   constructor(
@@ -97,6 +102,8 @@ export async function createThreadWithRun(context: SiteRequestContext, input: {
     await tx.insert(threads).values({
       id: threadId,
       siteId: context.siteId,
+      ownerUserId: context.userId,
+      authorUserId: context.userId,
       projectId: input.projectId ?? null,
       title: makeTitle(input.message),
       source: input.source,
@@ -113,6 +120,8 @@ export async function createThreadWithRun(context: SiteRequestContext, input: {
     await tx.insert(runs).values({
       id: runId,
       siteId: context.siteId,
+      ownerUserId: context.userId,
+      authorUserId: context.userId,
       projectId: input.projectId ?? null,
       threadId,
       input: input.message,
@@ -126,6 +135,20 @@ export async function createThreadWithRun(context: SiteRequestContext, input: {
       role: "user",
       content: [{ type: "text", text: input.message }],
       createdAt: now,
+    });
+    await auditOwnershipCreation(tx, context, {
+      resourceType: "thread",
+      resourceId: threadId,
+      projectId: input.projectId ?? null,
+      ownerUserId: context.userId,
+      authorUserId: context.userId,
+    });
+    await auditOwnershipCreation(tx, context, {
+      resourceType: "run",
+      resourceId: runId,
+      projectId: input.projectId ?? null,
+      ownerUserId: context.userId,
+      authorUserId: context.userId,
     });
   });
 
@@ -145,9 +168,17 @@ export async function createRunForThread(context: SiteRequestContext, threadId: 
     // Sans ce verrou, deux POST simultanés lisent tous les deux « aucun run
     // actif » (READ COMMITTED) et démarrent deux missions sur le même fil.
     const [thread] = await tx
-      .select({ id: threads.id, projectId: threads.projectId })
+      .select({
+        id: threads.id,
+        projectId: threads.projectId,
+        ownerUserId: threads.ownerUserId,
+      })
       .from(threads)
-      .where(and(eq(threads.siteId, context.siteId), eq(threads.id, threadId)))
+      .where(and(
+        eq(threads.siteId, context.siteId),
+        eq(threads.id, threadId),
+        context.role === "requester" ? eq(threads.ownerUserId, context.userId) : undefined,
+      ))
       .for("update");
     if (!thread) {
       await auditScopedMiss(context, { action: "thread.run.create", resourceType: "thread", resourceId: threadId });
@@ -174,6 +205,8 @@ export async function createRunForThread(context: SiteRequestContext, threadId: 
     await tx.insert(runs).values({
       id: runId,
       siteId: context.siteId,
+      ownerUserId: thread.ownerUserId,
+      authorUserId: context.userId,
       projectId: thread.projectId,
       threadId,
       input,
@@ -192,6 +225,13 @@ export async function createRunForThread(context: SiteRequestContext, threadId: 
       .update(threads)
       .set({ updatedAt: now })
       .where(and(eq(threads.siteId, context.siteId), eq(threads.id, threadId)));
+    await auditOwnershipCreation(tx, context, {
+      resourceType: "run",
+      resourceId: runId,
+      projectId: thread.projectId,
+      ownerUserId: thread.ownerUserId,
+      authorUserId: context.userId,
+    });
   });
 
   const workdir = await ensureRunWorkdirs(runId);
@@ -207,7 +247,11 @@ export async function discardUnstartedRun(scope: SiteScope, runId: string) {
   const [run] = await db
     .select({ status: runs.status })
     .from(runs)
-    .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)))
+    .where(and(
+      eq(runs.siteId, scope.siteId),
+      eq(runs.id, runId),
+      isRequesterScope(scope) ? eq(runs.ownerUserId, scope.userId) : undefined,
+    ))
     .limit(1);
   if (!run || run.status !== "pending") return;
   await db
@@ -267,7 +311,7 @@ async function getConversationHistory(
  * Les jours sans mission sont émis à zéro : sans eux, une courbe relierait le
  * 12 au 28 comme s'il s'était passé quelque chose entre les deux.
  */
-export async function getRunActivity(scope: SiteScope, days = 30): Promise<RunActivityPoint[]> {
+export async function getRunActivity(scope: SiteRequestContext, days = 30): Promise<RunActivityPoint[]> {
   const since = new Date();
   since.setHours(0, 0, 0, 0);
   since.setDate(since.getDate() - (days - 1));
@@ -279,7 +323,11 @@ export async function getRunActivity(scope: SiteScope, days = 30): Promise<RunAc
       createdAt: runs.createdAt,
     })
     .from(runs)
-    .where(and(eq(runs.siteId, scope.siteId), gt(runs.createdAt, since)))
+    .where(and(
+      eq(runs.siteId, scope.siteId),
+      gt(runs.createdAt, since),
+      scope.role === "requester" ? eq(runs.ownerUserId, scope.userId) : undefined,
+    ))
     .orderBy(asc(runs.createdAt));
 
   const buckets = new Map<string, RunActivityPoint>();
@@ -391,7 +439,11 @@ export async function markRunAwaitingApproval(scope: SiteScope, runId: string) {
   const [run] = await db
     .select({ status: runs.status })
     .from(runs)
-    .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)))
+    .where(and(
+      eq(runs.siteId, scope.siteId),
+      eq(runs.id, runId),
+      isRequesterScope(scope) ? eq(runs.ownerUserId, scope.userId) : undefined,
+    ))
     .limit(1);
   if (!run) return;
   if (TERMINAL_STATUSES.includes(run.status as ProductRunStatus)) return;
@@ -740,7 +792,11 @@ export async function getRunCancelTarget(
       input: runs.input,
     })
     .from(runs)
-    .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)))
+    .where(and(
+      eq(runs.siteId, scope.siteId),
+      eq(runs.id, runId),
+      isRequesterScope(scope) ? eq(runs.ownerUserId, scope.userId) : undefined,
+    ))
     .limit(1);
 
   if (!row) return null;
@@ -782,7 +838,11 @@ export async function getThreadSnapshot(
   const [thread] = await db
     .select()
     .from(threads)
-    .where(and(eq(threads.siteId, context.siteId), eq(threads.id, threadId)))
+    .where(and(
+      eq(threads.siteId, context.siteId),
+      eq(threads.id, threadId),
+      context.role === "requester" ? eq(threads.ownerUserId, context.userId) : undefined,
+    ))
     .limit(1);
   if (!thread) {
     await auditScopedMiss(context, { action: "thread.read", resourceType: "thread", resourceId: threadId });
@@ -882,7 +942,7 @@ export async function getThreadSnapshot(
 }
 
 export async function listThreadEventsAfter(
-  scope: SiteScope,
+  scope: SiteRequestContext,
   threadId: string,
   cursor: number,
 ): Promise<StoredProductEvent[]> {
@@ -897,13 +957,35 @@ export async function listThreadEventsAfter(
     })
     .from(runEvents)
     .innerJoin(runs, eq(runEvents.runId, runs.id))
-    .where(and(eq(runs.siteId, scope.siteId), eq(runs.threadId, threadId), gt(runEvents.id, cursor)))
+    .where(and(
+      eq(runs.siteId, scope.siteId),
+      eq(runs.threadId, threadId),
+      scope.role === "requester" ? eq(runs.ownerUserId, scope.userId) : undefined,
+      gt(runEvents.id, cursor),
+    ))
     .orderBy(asc(runEvents.id));
 
   return rows.map((event) => ({
     ...event,
     type: event.type as StoredProductEvent["type"],
   }));
+}
+
+/** Vérifie un droit SSE sans auditer ni révéler l'identité de la ressource. */
+export async function canReadThreadEvents(
+  context: SiteRequestContext,
+  threadId: string,
+) {
+  const [thread] = await getDatabase()
+    .select({ id: threads.id })
+    .from(threads)
+    .where(and(
+      eq(threads.siteId, context.siteId),
+      eq(threads.id, threadId),
+      context.role === "requester" ? eq(threads.ownerUserId, context.userId) : undefined,
+    ))
+    .limit(1);
+  return Boolean(thread);
 }
 
 export async function getLatestRun(scope: SiteScope, threadId: string): Promise<RunDto | null> {
@@ -916,7 +998,7 @@ export async function getLatestRun(scope: SiteScope, threadId: string): Promise<
   return run ? toRunDto(run) : null;
 }
 
-export async function listThreads(scope: SiteScope, options?: {
+export async function listThreads(scope: SiteRequestContext, options?: {
   source?: ThreadSource;
 }): Promise<ThreadListItemDto[]> {
   const db = getDatabase();
@@ -924,12 +1006,22 @@ export async function listThreads(scope: SiteScope, options?: {
     ? db
         .select()
         .from(threads)
-        .where(and(eq(threads.siteId, scope.siteId), eq(threads.source, options.source)))
+        .where(and(
+          eq(threads.siteId, scope.siteId),
+          eq(threads.source, options.source),
+          scope.role === "requester" ? eq(threads.ownerUserId, scope.userId) : undefined,
+        ))
         .orderBy(desc(threads.updatedAt))
-    : db.select().from(threads).where(eq(threads.siteId, scope.siteId)).orderBy(desc(threads.updatedAt));
+    : db.select().from(threads).where(and(
+        eq(threads.siteId, scope.siteId),
+        scope.role === "requester" ? eq(threads.ownerUserId, scope.userId) : undefined,
+      )).orderBy(desc(threads.updatedAt));
   const [threadRows, runRows] = await Promise.all([
     threadQuery,
-    db.select().from(runs).where(eq(runs.siteId, scope.siteId)).orderBy(desc(runs.createdAt)),
+    db.select().from(runs).where(and(
+      eq(runs.siteId, scope.siteId),
+      scope.role === "requester" ? eq(runs.ownerUserId, scope.userId) : undefined,
+    )).orderBy(desc(runs.createdAt)),
   ]);
   const latestByThread = new Map<string, RunDto>();
   for (const run of runRows) {

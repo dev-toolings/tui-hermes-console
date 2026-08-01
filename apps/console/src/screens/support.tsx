@@ -12,14 +12,18 @@ import type { SupportData } from "@/loaders";
 export function SupportScreen({ data }: { data: SupportData }) {
   const { runtime, probe } = data;
 
-  const hermesTone = !runtime.configured
+  const hermesTone = !runtime
+    ? ("neutral" as const)
+    : !runtime.configured
     ? ("warning" as const)
-    : probe.ok
+    : probe?.ok
       ? ("success" as const)
       : ("danger" as const);
-  const hermesLabel = !runtime.configured
+  const hermesLabel = !runtime
+    ? "Accès restreint"
+    : !runtime.configured
     ? "Non configuré"
-    : probe.ok
+    : probe?.ok
       ? probe.version
         ? `Joignable · ${probe.version}`
         : "Joignable"
@@ -27,16 +31,16 @@ export function SupportScreen({ data }: { data: SupportData }) {
 
   const report = [
     `console.web          ready`,
-    `runtime.source       ${runtime.source}`,
-    `runtime.configured   ${runtime.configured}`,
-    `runtime.base_url     ${runtime.baseUrl ?? "—"}`,
-    `runtime.health       ${probe.ok ? "healthy" : runtime.configured ? "unreachable" : "not_configured"}`,
-    `runtime.version      ${probe.version ?? "—"}`,
-    `runtime.latency_ms   ${probe.latencyMs ?? "—"}`,
-    `runtime.token        ${runtime.tokenConfigured ? "present (hidden)" : "missing"}`,
-    `runtime.features     ${probe.features.length ? probe.features.join(",") : "unknown"}`,
+    `runtime.source       ${runtime?.source ?? "restricted"}`,
+    `runtime.configured   ${runtime?.configured ?? "unavailable"}`,
+    `runtime.base_url     ${runtime?.baseUrl ?? "—"}`,
+    `runtime.health       ${probe?.ok ? "healthy" : runtime?.configured ? "unreachable" : "not_available"}`,
+    `runtime.version      ${probe?.version ?? "—"}`,
+    `runtime.latency_ms   ${probe?.latencyMs ?? "—"}`,
+    `runtime.token        ${runtime?.tokenConfigured ? "present (hidden)" : "not_exposed"}`,
+    `runtime.features     ${probe?.features.length ? probe.features.join(",") : "not_available"}`,
     `edge.relay           not_in_scope_v0`,
-    `probe.error          ${probe.error ?? "—"}`,
+    `probe.error          ${probe?.error ?? (runtime ? "—" : "runtime access not granted")}`,
   ].join("\n");
 
   return (

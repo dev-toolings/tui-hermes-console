@@ -79,7 +79,7 @@ export async function POST(
       const stream = new URL(request.url).searchParams.get("stream") === "1";
       if (stream) {
         return createProductEventStream({
-          siteId: context.siteContext.siteId,
+          context: context.siteContext,
           threadId,
           runId: created.runId,
           signal: request.signal,

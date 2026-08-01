@@ -7,6 +7,7 @@ import { ImapTestError, testImapLogin } from "./imap-test";
 import { CONNECTOR_PRESETS, type ConnectorPublicDto } from "@console/core/modules/connectors/types";
 import type { SiteRequestContext } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
+import { auditOwnershipCreation } from "@/modules/ownership/audit";
 
 export class ConnectorRepositoryError extends Error {
   constructor(
@@ -23,12 +24,19 @@ export function isConnectorType(value: string): value is ConnectorType {
 }
 
 export async function listConnectors(context: SiteRequestContext): Promise<ConnectorPublicDto[]> {
-  const rows = await getDatabase().select().from(connectors).where(eq(connectors.siteId, context.siteId));
+  const rows = await getDatabase().select().from(connectors).where(and(
+    eq(connectors.siteId, context.siteId),
+    context.role === "requester" ? eq(connectors.ownerUserId, context.userId) : undefined,
+  ));
   return rows.map(toPublicDto);
 }
 
 export async function getConnector(context: SiteRequestContext, type: ConnectorType): Promise<ConnectorPublicDto | null> {
-  const [row] = await getDatabase().select().from(connectors).where(and(eq(connectors.siteId, context.siteId), eq(connectors.type, type))).limit(1);
+  const [row] = await getDatabase().select().from(connectors).where(and(
+    eq(connectors.siteId, context.siteId),
+    eq(connectors.type, type),
+    context.role === "requester" ? eq(connectors.ownerUserId, context.userId) : undefined,
+  )).limit(1);
   return row ? toPublicDto(row) : null;
 }
 
@@ -87,14 +95,26 @@ export async function saveConnector(context: SiteRequestContext, input: {
   }
 
   const id = `conn_${randomUUID().replaceAll("-", "")}`;
-  await db.insert(connectors).values({
-    id,
-    siteId: context.siteId,
-    type: input.type,
-    ...values,
-    encryptedPassword: encryptSecret(input.password.trim()),
-    lastTestStatus: "unknown",
-    createdAt: now,
+  const encryptedPassword = encryptSecret(input.password.trim());
+  await db.transaction(async (tx) => {
+    await tx.insert(connectors).values({
+      id,
+      siteId: context.siteId,
+      ownerUserId: context.userId,
+      authorUserId: context.userId,
+      type: input.type,
+      ...values,
+      encryptedPassword,
+      lastTestStatus: "unknown",
+      createdAt: now,
+    });
+    await auditOwnershipCreation(tx, context, {
+      resourceType: "connector",
+      resourceId: id,
+      projectId: null,
+      ownerUserId: context.userId,
+      authorUserId: context.userId,
+    });
   });
 
   return (await getConnector(context, input.type))!;

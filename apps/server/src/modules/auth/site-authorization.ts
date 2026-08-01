@@ -3,7 +3,7 @@ import type { SiteMembershipRole } from "@/db/schema";
 import { appendAuditEntry } from "@/modules/audit/service";
 import { AuthError, type SiteRequestContext } from "./service";
 
-export const SITE_ROLE_MATRIX_VERSION = "2026-08-01.us-g2-002.v1";
+export const SITE_ROLE_MATRIX_VERSION = "2026-08-01.us-g2-003.v1";
 
 export const SITE_ACTIONS = [
   "agent.read",
@@ -31,6 +31,7 @@ export const SITE_ACTIONS = [
   "membership.manage",
   "audit.read",
   "audit.export",
+  "ownership.transfer",
 ] as const;
 
 export type SiteAction = (typeof SITE_ACTIONS)[number];
@@ -67,10 +68,22 @@ export const SITE_ROLE_PERMISSIONS: Readonly<
     ...READ_ACTIONS,
     ...EXECUTION_ACTIONS,
     "thread.agent.switch",
+    "ownership.transfer",
   ]),
-  // Tant que G2-003 n'apporte pas de propriété par ressource, le requester ne
-  // peut pas recevoir de lecture site-wide ni muter un thread existant.
-  requester: new Set(["thread.create"]),
+  // Les repositories appliquent un prédicat owner_user_id pour chacune de ces
+  // actions. Les ajouter ici n'accorde donc jamais une lecture site-wide.
+  requester: new Set([
+    "agent.read",
+    "connector.read",
+    "thread.read",
+    "thread.create",
+    "thread.message",
+    "thread.command",
+    "thread.events.read",
+    "run.read",
+    "artifact.read",
+    "artifact.create",
+  ]),
   approver: new Set([
     "thread.read",
     "thread.command",

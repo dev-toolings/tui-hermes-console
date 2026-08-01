@@ -63,7 +63,7 @@ function psql(statement: string, database = "site_api") {
 }
 
 function applyMigrations() {
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 20)) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= 21)) {
     psql(readFileSync(join(import.meta.dir, `${entry.tag}.sql`), "utf8"));
   }
 }
@@ -115,29 +115,30 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
     psql(`
       INSERT INTO sites (id, name, slug) VALUES
         ('paris', 'Paris', 'paris'), ('lyon', 'Lyon', 'lyon');
-      INSERT INTO console_users (id, email, google_subject)
-        VALUES ('usr_paris', 'paris@example.com', 'sub-paris');
+      INSERT INTO console_users (id, email, google_subject) VALUES
+        ('usr_paris', 'paris@example.com', 'sub-paris'),
+        ('usr_lyon', 'lyon@example.com', 'sub-lyon');
       INSERT INTO site_memberships (user_id, site_id, role)
-        VALUES ('usr_paris', 'paris', 'operator');
-      INSERT INTO agents (id, site_id, name, slug, instructions) VALUES
-        ('agt_paris', 'paris', 'Paris agent', 'paris-agent', 'Paris'),
-        ('agt_lyon', 'lyon', 'Lyon agent', 'lyon-agent', 'Lyon');
+        VALUES ('usr_paris', 'paris', 'operator'), ('usr_lyon', 'lyon', 'admin');
+      INSERT INTO agents (id, site_id, owner_user_id, author_user_id, name, slug, instructions) VALUES
+        ('agt_paris', 'paris', 'usr_paris', 'usr_paris', 'Paris agent', 'paris-agent', 'Paris'),
+        ('agt_lyon', 'lyon', 'usr_lyon', 'usr_lyon', 'Lyon agent', 'lyon-agent', 'Lyon');
       INSERT INTO connectors
-        (id, site_id, type, label, email, imap_host, encrypted_password) VALUES
-        ('con_paris', 'paris', 'gmail_imap', 'Paris inbox', 'p@example.com', 'imap.example.com', 'cipher'),
-        ('con_lyon', 'lyon', 'gmail_imap', 'Lyon inbox', 'l@example.com', 'imap.example.com', 'cipher');
+        (id, site_id, owner_user_id, author_user_id, type, label, email, imap_host, encrypted_password) VALUES
+        ('con_paris', 'paris', 'usr_paris', 'usr_paris', 'gmail_imap', 'Paris inbox', 'p@example.com', 'imap.example.com', 'cipher'),
+        ('con_lyon', 'lyon', 'usr_lyon', 'usr_lyon', 'gmail_imap', 'Lyon inbox', 'l@example.com', 'imap.example.com', 'cipher');
       INSERT INTO threads
-        (id, site_id, title, agent_id, agent_name, instructions, hermes_conversation) VALUES
-        ('thr_paris', 'paris', 'Paris thread', 'agt_paris', 'Paris agent', 'Paris', 'console:paris'),
-        ('thr_lyon', 'lyon', 'Lyon thread', 'agt_lyon', 'Lyon agent', 'Lyon', 'console:lyon');
+        (id, site_id, owner_user_id, author_user_id, title, agent_id, agent_name, instructions, hermes_conversation) VALUES
+        ('thr_paris', 'paris', 'usr_paris', 'usr_paris', 'Paris thread', 'agt_paris', 'Paris agent', 'Paris', 'console:paris'),
+        ('thr_lyon', 'lyon', 'usr_lyon', 'usr_lyon', 'Lyon thread', 'agt_lyon', 'Lyon agent', 'Lyon', 'console:lyon');
       INSERT INTO runs
-        (id, site_id, thread_id, input, status, hermes_response_id) VALUES
-        ('run_paris', 'paris', 'thr_paris', 'Paris', 'completed', 'hermes-paris'),
-        ('run_lyon', 'lyon', 'thr_lyon', 'Lyon', 'awaiting_approval', 'hermes-lyon');
+        (id, site_id, owner_user_id, author_user_id, thread_id, input, status, hermes_response_id) VALUES
+        ('run_paris', 'paris', 'usr_paris', 'usr_paris', 'thr_paris', 'Paris', 'completed', 'hermes-paris'),
+        ('run_lyon', 'lyon', 'usr_lyon', 'usr_lyon', 'thr_lyon', 'Lyon', 'awaiting_approval', 'hermes-lyon');
       INSERT INTO artifacts
-        (id, site_id, run_id, direction, filename, storage_path, size_bytes, checksum_sha256) VALUES
-        ('file_paris', 'paris', 'run_paris', 'output', 'paris.txt', '/vault/paris.txt', 1, '00'),
-        ('file_lyon', 'lyon', 'run_lyon', 'output', 'lyon.txt', '/vault/lyon.txt', 1, '00');
+        (id, site_id, owner_user_id, author_user_id, run_id, direction, filename, storage_path, size_bytes, checksum_sha256) VALUES
+        ('file_paris', 'paris', 'usr_paris', 'usr_paris', 'run_paris', 'output', 'paris.txt', '/vault/paris.txt', 1, '00'),
+        ('file_lyon', 'lyon', 'usr_lyon', 'usr_lyon', 'run_lyon', 'output', 'lyon.txt', '/vault/lyon.txt', 1, '00');
     `);
     const binding = docker(["port", containerName, "5432/tcp"]);
     const port = binding.match(/:(\d+)$/)?.[1];

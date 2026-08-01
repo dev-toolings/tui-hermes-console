@@ -27,8 +27,8 @@ const readActions: SiteAction[] = [
 
 describe("site role permission matrix", () => {
   test("assigns every current action to the five roles without broadening specialized roles", () => {
-    expect(SITE_ROLE_MATRIX_VERSION).toBe("2026-08-01.us-g2-002.v1");
-    expect(SITE_ACTIONS).toHaveLength(25);
+    expect(SITE_ROLE_MATRIX_VERSION).toBe("2026-08-01.us-g2-003.v1");
+    expect(SITE_ACTIONS).toHaveLength(26);
 
     for (const action of SITE_ACTIONS) {
       expect(canPerformSiteAction("admin", action)).toBe(true);
@@ -44,15 +44,17 @@ describe("site role permission matrix", () => {
     expect(canPerformSiteAction("operator", "run.cancel")).toBe(true);
     expect(canPerformSiteAction("operator", "run.retry")).toBe(true);
     expect(canPerformSiteAction("operator", "thread.agent.switch")).toBe(true);
+    expect(canPerformSiteAction("operator", "ownership.transfer")).toBe(true);
     expect(canPerformSiteAction("operator", "run.approve")).toBe(false);
     expect(canPerformSiteAction("operator", "agent.create")).toBe(false);
 
     expect(canPerformSiteAction("requester", "thread.create")).toBe(true);
-    expect(canPerformSiteAction("requester", "agent.read")).toBe(false);
-    expect(canPerformSiteAction("requester", "thread.read")).toBe(false);
-    expect(canPerformSiteAction("requester", "thread.message")).toBe(false);
-    expect(canPerformSiteAction("requester", "artifact.create")).toBe(false);
-    expect(canPerformSiteAction("requester", "thread.command")).toBe(false);
+    expect(canPerformSiteAction("requester", "agent.read")).toBe(true);
+    expect(canPerformSiteAction("requester", "connector.read")).toBe(true);
+    expect(canPerformSiteAction("requester", "thread.read")).toBe(true);
+    expect(canPerformSiteAction("requester", "thread.message")).toBe(true);
+    expect(canPerformSiteAction("requester", "artifact.create")).toBe(true);
+    expect(canPerformSiteAction("requester", "thread.command")).toBe(true);
     expect(canPerformSiteAction("requester", "thread.agent.switch")).toBe(false);
     expect(canPerformSiteAction("requester", "thread.delete")).toBe(false);
     expect(canPerformSiteAction("requester", "run.cancel")).toBe(false);
@@ -101,11 +103,11 @@ describe("site role permission matrix", () => {
       reasonCode: "ROLE_PERMISSION_DENIED",
       beforeState: {
         role: "requester",
-        matrixVersion: "2026-08-01.us-g2-002.v1",
+        matrixVersion: "2026-08-01.us-g2-003.v1",
       },
       afterState: {
         role: "requester",
-        matrixVersion: "2026-08-01.us-g2-002.v1",
+        matrixVersion: "2026-08-01.us-g2-003.v1",
       },
       correlationId: "req_requester",
     });

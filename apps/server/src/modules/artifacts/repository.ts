@@ -12,9 +12,10 @@ import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
 import { and, desc, eq } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
-import { artifacts, runs, type ArtifactDirection } from "@/db/schema";
+import { artifacts, runs, siteMemberships, type ArtifactDirection } from "@/db/schema";
 import type { SiteRequestContext, SiteScope } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
+import { auditOwnershipCreation } from "@/modules/ownership/audit";
 import {
   ArtifactPathError,
   assertSafeRegularFile,
@@ -49,6 +50,10 @@ export class ArtifactError extends Error {
     super(message, options);
     this.name = "ArtifactError";
   }
+}
+
+function isRequesterScope(scope: SiteScope): scope is SiteRequestContext {
+  return "role" in scope && scope.role === "requester" && "userId" in scope;
 }
 
 export async function depositInputFile(
@@ -107,16 +112,25 @@ export async function depositInputFile(
     throw error;
   }
 
-  return insertArtifact({
-    ...runScope,
-    runId,
-    direction: "input",
-    filename,
-    storagePath,
-    mimeType: file.type || null,
-    sizeBytes,
-    checksumSha256: checksum,
-  });
+  try {
+    return await insertArtifact({
+      ...runScope,
+      authorUserId: context.userId,
+      runId,
+      direction: "input",
+      filename,
+      storagePath,
+      mimeType: file.type || null,
+      sizeBytes,
+      checksumSha256: checksum,
+    }, context);
+  } catch (error) {
+    await Promise.all([
+      rm(storagePath, { force: true }),
+      rm(stagedPath, { force: true }),
+    ]);
+    throw error;
+  }
 }
 
 /** Scanne `out/` et enregistre les nouveaux artefacts de sortie (idempotent par checksum+nom). */
@@ -125,6 +139,7 @@ export async function scanOutputArtifacts(
   runId: string,
 ): Promise<ArtifactDto[]> {
   const runScope = await resolveRunScope(scope, runId, false);
+  const auditContext = await resolveArtifactAuditContext(scope, runId, runScope.authorUserId);
   const outDir = runOutputDir(runId);
   const existing = await listArtifactsForRun(scope, runId, "output");
   const quotas = getArtifactQuotas();
@@ -199,22 +214,52 @@ export async function scanOutputArtifacts(
       continue;
     }
 
-    const row = await insertArtifact({
-      ...runScope,
-      runId,
-      direction: "output",
-      filename: name,
-      storagePath,
-      mimeType: null,
-      sizeBytes: source.size,
-      checksumSha256: checksum,
-    });
+    let row: ArtifactDto;
+    try {
+      row = await insertArtifact({
+        ...runScope,
+        runId,
+        direction: "output",
+        filename: name,
+        storagePath,
+        mimeType: null,
+        sizeBytes: source.size,
+        checksumSha256: checksum,
+      }, auditContext);
+    } catch (error) {
+      await rm(storagePath, { force: true });
+      throw error;
+    }
     known.add(key);
     total += source.size;
     created.push(row);
   }
 
   return created;
+}
+
+async function resolveArtifactAuditContext(
+  scope: SiteScope,
+  runId: string,
+  authorUserId: string,
+): Promise<SiteRequestContext> {
+  const [membership] = await getDatabase()
+    .select({ role: siteMemberships.role })
+    .from(siteMemberships)
+    .where(and(
+      eq(siteMemberships.siteId, scope.siteId),
+      eq(siteMemberships.userId, authorUserId),
+    ))
+    .limit(1);
+  if (!membership) {
+    throw new Error("L'auteur du run n'a plus de membership active pour auditer l'artefact.");
+  }
+  return {
+    siteId: scope.siteId,
+    userId: authorUserId,
+    role: membership.role,
+    correlationId: `artifact:${runId}`,
+  };
 }
 
 export async function readDirectoryBounded(
@@ -289,19 +334,35 @@ export async function listArtifactsForRun(
     .from(artifacts)
     .where(
       direction
-        ? and(eq(artifacts.siteId, scope.siteId), eq(artifacts.runId, runId), eq(artifacts.direction, direction))
-        : and(eq(artifacts.siteId, scope.siteId), eq(artifacts.runId, runId)),
+        ? and(
+            eq(artifacts.siteId, scope.siteId),
+            eq(artifacts.runId, runId),
+            eq(artifacts.direction, direction),
+            isRequesterScope(scope)
+              ? eq(artifacts.ownerUserId, scope.userId)
+              : undefined,
+          )
+        : and(
+            eq(artifacts.siteId, scope.siteId),
+            eq(artifacts.runId, runId),
+            isRequesterScope(scope)
+              ? eq(artifacts.ownerUserId, scope.userId)
+              : undefined,
+          ),
     )
     .orderBy(desc(artifacts.createdAt));
 
   return rows.map(toDto);
 }
 
-export async function listAllArtifacts(scope: SiteScope, limit = 50): Promise<ArtifactDto[]> {
+export async function listAllArtifacts(scope: SiteRequestContext, limit = 50): Promise<ArtifactDto[]> {
   const rows = await getDatabase()
     .select()
     .from(artifacts)
-    .where(eq(artifacts.siteId, scope.siteId))
+    .where(and(
+      eq(artifacts.siteId, scope.siteId),
+      scope.role === "requester" ? eq(artifacts.ownerUserId, scope.userId) : undefined,
+    ))
     .orderBy(desc(artifacts.createdAt))
     .limit(limit);
   return rows.map(toDto);
@@ -311,7 +372,11 @@ export async function getArtifact(context: SiteRequestContext, fileId: string) {
   const [row] = await getDatabase()
     .select()
     .from(artifacts)
-    .where(and(eq(artifacts.siteId, context.siteId), eq(artifacts.id, fileId)))
+    .where(and(
+      eq(artifacts.siteId, context.siteId),
+      eq(artifacts.id, fileId),
+      context.role === "requester" ? eq(artifacts.ownerUserId, context.userId) : undefined,
+    ))
     .limit(1);
   if (!row) {
     await auditScopedMiss(context, { action: "artifact.read", resourceType: "artifact", resourceId: fileId });
@@ -342,6 +407,8 @@ export async function copyIntoOutput(
 async function insertArtifact(input: {
   siteId: string;
   projectId: string | null;
+  ownerUserId: string;
+  authorUserId: string;
   runId: string;
   direction: ArtifactDirection;
   filename: string;
@@ -349,13 +416,15 @@ async function insertArtifact(input: {
   mimeType: string | null;
   sizeBytes: number;
   checksumSha256: string;
-}): Promise<ArtifactDto> {
+}, context?: SiteRequestContext): Promise<ArtifactDto> {
   const id = `file_${randomUUID().replaceAll("-", "")}`;
   const now = new Date();
-  await getDatabase().insert(artifacts).values({
+  const values = {
     id,
     siteId: input.siteId,
     projectId: input.projectId,
+    ownerUserId: input.ownerUserId,
+    authorUserId: input.authorUserId,
     runId: input.runId,
     direction: input.direction,
     filename: input.filename,
@@ -364,7 +433,21 @@ async function insertArtifact(input: {
     sizeBytes: input.sizeBytes,
     checksumSha256: input.checksumSha256,
     createdAt: now,
-  });
+  };
+  if (context) {
+    await getDatabase().transaction(async (tx) => {
+      await tx.insert(artifacts).values(values);
+      await auditOwnershipCreation(tx, context, {
+        resourceType: "artifact",
+        resourceId: id,
+        projectId: input.projectId,
+        ownerUserId: input.ownerUserId,
+        authorUserId: input.authorUserId,
+      });
+    });
+  } else {
+    await getDatabase().insert(artifacts).values(values);
+  }
   return {
     id,
     runId: input.runId,
@@ -383,9 +466,20 @@ async function resolveRunScope(
   auditMiss: boolean,
 ) {
   const [run] = await getDatabase()
-    .select({ siteId: runs.siteId, projectId: runs.projectId })
+    .select({
+      siteId: runs.siteId,
+      projectId: runs.projectId,
+      ownerUserId: runs.ownerUserId,
+      authorUserId: runs.authorUserId,
+    })
     .from(runs)
-    .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)))
+    .where(and(
+      eq(runs.siteId, scope.siteId),
+      eq(runs.id, runId),
+      isRequesterScope(scope)
+        ? eq(runs.ownerUserId, scope.userId)
+        : undefined,
+    ))
     .limit(1);
   if (run) return run;
   if (auditMiss && "userId" in scope) {
