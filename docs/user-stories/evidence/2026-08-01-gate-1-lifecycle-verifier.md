@@ -2,7 +2,7 @@
 
 - Date/heure UTC : 2026-08-01
 - Story : US-G1-006 (préparation G1-006C)
-- Commit : `295b206`
+- Commits : `295b206`, `369fbbc`
 - Environnement : Bun local
 - Reviewer : non effectué
 
