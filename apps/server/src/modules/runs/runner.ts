@@ -210,7 +210,13 @@ async function resumeAgentStream(
 
   try {
     context = await getRunContext(scope, runId);
-    await markRunStarted(scope, runId);
+    // Après un redémarrage, Hermes peut encore être suspendu sur une demande
+    // d'autorisation. Ne pas raconter un passage à `running` avant la décision
+    // humaine : un flux vide de reprise doit conserver `awaiting_approval`.
+    const persistedRun = await getRunCancelTarget(scope, runId);
+    if (persistedRun?.status !== "awaiting_approval") {
+      await markRunStarted(scope, runId);
+    }
 
     const stream = await streamHermesAgentRun({
       hermesRunId,

@@ -541,6 +541,11 @@ le pipeline de publication ne sont pas livrés.
 | bun run lint | vert avec 2 warnings |
 | bun run build | vert |
 
+Preuve locale complémentaire : `bun run proof:g1-007a` passe le parcours HTTP post-setup
+inter-process, le redémarrage pendant `awaiting_approval`, la reprise après completion et cinq
+variantes négatives contre PostgreSQL scratch et Hermes synthétique. Cette preuve ne ferme pas la
+P-E2E installation vierge ni Gate 1.
+
 Warnings connus :
 
 - TanStack Table incompatible avec une optimisation du compilateur React ;
@@ -557,8 +562,12 @@ Ce qui n’est pas prouvé :
 
 - aucun E2E navigateur automatisé ;
 - aucun parcours Google OIDC contre Google réel ;
-- aucun test d’intégration contre un mock Hermes complet ;
-- aucun test de redémarrage prouvant réconciliation et durabilité ;
+- un harness post-setup local G1-007A existe contre un faux Hermes HTTP/SSE, avec PostgreSQL réel,
+  cookies/CSRF, CAS/audit, artefact et cinq variantes négatives ; aucun test contre Hermes upstream
+  ni aucune P-E2E d’installation vierge ;
+- le harness arrête réellement la Console pendant `awaiting_approval`, redémarre sur la même DB et
+  les mêmes racines, puis vérifie la conservation de la demande avant le second redémarrage après
+  completion ; cela reste une preuve synthétique locale, pas une reprise Hermes upstream ;
 - aucun test réel SSH/SFTP/tunnel ;
 - aucun build et démarrage de compose.prod.yml rapporté dans cette passe ;
 - aucun pilote avec un utilisateur tiers.

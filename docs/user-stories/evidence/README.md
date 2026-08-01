@@ -59,6 +59,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
   l’intention avant le relais ; Hermes réel, P-SEC/P-E2E et Gate 1 restent ouverts.
 - [01-08-2026 — parcours navigateur notice IA](2026-08-01-gate-1-ai-disclosure-e2e.md) : redirection,
   arbre accessible, clavier et persistance scratch ; lecteur d’écran et acceptation Gate encore ouverts.
+- [01-08-2026 — parcours critique post-setup G1-007A](2026-08-01-gate-1-g1-007a-post-setup-local.md) :
+  Hono inter-process, PostgreSQL scratch, faux Hermes SSE, approbation/CAS/audit, redémarrage et
+  artefact vérifié ; installation vierge, Hermes upstream, P-SEC/P-OPS et acceptation Gate restent ouvertes.
 
 ## Modèle
 
