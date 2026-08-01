@@ -3,7 +3,7 @@
 - Date/heure UTC : 2026-08-01
 - Story : US-G1-006 (slice G1-006A)
 - Environnement : tests locaux Bun + migration PostgreSQL préparée
-- Commit : à renseigner après commit
+- Commits : `03b4ec6` (implémentation), `0ac701f` (durcissement)
 - Reviewer : non effectué
 
 ## Périmètre livré

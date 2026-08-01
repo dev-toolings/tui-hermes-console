@@ -2,7 +2,7 @@
 
 - Date/heure UTC : 2026-08-01
 - Story : US-G1-006 (slice G1-006B)
-- Commit : à renseigner après commit
+- Commit : `673dbc0`
 - Environnement : tests locaux Bun ; PostgreSQL de test disponible pour la suite existante
 - Reviewer : non effectué
 
