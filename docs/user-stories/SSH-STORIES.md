@@ -78,8 +78,11 @@ recovery, compte SSH de service, transports Hermes, cycle de vie des identités.
 - **Positif :** la seule clé autorisée se connecte avec `IdentitiesOnly` et `BatchMode`.
 - **Négatif :** clé inconnue ou révoquée ; exit non nul, aucune session, écriture ni fallback.
 - **Preuves :** `P-SEC`, empreintes publiques, config et logs expurgés.
+- **Préparation code disponible :** les invocations système `ssh` et `scp` imposent désormais
+  `BatchMode=yes` et `IdentitiesOnly=yes` ; l’overlay Compose SSH opt-in fournit le dossier de
+  config/identité en lecture seule sans modifier le Compose de base.
 - **État courant :** `BLOQUÉE` — la clé inconnue est refusée sur la cible diagnostiquée, mais le
-  compte de service cible et la revue d'acceptation manquent.
+  compte de service cible, la cible vierge, la rotation et la revue d'acceptation manquent.
 
 ## US-G1-SSH-005 — Borner le tunnel à Hermes
 
