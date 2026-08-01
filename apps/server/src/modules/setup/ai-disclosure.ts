@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { consoleUsers } from "@/db/schema";
 import { getDatabase } from "@/db/client";
@@ -17,6 +18,27 @@ export const CURRENT_AI_DISCLOSURE = {
     "N’envoyez des secrets ou des données personnelles que si votre organisation vous y autorise.",
   ],
 } as const;
+
+/** The version is coupled to this hash so text cannot change silently. */
+export const CURRENT_AI_DISCLOSURE_CONTENT_SHA256 =
+  "198c7822cd8edd739f4a70e7f30aa835e4724ab7f29d92da412f5d1d7428989d";
+
+export function aiDisclosureContentSha256() {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        title: CURRENT_AI_DISCLOSURE.title,
+        summary: CURRENT_AI_DISCLOSURE.summary,
+        items: CURRENT_AI_DISCLOSURE.items,
+      }),
+      "utf8",
+    )
+    .digest("hex");
+}
+
+if (aiDisclosureContentSha256() !== CURRENT_AI_DISCLOSURE_CONTENT_SHA256) {
+  throw new Error("AI_DISCLOSURE_CONTENT_HASH_MISMATCH");
+}
 
 export function hasCurrentAiDisclosureConsent(
   user: Pick<AuthSession, "aiDisclosureVersion" | "aiDisclosureAcceptedAt">,

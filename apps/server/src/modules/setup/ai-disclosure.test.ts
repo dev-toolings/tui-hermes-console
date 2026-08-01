@@ -1,6 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
   CURRENT_AI_DISCLOSURE,
+  CURRENT_AI_DISCLOSURE_CONTENT_SHA256,
+  aiDisclosureContentSha256,
   hasCurrentAiDisclosureConsent,
   runStartPreconditionResponse,
   withCurrentAiDisclosureConsent,
@@ -47,6 +49,13 @@ describe("AI disclosure consent", () => {
     expect(disclosure).toMatch(/fournisseurs externes.*modèles d’IA/i);
     expect(disclosure).toMatch(/commandes et des actions/i);
     expect(disclosure).toMatch(/contrôle humain/i);
+  });
+
+  test("pins the current disclosure text to its versioned content hash", () => {
+    expect(aiDisclosureContentSha256()).toBe(CURRENT_AI_DISCLOSURE_CONTENT_SHA256);
+    expect(CURRENT_AI_DISCLOSURE_CONTENT_SHA256).toBe(
+      "198c7822cd8edd739f4a70e7f30aa835e4724ab7f29d92da412f5d1d7428989d",
+    );
   });
 
   test("is current only when version and timestamp are both present", () => {
