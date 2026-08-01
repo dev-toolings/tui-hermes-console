@@ -16,6 +16,8 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
   P-E2E, P-SEC multi-compte et acceptation Gate encore ouverts.
 - [31-07-2026 — diagnostic SSH/SFTP sur VPS existant](2026-07-31-gate-1-ssh-vps-diagnostic.md) :
   preuve partielle, US-G1-008 `BLOQUÉE`.
+- [01-08-2026 — export d’audit expurgé](2026-08-01-gate-1-audit-export.md) : préparation code
+  locale pour US-G1-005 ; P-SEC/P-E2E et acceptation Gate encore ouvertes.
 
 ## Modèle
 

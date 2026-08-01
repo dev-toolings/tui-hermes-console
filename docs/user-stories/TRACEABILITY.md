@@ -12,7 +12,7 @@ daté seulement après exécution ; `—` signifie « non prouvé », pas « non
 | US-G1-002 | §9.5, §13 — Hermes pinné et confiné | US-G0-003 | — | `PROPOSÉE` |
 | US-G1-003 | §9.5, §13 — avertissement IA | US-G0-003 | — | `PROPOSÉE` |
 | US-G1-004 | §9.2, §13 — policy fail-closed | US-G1-002 | — | `PROPOSÉE` |
-| US-G1-005 | §8.2, §9.2, §13 — approbation et audit | US-G1-004 | — | `PROPOSÉE` |
+| US-G1-005 | §8.2, §9.2, §13 — approbation et audit | US-G1-004 | [export audit expurgé 2026-08-01](evidence/2026-08-01-gate-1-audit-export.md) | `IMPLÉMENTÉE` |
 | US-G1-006 | §9.1, §13 — rétention, export, backup, restauration | US-G1-001, US-G1-005 | — | `PROPOSÉE` |
 | US-G1-007 | §11, §13 — E2E critique | US-G1-001..006 | — | `PROPOSÉE` |
 | US-G1-008 | §9.4, §10, §13 — SSH/SFTP réel | US-G1-002 | [diagnostic read-only VPS 187.55.227.55 01-08-2026](evidence/2026-08-01-gate-1-ssh-vps-18755-diagnostic.md), [diagnostic VPS 31-07-2026](evidence/2026-07-31-gate-1-ssh-vps-diagnostic.md) | `BLOQUÉE` |
