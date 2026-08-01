@@ -109,8 +109,11 @@ recovery, compte SSH de service, transports Hermes, cycle de vie des identités.
 - **Négatif :** chemin protégé, symlink, quota, coupure, hash différent ou erreur list/download ;
   échec visible, corrélé, sans fichier partiel ni état « livré ».
 - **Preuves :** `P-E2E`, `P-SEC`, hashes, inventaires et statuts corrélés.
+- **Préparation code disponible (`3c37900`) :** le mode SSH exige maintenant un workdir distant
+  explicitement fourni, absolu et non situé sous `/tmp`, `/var/tmp`, `/run` ou `/dev/shm`. Aucun
+  chemin de repli transitoire n'est inventé lorsque le champ est absent ou invalide.
 - **État courant :** `BLOQUÉE` — le transport synthétique seul est prouvé et les erreurs applicatives
-  peuvent encore être absorbées.
+  peuvent encore être absorbées ; la durabilité réelle du workdir reste non prouvée sans cible VPS.
 
 ## US-G1-SSH-007 — Prouver concurrence et reconnexion
 
