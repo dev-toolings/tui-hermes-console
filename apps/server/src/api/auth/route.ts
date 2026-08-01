@@ -1,7 +1,7 @@
 import { apiErrorResponse } from "@/modules/api/errors";
 import { assertSameOriginMutation } from "@/modules/api/same-origin";
 import { consoleSetupRequired } from "@/modules/setup/service";
-import { AuthError, assertCsrf, beginGoogleLogin, clearSessionHeaders, completeGoogleLogin, deleteSession, getSession, oidcStateClearingHeader, requireSiteRequestContext, resolveSiteRequirement, selectSessionSite, type SiteRequestContext } from "@/modules/auth/service";
+import { AuthError, assertCsrf, beginGoogleLogin, clearSessionHeaders, completeGoogleLogin, deleteSession, findActiveAssignedMandates, getSession, oidcStateClearingHeader, requireSiteRequestContext, resolveSiteRequirement, selectSessionMandate, selectSessionSite, type SiteRequestContext } from "@/modules/auth/service";
 import { siteCapabilitiesForRole } from "@/modules/auth/site-authorization";
 import { z } from "zod";
 import {
@@ -36,6 +36,8 @@ export function authStatusPayload(
   session: AuthSession | null,
   setupRequired: boolean,
   requestContext: SiteRequestContext | null = null,
+  mandates: Awaited<ReturnType<typeof findActiveAssignedMandates>> = [],
+  mandateSelectionRequired = false,
 ) {
   const consentRequired = session
     ? !hasCurrentAiDisclosureConsent(session)
@@ -72,6 +74,14 @@ export function authStatusPayload(
                 projectId: requestContext.mandateProjectId,
               }
             : null,
+          mandates: mandates.map((mandate) => ({
+            id: mandate.id,
+            operatorOrganizationId: mandate.operatorOrganizationId,
+            projectId: mandate.projectId,
+            startsAt: mandate.startsAt.toISOString(),
+            expiresAt: mandate.expiresAt?.toISOString() ?? null,
+          })),
+          mandateSelectionRequired,
         }
       : null,
   };
@@ -107,11 +117,31 @@ export async function GET(request: Request) {
     const requirement = session
       ? resolveSiteRequirement(session.memberships, session.siteId)
       : null;
-    const requestContext = session && requirement?.activeSite
-      ? await requireSiteRequestContext(session)
-      : null;
+    let requestContext: SiteRequestContext | null = null;
+    let mandates: Awaited<ReturnType<typeof findActiveAssignedMandates>> = [];
+    let mandateSelectionRequired = false;
+    if (session && requirement?.activeSite) {
+      if (requirement.activeSite.role === "operator") {
+        mandates = await findActiveAssignedMandates(session.userId, requirement.activeSite);
+      }
+      try {
+        requestContext = await requireSiteRequestContext(session);
+      } catch (error) {
+        if (error instanceof AuthError && error.code === "MSP_MANDATE_SELECTION_REQUIRED") {
+          mandateSelectionRequired = true;
+        } else {
+          throw error;
+        }
+      }
+    }
     return Response.json(
-      authStatusPayload(session, await consoleSetupRequired(), requestContext),
+      authStatusPayload(
+        session,
+        await consoleSetupRequired(),
+        requestContext,
+        mandates,
+        mandateSelectionRequired,
+      ),
       { headers: { "cache-control": "no-store" } },
     );
   } catch (error) {
@@ -152,7 +182,7 @@ function sessionHeadersForCallback(rawToken: string, session: { csrfToken: strin
 export async function POST(request: Request) {
   try {
     const action = new URL(request.url).searchParams.get("action");
-    if (action !== "logout" && action !== "select-site") throw new AuthError("Action d'authentification inconnue.", 404, "AUTH_ACTION_NOT_FOUND");
+    if (action !== "logout" && action !== "select-site" && action !== "select-mandate") throw new AuthError("Action d'authentification inconnue.", 404, "AUTH_ACTION_NOT_FOUND");
     const session = await getSession(request);
     if (!session) throw new AuthError("Authentification requise.", 401, "AUTH_REQUIRED");
     assertSameOriginMutation(request);
@@ -163,6 +193,13 @@ export async function POST(request: Request) {
         .strict()
         .parse(await request.json());
       return Response.json({ activeSite: await selectSessionSite(request, siteId) });
+    }
+    if (action === "select-mandate") {
+      const { mandateId } = z
+        .object({ mandateId: z.string().trim().min(1).max(200) })
+        .strict()
+        .parse(await request.json());
+      return Response.json({ mandate: await selectSessionMandate(request, mandateId) });
     }
     await deleteSession(request);
     return new Response(null, { status: 204, headers: clearSessionHeaders() });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { selectSitePayload, siteAccessBlock, type AuthSiteContext } from "./auth-site-context";
+import { selectMandatePayload, selectSitePayload, siteAccessBlock, type AuthSiteContext } from "./auth-site-context";
 
 const paris = {
   id: "paris",
@@ -17,6 +17,8 @@ describe("auth site context", () => {
       memberships: [paris],
       selectionRequired: false,
       membershipRequired: false,
+      mandateSelectionRequired: false,
+      mandates: [],
       capabilities: ["run.read"],
     };
 
@@ -30,6 +32,8 @@ describe("auth site context", () => {
         memberships: [],
         selectionRequired: false,
         membershipRequired: true,
+        mandateSelectionRequired: false,
+        mandates: [],
         capabilities: [],
       }),
     ).toBe("membership");
@@ -39,6 +43,8 @@ describe("auth site context", () => {
         memberships: [paris, { ...paris, id: "lyon", slug: "lyon", name: "Lyon" }],
         selectionRequired: true,
         membershipRequired: false,
+        mandateSelectionRequired: false,
+        mandates: [],
         capabilities: [],
       }),
     ).toBe("selection");
@@ -46,5 +52,24 @@ describe("auth site context", () => {
 
   test("submits only the selected membership identifier", () => {
     expect(selectSitePayload("paris")).toEqual({ siteId: "paris" });
+    expect(selectMandatePayload("mandate_a")).toEqual({ mandateId: "mandate_a" });
+  });
+
+  test("blocks product access until an operator mandate is selected", () => {
+    expect(siteAccessBlock({
+      activeSite: paris,
+      memberships: [paris],
+      selectionRequired: false,
+      membershipRequired: false,
+      mandateSelectionRequired: true,
+      mandates: [{
+        id: "mandate_a",
+        operatorOrganizationId: "org_msp",
+        projectId: "prj_a",
+        startsAt: "2026-08-01T00:00:00.000Z",
+        expiresAt: null,
+      }],
+      capabilities: [],
+    })).toBe("mandate");
   });
 });

@@ -5,6 +5,7 @@ import {
   agents,
   artifacts,
   connectors,
+  consoleSessions,
   consoleUsers,
   organizationMemberships,
   runs,
@@ -259,6 +260,16 @@ export async function setSiteMembershipRole(
         503,
         "SITE_MEMBERSHIP_UNAVAILABLE",
       );
+    }
+
+    if (existing?.role === "operator" && role !== "operator") {
+      await tx
+        .update(consoleSessions)
+        .set({ mandateId: null })
+        .where(and(
+          eq(consoleSessions.userId, targetUserId),
+          eq(consoleSessions.siteId, context.siteId),
+        ));
     }
 
     await appendMembershipAudit(tx, {

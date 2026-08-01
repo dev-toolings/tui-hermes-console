@@ -169,6 +169,13 @@
       "when": 1785718800000,
       "tag": "0023_run_mandate_snapshot",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785722400000,
+      "tag": "0024_session_mandate_selection",
+      "breakpoints": true
     }
   ]
 }

@@ -19,6 +19,8 @@ import {
   siteAccessBlock,
   type AuthSite,
   type AuthSiteContext,
+  selectMandatePayload,
+  type AuthMandate,
 } from "@/lib/auth-site-context";
 import { useRouter } from "@/lib/router";
 
@@ -151,6 +153,13 @@ export function SetupScreen() {
       <SiteSelectionStep
         email={auth.user?.email ?? "Opérateur Google"}
         memberships={auth.siteContext.memberships}
+      />
+    );
+  } else if (siteAccessBlock(auth.siteContext) === "mandate" && auth.siteContext) {
+    content = (
+      <MandateSelectionStep
+        email={auth.user?.email ?? "Opérateur Google"}
+        mandates={auth.siteContext.mandates}
       />
     );
   } else if (setup?.step === "completed" && needsAiDisclosureConsent(setup)) {
@@ -293,6 +302,114 @@ function SiteSelectionStep({
             >
               {busy ? <LoaderCircleIcon className="size-4 animate-spin" aria-hidden /> : null}
               Ouvrir ce site
+              <ArrowRightIcon className="size-4" aria-hidden />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MandateSelectionStep({
+  email,
+  mandates,
+}: {
+  email: string;
+  mandates: AuthMandate[];
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<Notice>(null);
+
+  const selectMandate = async () => {
+    if (!selectedId) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/auth?action=select-mandate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Hermes-Toast": "0" },
+        body: JSON.stringify(selectMandatePayload(selectedId)),
+      });
+      const body = (await response.json().catch(() => null)) as
+        | { error?: { message?: string } }
+        | null;
+      if (!response.ok) {
+        throw new Error(body?.error?.message ?? "Ce mandat n’est plus disponible pour votre compte.");
+      }
+      window.location.assign("/");
+    } catch (reason) {
+      setNotice({
+        tone: "error",
+        message: reason instanceof Error ? reason.message : "Sélection impossible.",
+      });
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="flex min-h-0 flex-col">
+      <header className="flex shrink-0 items-center gap-5 border-b border-white/9 px-6 py-5 sm:px-10 lg:px-16 xl:px-24">
+        <BrandMark compact />
+        <div className="ml-auto hidden text-right sm:block">
+          <p className="text-[0.6875rem] font-medium text-white/72">{email}</p>
+          <p className="mt-0.5 text-[0.625rem] text-white/39">Identité Google vérifiée</p>
+        </div>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-8 pt-8 sm:px-10 lg:px-16 lg:pt-12 xl:px-24">
+        <div className="mx-auto max-w-[35rem]">
+          <StepHeading eyebrow="Mandat opérateur" title="Choisissez le périmètre à ouvrir." />
+          <p className="mt-4 max-w-[60ch] text-[0.875rem] leading-6 text-white/59">
+            Plusieurs mandats actifs vous sont affectés sur ce site. Un seul contexte est utilisé à la fois.
+          </p>
+          <fieldset className="mt-8 space-y-2">
+            <legend className="sr-only">Mandats autorisés</legend>
+            {mandates.map((mandate) => {
+              const selected = selectedId === mandate.id;
+              const scope = mandate.projectId ? `Projet ${mandate.projectId}` : "Tous les projets du site";
+              return (
+                <label
+                  key={mandate.id}
+                  className={`flex w-full cursor-pointer items-center gap-3 rounded-[14px] border px-4 py-3.5 text-left outline-none transition-[border-color,background-color,box-shadow] duration-150 focus-within:ring-2 focus-within:ring-[oklch(0.68_0.17_251/0.45)] ${
+                    selected
+                      ? "border-[oklch(0.68_0.17_251/0.72)] bg-[oklch(0.62_0.19_251/0.12)]"
+                      : "border-white/10 bg-white/[0.035] hover:border-white/20 hover:bg-white/[0.055]"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="active-mandate"
+                    value={mandate.id}
+                    checked={selected}
+                    onChange={() => setSelectedId(mandate.id)}
+                    className="sr-only"
+                  />
+                  <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-white/7 text-white/72">
+                    <RadioTowerIcon className="size-4" aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[0.8125rem] font-medium text-white/91">{scope}</span>
+                    <span className="mt-0.5 block truncate font-mono text-[0.625rem] text-white/40">{mandate.id}</span>
+                  </span>
+                  <span className={`grid size-5 shrink-0 place-items-center rounded-full border ${selected ? "border-[oklch(0.68_0.17_251)] bg-[oklch(0.62_0.19_251)] text-white" : "border-white/18 text-transparent"}`}>
+                    <CheckIcon className="size-3" aria-hidden />
+                  </span>
+                </label>
+              );
+            })}
+          </fieldset>
+          {notice ? <InlineNotice notice={notice} /> : null}
+          <div className="mt-8 flex justify-end border-t border-white/9 pt-5">
+            <Button
+              type="button"
+              variant="primary"
+              disabled={!selectedId || busy}
+              onClick={() => void selectMandate()}
+              className="h-10 !rounded-[10px] !bg-[oklch(0.62_0.19_251)]"
+            >
+              {busy ? <LoaderCircleIcon className="size-4 animate-spin" aria-hidden /> : null}
+              Ouvrir ce mandat
               <ArrowRightIcon className="size-4" aria-hidden />
             </Button>
           </div>

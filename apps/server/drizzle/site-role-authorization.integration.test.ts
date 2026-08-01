@@ -66,7 +66,7 @@ function sqlString(value: string) {
 }
 
 function applyMigrations() {
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 23)) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= 24)) {
     psql(readFileSync(join(import.meta.dir, `${entry.tag}.sql`), "utf8"));
   }
 }
@@ -821,5 +821,112 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
       psql(`SELECT count(*) FROM console_sessions
         WHERE token_hash = '${createHash("sha256").update(sessions.unassigned.token).digest("hex")}';`),
     ).toBe("0");
+  });
+
+  test("an operator selects one active mandate and never unions scopes", async () => {
+    const created = await appFetch(
+      authenticatedRequest("admin", "/api/site/mandates", {
+        method: "POST",
+        body: { operatorOrganizationId: "org_msp_default", projectId: "prj_paris_a" },
+      }),
+    );
+    expect(created.status).toBe(201);
+    const createdBody = await payload(created) as { mandate: { id: string } };
+    const projectMandateId = createdBody.mandate.id;
+
+    const assigned = await appFetch(
+      authenticatedRequest("admin", `/api/site/mandates/${projectMandateId}/assignments`, {
+        method: "POST",
+        body: { userId: "usr_operator" },
+      }),
+    );
+    expect(assigned.status).toBe(201);
+
+    const discovery = await appFetch(authenticatedRequest("operator", "/api/auth"));
+    expect(discovery.status).toBe(200);
+    const discoveryBody = await payload(discovery) as {
+      siteContext: {
+        authorization: unknown;
+        capabilities: string[];
+        mandateSelectionRequired: boolean;
+        mandates: Array<{ id: string; projectId: string | null }>;
+      };
+    };
+    expect(discoveryBody.siteContext.mandateSelectionRequired).toBe(true);
+    expect(discoveryBody.siteContext.authorization).toBeNull();
+    expect(discoveryBody.siteContext.capabilities).toEqual([]);
+    expect(discoveryBody.siteContext.mandates.map(({ id }) => id)).toEqual(
+      expect.arrayContaining(["mandate_paris", projectMandateId]),
+    );
+    expect(discoveryBody.siteContext.mandates).toHaveLength(2);
+
+    const blocked = await appFetch(authenticatedRequest("operator", "/api/threads"));
+    expect(blocked.status).toBe(409);
+    expect(await payload(blocked)).toEqual({
+      error: {
+        code: "MSP_MANDATE_SELECTION_REQUIRED",
+        message: "Sélectionnez un mandat MSP avant de poursuivre.",
+      },
+    });
+
+    const selected = await appFetch(
+      authenticatedRequest("operator", "/api/auth?action=select-mandate", {
+        method: "POST",
+        body: { mandateId: projectMandateId },
+      }),
+    );
+    expect(selected.status).toBe(200);
+    expect(await payload(selected)).toEqual({
+      mandate: { id: projectMandateId, projectId: "prj_paris_a" },
+    });
+    expect(psql(`SELECT mandate_id FROM console_sessions
+      WHERE token_hash = '${createHash("sha256").update(sessions.operator.token).digest("hex")}';`)).toBe(projectMandateId);
+
+    const projectAgents = await appFetch(authenticatedRequest("operator", "/api/agents"));
+    expect(projectAgents.status).toBe(200);
+    expect((await payload(projectAgents)).agents).toEqual([
+      expect.objectContaining({ id: "agt_project_a" }),
+    ]);
+
+    const forged = await appFetch(
+      authenticatedRequest("operator", "/api/auth?action=select-mandate", {
+        method: "POST",
+        body: { mandateId: "mandate_neighbor" },
+      }),
+    );
+    expect(forged.status).toBe(403);
+    expect(await payload(forged)).toMatchObject({ error: { code: "MSP_MANDATE_NOT_ASSIGNED" } });
+    expect(
+      psql(`SELECT count(*) FROM audit_ledger_entries
+        WHERE actor_user_id = 'usr_operator'
+          AND action = 'site.access'
+          AND resource_type = 'msp_mandate'
+          AND resource_id = 'mandate_neighbor'
+          AND decision = 'denied'
+          AND reason_code = 'MSP_MANDATE_REQUIRED';`),
+    ).toBe("1");
+    const afterForged = await appFetch(authenticatedRequest("operator", "/api/auth"));
+    expect((await payload(afterForged)).siteContext.authorization.mandateId).toBe(projectMandateId);
+
+    const revoked = await appFetch(
+      authenticatedRequest("admin", `/api/site/mandates/${projectMandateId}`, {
+        method: "DELETE",
+      }),
+    );
+    expect(revoked.status).toBe(200);
+    const afterRevocation = await appFetch(authenticatedRequest("operator", "/api/auth"));
+    expect(afterRevocation.status).toBe(200);
+    const afterRevocationBody = await payload(afterRevocation) as {
+      siteContext: {
+        mandateSelectionRequired: boolean;
+        authorization: unknown;
+        mandates: Array<{ id: string }>;
+      };
+    };
+    expect(afterRevocationBody.siteContext.mandateSelectionRequired).toBe(true);
+    expect(afterRevocationBody.siteContext.authorization).toBeNull();
+    expect(afterRevocationBody.siteContext.mandates.map(({ id }) => id)).toEqual(["mandate_paris"]);
+    expect(psql(`SELECT mandate_id IS NULL FROM console_sessions
+      WHERE token_hash = '${createHash("sha256").update(sessions.operator.token).digest("hex")}';`)).toBe("t");
   });
 });

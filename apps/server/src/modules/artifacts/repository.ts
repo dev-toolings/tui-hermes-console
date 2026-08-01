@@ -456,6 +456,8 @@ async function insertArtifact(input: {
           projectId: runs.projectId,
           ownerUserId: runs.ownerUserId,
           authorUserId: runs.authorUserId,
+          mandateId: runs.mandateId,
+          operatorOrganizationId: runs.operatorOrganizationId,
           clientOrganizationId: sites.clientOrganizationId,
         })
         .from(runs)
@@ -515,55 +517,89 @@ async function insertArtifact(input: {
         throw new Error("L'organisation de l'auteur de l'artefact est introuvable.");
       }
 
-      // Les sorties Hermes sont parfois enregistrées hors contexte HTTP. Dans
-      // ce cas le run reste la source d'identité de l'auteur, mais un opérateur
-      // ne peut pas faire écrire un audit v2 sans retrouver son mandat actif.
-      // On privilégie un mandat projet, puis un mandat site; toute ambiguïté
-      // est refusée plutôt que d'émettre une preuve incomplète.
+      // Les sorties Hermes sont parfois enregistrées hors contexte HTTP. Le
+      // snapshot du run est alors la source d'identité de l'autorisation : une
+      // révocation ne doit jamais être contournée par une nouvelle résolution
+      // ambiguë de mandats actifs.
       let mandateId = audit.requestedContext?.mandateId ?? null;
       let mandateProjectId = audit.requestedContext?.mandateProjectId ?? null;
       if (!audit.requestedContext && actorRole === "operator") {
-        const nowForMandate = new Date();
-        const candidates = await tx
-          .select({
-            id: mspMandates.id,
-            projectId: mspMandates.projectId,
-          })
-          .from(mspMandateAssignments)
-          .innerJoin(
-            mspMandates,
-            eq(mspMandates.id, mspMandateAssignments.mandateId),
-          )
-          .where(and(
-            eq(mspMandateAssignments.userId, actorUserId),
-            eq(mspMandateAssignments.organizationId, actorOrganizationId),
-            isNull(mspMandateAssignments.revokedAt),
-            or(
-              isNull(mspMandateAssignments.expiresAt),
-              gt(mspMandateAssignments.expiresAt, nowForMandate),
-            ),
-            eq(mspMandates.operatorOrganizationId, actorOrganizationId),
-            eq(mspMandates.clientOrganizationId, runSnapshot.clientOrganizationId),
-            eq(mspMandates.siteId, runSnapshot.siteId),
-            isNull(mspMandates.revokedAt),
-            lte(mspMandates.startsAt, nowForMandate),
-            or(isNull(mspMandates.expiresAt), gt(mspMandates.expiresAt, nowForMandate)),
-          ));
-        const exact = runSnapshot.projectId
-          ? candidates.filter((candidate) => candidate.projectId === runSnapshot.projectId)
-          : [];
-        const applicable = exact.length > 0
-          ? exact
-          : candidates.filter((candidate) => candidate.projectId === null);
-        if (applicable.length !== 1) {
-          throw new Error(
-            applicable.length === 0
-              ? "Aucun mandat MSP actif ne couvre la sortie Hermes."
-              : "Plusieurs mandats MSP actifs couvrent la sortie Hermes.",
-          );
+        if (runSnapshot.mandateId) {
+          const nowForMandate = new Date();
+          const [snapshotMandate] = await tx
+            .select({
+              id: mspMandates.id,
+              projectId: mspMandates.projectId,
+            })
+            .from(mspMandateAssignments)
+            .innerJoin(
+              mspMandates,
+              eq(mspMandates.id, mspMandateAssignments.mandateId),
+            )
+            .where(and(
+              eq(mspMandateAssignments.mandateId, runSnapshot.mandateId),
+              eq(mspMandateAssignments.userId, actorUserId),
+              eq(
+                mspMandateAssignments.organizationId,
+                runSnapshot.operatorOrganizationId ?? actorOrganizationId,
+              ),
+              isNull(mspMandateAssignments.revokedAt),
+              or(
+                isNull(mspMandateAssignments.expiresAt),
+                gt(mspMandateAssignments.expiresAt, nowForMandate),
+              ),
+              eq(mspMandates.operatorOrganizationId, runSnapshot.operatorOrganizationId ?? actorOrganizationId),
+              eq(mspMandates.clientOrganizationId, runSnapshot.clientOrganizationId),
+              eq(mspMandates.siteId, runSnapshot.siteId),
+              isNull(mspMandates.revokedAt),
+              lte(mspMandates.startsAt, nowForMandate),
+              or(isNull(mspMandates.expiresAt), gt(mspMandates.expiresAt, nowForMandate)),
+            ));
+          if (
+            !snapshotMandate ||
+            (snapshotMandate.projectId !== null && snapshotMandate.projectId !== runSnapshot.projectId)
+          ) {
+            throw new Error("Le mandat snapshoté de la sortie Hermes n’est plus actif ou compatible.");
+          }
+          mandateId = snapshotMandate.id;
+          mandateProjectId = snapshotMandate.projectId;
+        } else {
+          // Les runs créés avant 0023 n'ont pas de provenance persistée. Ils
+          // restent compatibles seulement si une unique résolution active est
+          // possible ; toute ambiguïté historique est refusée.
+          const nowForLegacyMandate = new Date();
+          const candidates = await tx
+            .select({ id: mspMandates.id, projectId: mspMandates.projectId })
+            .from(mspMandateAssignments)
+            .innerJoin(mspMandates, eq(mspMandates.id, mspMandateAssignments.mandateId))
+            .where(and(
+              eq(mspMandateAssignments.userId, actorUserId),
+              eq(mspMandateAssignments.organizationId, actorOrganizationId),
+              isNull(mspMandateAssignments.revokedAt),
+              or(isNull(mspMandateAssignments.expiresAt), gt(mspMandateAssignments.expiresAt, nowForLegacyMandate)),
+              eq(mspMandates.operatorOrganizationId, actorOrganizationId),
+              eq(mspMandates.clientOrganizationId, runSnapshot.clientOrganizationId),
+              eq(mspMandates.siteId, runSnapshot.siteId),
+              isNull(mspMandates.revokedAt),
+              lte(mspMandates.startsAt, nowForLegacyMandate),
+              or(isNull(mspMandates.expiresAt), gt(mspMandates.expiresAt, nowForLegacyMandate)),
+            ));
+          const exact = runSnapshot.projectId
+            ? candidates.filter((candidate) => candidate.projectId === runSnapshot.projectId)
+            : [];
+          const applicable = exact.length > 0
+            ? exact
+            : candidates.filter((candidate) => candidate.projectId === null);
+          if (applicable.length !== 1) {
+            throw new Error(
+              applicable.length === 0
+                ? "Aucun mandat MSP actif ne couvre la sortie Hermes."
+                : "Plusieurs mandats MSP actifs couvrent la sortie Hermes.",
+            );
+          }
+          mandateId = applicable[0].id;
+          mandateProjectId = applicable[0].projectId;
         }
-        mandateId = applicable[0].id;
-        mandateProjectId = applicable[0].projectId;
       }
 
       const [lockedRun] = await tx
@@ -572,6 +608,8 @@ async function insertArtifact(input: {
           projectId: runs.projectId,
           ownerUserId: runs.ownerUserId,
           authorUserId: runs.authorUserId,
+          mandateId: runs.mandateId,
+          operatorOrganizationId: runs.operatorOrganizationId,
         })
         .from(runs)
         .where(and(eq(runs.siteId, input.siteId), eq(runs.id, input.runId)))
@@ -580,7 +618,9 @@ async function insertArtifact(input: {
         !lockedRun ||
         lockedRun.projectId !== runSnapshot.projectId ||
         lockedRun.ownerUserId !== runSnapshot.ownerUserId ||
-        lockedRun.authorUserId !== runSnapshot.authorUserId
+        lockedRun.authorUserId !== runSnapshot.authorUserId ||
+        lockedRun.mandateId !== runSnapshot.mandateId ||
+        lockedRun.operatorOrganizationId !== runSnapshot.operatorOrganizationId
       ) {
         throw new Error("La propriété du run a changé pendant la création de l'artefact.");
       }

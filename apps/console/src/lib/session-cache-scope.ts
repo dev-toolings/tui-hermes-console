@@ -13,10 +13,14 @@ function normalize(value: string | null | undefined) {
 export function setSessionCacheScope(
   userKey: string | null | undefined,
   siteId: string | null | undefined,
+  mandateId?: string | null,
 ) {
   const user = normalize(userKey);
   const site = normalize(siteId);
-  const next = user && site ? `${encodeURIComponent(user)}:${encodeURIComponent(site)}` : "anonymous";
+  const mandate = normalize(mandateId);
+  const next = user && site
+    ? `${encodeURIComponent(user)}:${encodeURIComponent(site)}:${encodeURIComponent(mandate ?? "none")}`
+    : "anonymous";
   if (next === currentScope) return;
   currentScope = next;
   if (typeof window === "undefined") return;

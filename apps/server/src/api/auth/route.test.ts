@@ -79,4 +79,27 @@ describe("GET /api/auth status", () => {
       consentRequired: true,
     });
   });
+
+  test("exposes mandate candidates without granting capabilities before selection", () => {
+    const candidates = [{
+      id: "mandate_project_a",
+      operatorOrganizationId: "org_msp",
+      projectId: "project_a",
+      startsAt: new Date("2026-08-01T00:00:00.000Z"),
+      expiresAt: null,
+    }];
+    expect(authStatusPayload(session(), false, null, candidates, true)).toMatchObject({
+      siteContext: {
+        authorization: null,
+        mandateSelectionRequired: true,
+        capabilities: [],
+        mandates: [{
+          id: "mandate_project_a",
+          projectId: "project_a",
+          startsAt: "2026-08-01T00:00:00.000Z",
+          expiresAt: null,
+        }],
+      },
+    });
+  });
 });

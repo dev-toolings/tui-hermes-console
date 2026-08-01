@@ -284,6 +284,7 @@ export const mspMandates = pgTable(
       table.projectId,
       table.operatorOrganizationId,
     ),
+    uniqueIndex("msp_mandates_site_id_unique").on(table.siteId, table.id),
     check(
       "msp_mandates_distinct_organizations_check",
       sql`${table.operatorOrganizationId} <> ${table.clientOrganizationId}`,
@@ -427,6 +428,9 @@ export const consoleSessions = pgTable(
       .notNull()
       .references(() => consoleUsers.id, { onDelete: "cascade" }),
     siteId: text("site_id"),
+    mandateId: text("mandate_id").references(() => mspMandates.id, {
+      onDelete: "set null",
+    }),
     csrfToken: text("csrf_token").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -438,8 +442,14 @@ export const consoleSessions = pgTable(
       foreignColumns: [siteMemberships.userId, siteMemberships.siteId],
       name: "console_sessions_user_site_membership_fk",
     }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.siteId, table.mandateId],
+      foreignColumns: [mspMandates.siteId, mspMandates.id],
+      name: "console_sessions_site_mandate_fk",
+    }).onDelete("set null"),
     index("console_sessions_expires_idx").on(table.expiresAt),
     index("console_sessions_site_idx").on(table.siteId),
+    index("console_sessions_mandate_idx").on(table.mandateId),
   ],
 );
 

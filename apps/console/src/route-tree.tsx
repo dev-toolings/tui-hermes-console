@@ -130,7 +130,11 @@ const consoleLayout = createRoute({
     const response = await fetch("/api/auth", { cache: "no-store" });
     const auth = (await response.json()) as ConsoleAccessStatus;
     setPersonaCapabilities(auth.siteContext?.capabilities);
-    setSessionCacheScope(auth.user?.email, auth.siteContext?.activeSite?.id);
+    setSessionCacheScope(
+      auth.user?.email,
+      auth.siteContext?.activeSite?.id,
+      auth.siteContext?.authorization?.mandateId,
+    );
     if (requiresSetupRedirect(auth)) {
       throw redirect({ to: "/setup", replace: true });
     }

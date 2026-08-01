@@ -30,6 +30,8 @@ export type AuthSession = {
   email: string;
   name: string | null;
   siteId: string | null;
+  /** Mandat sélectionné dans la session (revalidé à chaque requête). */
+  selectedMandateId?: string | null;
   role: SiteMembershipRole | null;
   memberships: SiteMembershipSummary[];
   aiDisclosureVersion: string | null;
@@ -252,12 +254,31 @@ export async function requireSiteRequestContext(
       "MSP_MANDATE_REQUIRED",
     );
   }
+  const selectedFromSession = session.selectedMandateId
+    ? mandates.find((mandate) => mandate.id === session.selectedMandateId)
+    : null;
+  if (session.selectedMandateId && !selectedFromSession) {
+    await getDatabase()
+      .update(consoleSessions)
+      .set({ mandateId: null, lastSeenAt: new Date() })
+      .where(
+        and(
+          eq(consoleSessions.tokenHash, session.tokenHash),
+          eq(consoleSessions.mandateId, session.selectedMandateId),
+        ),
+      );
+    throw new AuthError(
+      "Le mandat sélectionné n’est plus actif. Choisissez un nouveau mandat.",
+      409,
+      "MSP_MANDATE_SELECTION_REQUIRED",
+    );
+  }
   const siteWide = mandates.filter((mandate) => mandate.projectId === null);
-  const selected = siteWide.length === 1 && mandates.length === 1
+  const selected = selectedFromSession ?? (siteWide.length === 1 && mandates.length === 1
     ? siteWide[0]
     : mandates.length === 1
       ? mandates[0]
-      : null;
+      : null);
   if (!selected) {
     throw new AuthError(
       "Sélectionnez un mandat MSP avant de poursuivre.",
@@ -277,13 +298,19 @@ export async function requireSiteRequestContext(
   };
 }
 
-async function findActiveAssignedMandates(
+export async function findActiveAssignedMandates(
   userId: string,
   membership: SiteMembershipSummary,
 ) {
   const now = new Date();
   return getDatabase()
-    .select({ id: mspMandates.id, projectId: mspMandates.projectId })
+    .select({
+      id: mspMandates.id,
+      projectId: mspMandates.projectId,
+      operatorOrganizationId: mspMandates.operatorOrganizationId,
+      startsAt: mspMandates.startsAt,
+      expiresAt: mspMandates.expiresAt,
+    })
     .from(mspMandates)
     .innerJoin(
       mspMandateAssignments,
@@ -647,6 +674,7 @@ export async function getSession(request: Request): Promise<AuthSession | null> 
     email: user.email,
     name: user.displayName,
     siteId: requirement.activeSite?.id ?? null,
+    selectedMandateId: session.mandateId ?? null,
     role: requirement.activeSite?.role ?? null,
     memberships,
     aiDisclosureVersion: user.aiDisclosureVersion,
@@ -666,7 +694,7 @@ export async function selectSessionSite(request: Request, siteId: string) {
   }
   const [updated] = await getDatabase()
     .update(consoleSessions)
-    .set({ siteId, lastSeenAt: new Date() })
+    .set({ siteId, mandateId: null, lastSeenAt: new Date() })
     .where(
       and(
         eq(consoleSessions.tokenHash, session.tokenHash),
@@ -696,8 +724,112 @@ export async function selectSessionSite(request: Request, siteId: string) {
       "AUTH_UNAVAILABLE",
     );
   }
-  await requireSiteRequestContext(refreshed!);
+  try {
+    await requireSiteRequestContext(refreshed!);
+  } catch (error) {
+    // A site can be selected before a user chooses among several active
+    // mandates. Other authorization failures remain fail-closed.
+    if (!(error instanceof AuthError) || error.code !== "MSP_MANDATE_SELECTION_REQUIRED") {
+      throw error;
+    }
+  }
   return activeSite;
+}
+
+export async function selectSessionMandate(request: Request, mandateId: string) {
+  const session = await requireSession(request);
+  const requirement = resolveSiteRequirement(session.memberships, session.siteId);
+  const activeSite = requirement.activeSite;
+  if (!activeSite || activeSite.role !== "operator") {
+    throw new AuthError(
+      "Un mandat ne peut être sélectionné que pour une affiliation opérateur.",
+      409,
+      "MSP_MANDATE_SELECTION_INVALID",
+    );
+  }
+  const mandates = await findActiveAssignedMandates(session.userId, activeSite);
+  const selected = mandates.find((mandate) => mandate.id === mandateId);
+  if (!selected) {
+    await auditInvalidMandateSelection(session, activeSite, mandateId);
+    throw new AuthError(
+      "Ce mandat n’est pas actif ou n’est pas affecté à ce compte.",
+      403,
+      "MSP_MANDATE_NOT_ASSIGNED",
+    );
+  }
+  const [updated] = await getDatabase()
+    .update(consoleSessions)
+    .set({ mandateId: selected.id, lastSeenAt: new Date() })
+    .where(
+      and(
+        eq(consoleSessions.tokenHash, session.tokenHash),
+        eq(consoleSessions.siteId, activeSite.id),
+      ),
+    )
+    .returning({ tokenHash: consoleSessions.tokenHash });
+  if (!updated) {
+    throw new AuthError(
+      "La sélection du mandat n’a pas pu être enregistrée.",
+      503,
+      "AUTH_UNAVAILABLE",
+    );
+  }
+  const refreshed = await getSession(request);
+  if (!refreshed) {
+    throw new AuthError(
+      "La session n’est plus disponible.",
+      401,
+      "AUTH_REQUIRED",
+    );
+  }
+  const context = await requireSiteRequestContext(refreshed);
+  return {
+    id: context.mandateId,
+    projectId: context.mandateProjectId,
+  };
+}
+
+async function auditInvalidMandateSelection(
+  session: AuthSession,
+  activeSite: SiteMembershipSummary,
+  mandateId: string,
+) {
+  try {
+    await appendAuditEntry({
+      eventId: randomUUID(),
+      actorSiteId: activeSite.id,
+      targetSiteId: activeSite.id,
+      actorUserId: session.userId,
+      actorRole: activeSite.role,
+      actorOrganizationId: activeSite.organizationId,
+      clientOrganizationId: activeSite.clientOrganizationId,
+      mandateId: null,
+      action: "site.access",
+      resourceType: "msp_mandate",
+      resourceId: mandateId,
+      decision: "denied",
+      // Le trigger du ledger autorise explicitement ce code pour un operator
+      // sans mandat utilisable ; on ne crée pas une nouvelle raison hors
+      // contrat de la migration 0022.
+      reasonCode: "MSP_MANDATE_REQUIRED",
+      beforeState: { mandateId: null },
+      afterState: { mandateId: null },
+      correlationId: randomUUID(),
+      occurredAt: new Date(),
+    });
+  } catch (error) {
+    console.error("MSP mandate selection denial audit failed", {
+      siteId: activeSite.id,
+      userId: session.userId,
+      mandateId,
+      error,
+    });
+    throw new AuthError(
+      "Le refus du mandat n’a pas pu être inscrit dans le journal d’audit.",
+      503,
+      "AUDIT_UNAVAILABLE",
+    );
+  }
 }
 
 export async function requireSession(request: Request): Promise<AuthSession> {

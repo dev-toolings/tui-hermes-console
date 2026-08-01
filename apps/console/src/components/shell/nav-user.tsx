@@ -27,7 +27,7 @@ import {
   useSidebar,
 } from "@boardui/ui";
 import { useRouter } from "@/lib/router";
-import { selectSitePayload, type AuthSiteContext } from "@/lib/auth-site-context";
+import { selectMandatePayload, selectSitePayload, type AuthSiteContext } from "@/lib/auth-site-context";
 import { setSessionCacheScope } from "@/lib/session-cache-scope";
 
 type AuthUser = {
@@ -67,6 +67,7 @@ export function NavUser() {
   const [auth, setAuth] = useState<AuthState | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [switchingSite, setSwitchingSite] = useState<string | null>(null);
+  const [switchingMandate, setSwitchingMandate] = useState<string | null>(null);
   const [siteSwitchError, setSiteSwitchError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -116,10 +117,38 @@ export function NavUser() {
         return;
       }
       // Un reload complet ferme les SSE et purge tous les états dérivés du site précédent.
-      setSessionCacheScope(auth?.user.email, siteId);
+      setSessionCacheScope(auth?.user.email, siteId, null);
       window.location.assign("/");
     } finally {
       setSwitchingSite(null);
+    }
+  };
+
+  const switchMandate = async (mandateId: string) => {
+    if (mandateId === auth?.siteContext.authorization?.mandateId || switchingMandate) return;
+    setSwitchingMandate(mandateId);
+    setSiteSwitchError(null);
+    try {
+      const response = await fetch("/api/auth?action=select-mandate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Hermes-Toast": "0" },
+        body: JSON.stringify(selectMandatePayload(mandateId)),
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | null;
+        setSiteSwitchError(body?.error?.message ?? "Le changement de mandat a échoué.");
+        return;
+      }
+      setSessionCacheScope(
+        auth?.user.email,
+        auth?.siteContext.activeSite?.id,
+        mandateId,
+      );
+      window.location.assign(window.location.pathname);
+    } finally {
+      setSwitchingMandate(null);
     }
   };
 
@@ -211,6 +240,31 @@ export function NavUser() {
                   >
                     {siteSwitchError}
                   </DropdownMenuLabel>
+                ) : null}
+                {auth.siteContext.mandates.length > 1 ? (
+                  <>
+                    <DropdownMenuSeparator className="-mx-2.5 my-2.5 bg-muted" />
+                    <DropdownMenuLabel className="px-2 pb-0 pt-1 text-xs font-medium text-muted-foreground">
+                      Mandat actif
+                    </DropdownMenuLabel>
+                    {auth.siteContext.mandates.map((mandate) => {
+                      const activeMandate = mandate.id === auth.siteContext.authorization?.mandateId;
+                      return (
+                        <DropdownMenuItem
+                          key={mandate.id}
+                          className="gap-2 rounded-[10px] p-2 text-foreground/80 focus:bg-muted"
+                          disabled={activeMandate || switchingMandate !== null}
+                          onSelect={() => void switchMandate(mandate.id)}
+                        >
+                          <Building2Icon className="size-5 text-muted-foreground" aria-hidden />
+                          <span className="min-w-0 flex-1 truncate">
+                            {mandate.projectId ? `Projet ${mandate.projectId}` : "Tous les projets"}
+                          </span>
+                          {activeMandate ? <CheckIcon className="size-4 text-primary" aria-label="Mandat actif" /> : null}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </>
                 ) : null}
               </>
             ) : null}
