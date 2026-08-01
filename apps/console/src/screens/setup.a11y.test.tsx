@@ -40,11 +40,13 @@ describe("setup AI disclosure accessibility", () => {
         accepted={false}
         checked={false}
         onCheckedChange={() => undefined}
+        focusHeading
       />,
     );
     expect(html).toContain('role="region"');
     expect(html).toContain('aria-labelledby="ai-disclosure-title"');
     expect(html).toContain('<h2 id="ai-disclosure-title"');
+    expect(html).toContain('tabindex="-1"');
     expect(html).toContain('>Notice IA</h2>');
     expect(html).toContain('id="ai-disclosure-summary"');
     expect(html).toContain('id="ai-disclosure-items"');

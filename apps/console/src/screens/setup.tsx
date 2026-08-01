@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import {
@@ -780,13 +780,14 @@ function ConsentStep({
             title="Gardez le contrôle avant votre prochaine mission."
           />
           <p className="mt-4 text-[0.875rem] leading-6 text-white/59">
-            Votre installation est prête. Cette version de la notice doit être acceptée par chaque opérateur avant tout nouveau calcul.
+            Votre installation est prête. Cette version de la notice doit être acceptée par chaque utilisateur autorisé avant toute nouvelle mission.
           </p>
           <AiDisclosurePanel
             disclosure={disclosure}
             accepted={false}
             checked={checked}
             onCheckedChange={setChecked}
+            focusHeading
           />
           {notice ? <InlineNotice notice={notice} /> : null}
           <div className="mt-8 flex justify-end border-t border-white/9 pt-5">
@@ -794,6 +795,7 @@ function ConsentStep({
               type="button"
               variant="primary"
               disabled={busy || !checked}
+              aria-busy={busy}
               onClick={() => void accept()}
               className="h-10 !rounded-[10px] !bg-[oklch(0.62_0.19_251)]"
             >
@@ -813,12 +815,20 @@ export function AiDisclosurePanel({
   accepted,
   checked,
   onCheckedChange,
+  focusHeading = false,
 }: {
   disclosure: AiDisclosure;
   accepted: boolean;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  focusHeading?: boolean;
 }) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (focusHeading) titleRef.current?.focus();
+  }, [focusHeading]);
+
   return (
     <section
       role="region"
@@ -830,7 +840,12 @@ export function AiDisclosurePanel({
           <ShieldCheckIcon className="size-4" aria-hidden />
         </span>
         <div>
-          <h2 id="ai-disclosure-title" className="text-[0.8125rem] font-medium text-white/91">
+          <h2
+            id="ai-disclosure-title"
+            ref={focusHeading ? titleRef : undefined}
+            tabIndex={focusHeading ? -1 : undefined}
+            className="text-[0.8125rem] font-medium text-white/91"
+          >
             {disclosure.title}
           </h2>
           <p className="mt-1 font-mono text-[0.5625rem] uppercase tracking-[0.13em] text-white/38">
