@@ -387,7 +387,10 @@ Le `run_events` actuel reste un ledger technique, distinct du ledger d'audit :
 - l'audit append-only existe séparément, avec enveloppes historiques v1 et nouvelles enveloppes v2
   snapshotant organisation cliente, organisation opératrice et mandat ; les policies détaillées
   restent G2-005 ;
-- aucun export expurgé accepté ni rétention par policy ;
+- un export d’audit expurgé est désormais implémenté (`POST /api/audit/exports`) avec vérification
+  de chaîne, pseudonymisation et audit de l’export ; il reste non accepté avant P-SEC/P-E2E ;
+- aucune politique de rétention, purge légale, backup/restauration ou export complet des données
+  métier/artefacts n’est encore livrée ;
 
 Ajouter davantage d’utilisateurs sans modèle d’autorisation élargirait le risque. Le RBAC et
 l’attribution précèdent toute croissance multi-user.
