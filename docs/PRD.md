@@ -5,7 +5,10 @@
 **Statut :** vérité produit auditée — technical preview, non prête pour une offre B2B autonome
 **Produit :** application self-hosted d’exploitation de missions exécutées par Hermes Agent
 **Périmètre actuel :** une installation, plusieurs sites isolés techniquement, plusieurs comptes Google allowlistés ; rôles et ownership sont implémentés localement mais restent non acceptés avant P-E2E/revue
-**Runtime de référence :** Hermes Agent v0.19.0, API server sur le port 8642
+**Runtime de référence :** Hermes Agent v0.19.0, API server sur le port 8642. Toute image upstream
+réellement tirée doit être vérifiée par digest et par version avant promotion ; la preuve locale
+G1-002B du 01-08-2026 observe `v0.19.1` et reste bloquée tant qu’une décision produit n’a pas
+révisé cette référence.
 
 > Ce document décrit l’arbre de travail réel au 31-07-2026, y compris les changements non encore
 > publiés. Les capacités sont classées en quatre états : **livré**, **validé statiquement**,

@@ -21,6 +21,7 @@
     "proof:g1-001": "bun apps/server/scripts/prove-artifact-durability.ts",
     "proof:g1-002": "bun apps/server/scripts/prove-hermes-confinement.ts",
     "proof:g1-002a": "bun apps/server/scripts/prove-hermes-confinement.ts",
+    "proof:g1-002b": "bun apps/server/scripts/prove-hermes-confinement-real.ts",
     "proof:g1-004": "bun apps/server/scripts/prove-g1-004-local.ts",
     "proof:g1-004a": "bun apps/server/scripts/prove-g1-004-local.ts",
     "proof:g1-006-dr": "bun apps/server/scripts/prove-lifecycle-dr-local.ts",
