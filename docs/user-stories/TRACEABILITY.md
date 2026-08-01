@@ -17,7 +17,7 @@ daté seulement après exécution ; `—` signifie « non prouvé », pas « non
 | US-G1-007 | §11, §13 — E2E critique | US-G1-001..006 | — | `PROPOSÉE` |
 | US-G1-008 | §9.4, §10, §13 — SSH/SFTP réel | US-G1-002 | [diagnostic VPS 31-07-2026](evidence/2026-07-31-gate-1-ssh-vps-diagnostic.md) | `BLOQUÉE` |
 | US-G1-SSH-001..009 | §9.4, §10 — recette SSH détaillée | US-G1-008 | [états détaillés](SSH-STORIES.md) | voir chaque story |
-| US-G2-001 | §6.3, §8, §13 — site/projet | Gate 1 acceptée | — | `PROPOSÉE` |
+| US-G2-001 | §6.3, §8, §13 — site/projet | Gate 1 acceptée | [preuve site context 2026-08-01](evidence/2026-08-01-gate-2-site-context.md) | `VÉRIFIÉE` |
 | US-G2-002 | §4, §13 — cinq rôles | US-G2-001 | — | `PROPOSÉE` |
 | US-G2-003 | §8, §13 — propriété des ressources | US-G2-001, US-G2-002 | — | `PROPOSÉE` |
 | US-G2-004 | §13 — séparation MSP/client | US-G2-002, US-G2-003 | — | `PROPOSÉE` |

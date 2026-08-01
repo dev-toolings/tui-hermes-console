@@ -18,6 +18,9 @@
 - **Preuves :** `P-CODE`, `P-INT`, `P-SEC`, migration/backfill, tests de requêtes croisées et preuve
   d'absence de ressource orpheline.
 - **État initial :** `PROPOSÉE`.
+- **État courant au 2026-08-01 :** `VÉRIFIÉE` techniquement, non `ACCEPTÉE` tant que la Gate 1 et
+  la revue finale ne sont pas clôturées.
+- **Preuve datée :** [`2026-08-01-gate-2-site-context.md`](evidence/2026-08-01-gate-2-site-context.md).
 
 ## US-G2-002 — Appliquer les cinq rôles
 
