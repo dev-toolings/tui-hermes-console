@@ -73,7 +73,8 @@
 - **État courant au 2026-08-01 :** `IMPLÉMENTÉE` et vérifiée localement par P-CODE/P-INT ;
   non `ACCEPTÉE` tant que la P-E2E navigateur multi-compte, la P-SEC partenaire, la revue finale,
   la preuve Hermes/restart après révocation et la dépendance Gate 1 ne sont pas clôturées ; le
-  filtrage UI initial des capabilities est corrigé localement mais reste à prouver en navigateur.
+  filtrage UI initial des capabilities et la sélection explicite d’un mandat parmi plusieurs sont
+  corrigés localement mais restent à prouver en navigateur.
 - **Preuve datée :** [`2026-08-01-gate-2-msp-client.md`](evidence/2026-08-01-gate-2-msp-client.md).
 
 ## US-G2-005 — Appliquer des policies par ressource

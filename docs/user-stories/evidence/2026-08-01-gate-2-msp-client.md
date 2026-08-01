@@ -2,7 +2,7 @@
 
 - Date/heure UTC : 2026-08-01
 - Story : US-G2-004
-- Commit/build : branche `feat/us-g2-004-msp-client`, commit `7d122cc`
+- Commit/build : branche `feat/us-g2-004-msp-client`, implémentation `9aeb1f3`
 - Environnement : local, PostgreSQL Docker éphémère `postgres:17.6-alpine` épinglé par digest
 - Opérateur : équipe Console
 - Reviewer : Vador — contre-audit à rattacher
@@ -12,7 +12,8 @@
 
 - US-G2-001 à US-G2-003 sont présentes sur la branche dérivée de `main`.
 - Les migrations 0022 et 0023 ajoutent organisations client/MSP, affiliations, mandats site/projet,
-  affectations individuelles, enveloppe d’audit v2 et snapshot d’autorisation sur les runs.
+  affectations individuelles, enveloppe d’audit v2 et snapshot d’autorisation sur les runs ; la
+  migration 0024 ajoute le mandat sélectionné à la session avec une contrainte de cohérence site.
 - Un site possède exactement une organisation cliente. Un operator doit avoir une affiliation MSP,
   une membership `operator`, un mandat actif et une affectation individuelle.
 - Les mandats ne portent aucune policy d’outil, chemin, connecteur, modèle ou budget : G2-005 reste
@@ -44,6 +45,18 @@
 - Then attendu : chaque mutation est bornée au site, validée par la DB et auditée.
 - Résultat observé : **vert** ; scénario API intégré dans `site-role-authorization.integration.test.ts`,
   avec annulation des runs actifs liés à l’affectation puis au mandat révoqués.
+
+### Sélection explicite parmi plusieurs mandats
+
+- Given : un operator MSP dispose de deux mandats actifs affectés sur le même site, dont un mandat
+  projet et un mandat site.
+- When : il consulte `/api/auth`, tente une route métier avant choix, sélectionne le mandat projet,
+  puis tente de sélectionner un mandat d’une organisation MSP voisine.
+- Then attendu : `/api/auth` expose uniquement les candidats actifs sans capacités, la route métier
+  reste bloquée tant qu’aucun choix n’est fait, le contexte sélectionné reste strictement projet-scoped,
+  la tentative voisine renvoie 403 et produit un `site.access` denied sans changer la session.
+- Résultat observé : **vert** ; P-INT couvre aussi la révocation du mandat sélectionné : la session
+  est nettoyée, aucun mandat voisin n’est choisi implicitement et l’UI redemande une sélection.
 
 ### Révocation d’un run actif
 
@@ -94,7 +107,7 @@
 ```text
 bun run typecheck                                      # core, server, console : vert
 bun test apps/server/drizzle/site-role-authorization.integration.test.ts
-  12 pass · 178 assertions
+  13 pass · 203 assertions
 bun test apps/server/drizzle/site-context-api.integration.test.ts
   2 pass · 37 assertions
 bun test apps/server/drizzle/resource-ownership.integration.test.ts
@@ -105,21 +118,22 @@ bun test apps/server/src/db/production-migration.test.ts
   3 pass
 bun test apps/server/src/routes.test.ts apps/server/src/api/auth/route.test.ts \
   apps/console/src/components/shell/nav-config.test.ts apps/console/src/lib/auth-site-context.test.ts \
-  apps/console/src/route-tree.test.ts
-  13 pass · 88 assertions
+  apps/console/src/route-tree.test.ts apps/console/src/lib/session-cache-scope.test.ts
+  16 pass · 94 assertions
 bun test
-  368 pass · 0 fail · 1250 expect() calls · 75 fichiers
+  372 pass · 0 fail · 1281 expect() calls · 76 fichiers
 ```
 
-La campagne globale séquentielle atteint 368 tests passants sans échec. Le scénario de sortie
+La campagne globale séquentielle atteint 372 tests passants sans échec. Le scénario de sortie
 Hermes hors contexte HTTP vérifie aussi la résolution du mandat opérateur (organisation MSP,
 organisation cliente et mandat dans l’audit v2). La P-E2E navigateur multi-compte et la revue
 finale partenaire restent à exécuter.
 
 ## Limites ouvertes
 
-- La sélection interactive entre plusieurs mandats simultanés n’est pas encore une surface UI : le
-  serveur refuse alors fail-closed avec `MSP_MANDATE_SELECTION_REQUIRED`.
+- La sélection interactive entre plusieurs mandats est implémentée côté backend/DB/UI et reste à
+  couvrir par la P-E2E navigateur et la P-SEC multi-compte ; le serveur refuse fail-closed avec
+  `MSP_MANDATE_SELECTION_REQUIRED` tant que le choix n’est pas explicite.
 - Les sorties Hermes hors contexte HTTP résolvent automatiquement un mandat projet exact, puis un
   mandat site ; l’absence ou l’ambiguïté du mandat fait échouer la livraison et l’audit plutôt que
   d’émettre une preuve opérateur incomplète.

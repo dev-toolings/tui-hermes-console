@@ -247,7 +247,8 @@ Précisions :
 - séparation organisationnelle MSP/client, mandats site/projet et affectations individuelles :
   implémentés côté backend/DB/UI et vérifiés localement, avec snapshot et annulation des runs actifs
   lors d’une révocation ; non acceptés avant P-E2E multi-compte, P-SEC partenaire et revue ; la
-  sélection interactive entre plusieurs mandats reste à livrer ;
+  sélection interactive entre plusieurs mandats est implémentée côté backend/DB/UI, mais reste
+  non acceptée avant P-E2E multi-compte, P-SEC partenaire et revue ;
 - site/projet comme frontière technique : implémenté et vérifié localement, mais non accepté avant Gate 1 ;
 - preuve navigateur multi-compte et décision de Gate sur le propriétaire agent/session/mission,
   connecteur ou artefact ;
@@ -352,7 +353,8 @@ L’adapter reste le seul point de couplage au protocole.
 - msp_mandates, msp_mandate_assignments : délégation coarse au niveau site ou projet, avec fenêtre
   temporelle, révocation et affectation individuelle obligatoire ; aucun outil, chemin, connecteur,
   modèle ou budget n’est évalué ici (G2-005) ;
-- console_sessions : token opaque hashé, CSRF, expiration et site actif sélectionné ;
+- console_sessions : token opaque hashé, CSRF, expiration, site actif sélectionné et mandat MSP
+  explicitement sélectionné lorsque plusieurs périmètres sont disponibles ;
 - sites, projects, site_memberships : frontière technique site/projet ;
 - console_setup : état global de l’installation ;
 - runtime_config et runtime_model_settings : une configuration globale ;
@@ -372,8 +374,10 @@ Un requester client ne lit et ne modifie que ses ressources ; un operator MSP do
 affiliation MSP, mandat actif et affectation individuelle ; un approver reste client-scoped.
 Le transfert thread est atomique avec runs et artefacts, l'audit append-only snapshotte les deux
 organisations et le mandat, et les caches UI changent de namespace par utilisateur/site/contexte.
-La P-E2E navigateur, la revue Gate, la sélection interactive de mandats multiples et l'autorité
-`installation_admin` restent à livrer. Une révocation snapshotée ferme les nouvelles requêtes et
+La P-E2E navigateur, la revue Gate et l'autorité `installation_admin` restent à livrer. Une
+sélection interactive de mandat est maintenant disponible dans la session et le namespace de cache
+est borné par utilisateur/site/mandat ; elle reste à prouver en P-E2E et à faire accepter par la
+revue. Une révocation snapshotée ferme les nouvelles requêtes et
 annule les runs actifs côté Console, y compris au reconciler après redémarrage ; l'arrêt effectif
 sur Hermes distant reste à prouver sur une cible réelle. Le filtrage initial des capacités UI est
 livré mais non encore prouvé en navigateur, et le provisioning initial MSP reste bootstrap-only.
