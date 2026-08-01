@@ -440,7 +440,7 @@ export const siteDataLifecyclePolicies = pgTable(
     check("site_data_lifecycle_hold_check", sql`(${table.legalHoldEnabled} IN (true, false))`),
     check(
       "site_data_lifecycle_hold_reason_check",
-      sql`${table.legalHoldEnabled} = false OR btrim(${table.legalHoldReason}) <> ''`,
+      sql`${table.legalHoldEnabled} = false OR (${table.legalHoldReason} IS NOT NULL AND btrim(${table.legalHoldReason}) <> '')`,
     ),
     foreignKey({
       columns: [table.updatedByUserId, table.siteId],

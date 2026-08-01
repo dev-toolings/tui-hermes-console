@@ -11,6 +11,7 @@ describe("data lifecycle preview migration", () => {
     expect(migration).toContain('data_lifecycle_preview_items');
     expect(migration).toContain('site_data_lifecycle_policy_author_fk');
     expect(migration).toContain('data_lifecycle_preview_items_preview_site_fk');
+    expect(migration).toContain('"legal_hold_reason" IS NOT NULL');
     expect(migration.toLowerCase()).not.toMatch(/\bdelete\s+(from|where)\b|\brm\b|hermes/);
   });
 });

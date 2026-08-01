@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS "site_data_lifecycle_policies" (
   CONSTRAINT "site_data_lifecycle_retention_days_check" CHECK ("retention_days" BETWEEN 1 AND 3650),
   CONSTRAINT "site_data_lifecycle_version_check" CHECK ("version" > 0),
   CONSTRAINT "site_data_lifecycle_hold_reason_check" CHECK (
-    NOT "legal_hold_enabled" OR btrim("legal_hold_reason") <> ''
+    NOT "legal_hold_enabled" OR ("legal_hold_reason" IS NOT NULL AND btrim("legal_hold_reason") <> '')
   ),
   CONSTRAINT "site_data_lifecycle_policy_author_fk"
     FOREIGN KEY ("updated_by_user_id", "site_id")
