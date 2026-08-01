@@ -1,0 +1,59 @@
+name: hermes-console
+
+# Opt-in only. This overlay supplies a local Hermes boundary; it does not
+# migrate or reconfigure an existing remote runtime.
+services:
+  hermes:
+    image: ${HERMES_IMAGE:?HERMES_IMAGE must be an immutable image@sha256:digest}
+    user: "65532:65532"
+    working_dir: /work
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # The only persistent writable mount is the explicit Hermes workdir.
+    volumes:
+      - type: volume
+        source: hermes-work
+        target: /work
+        read_only: false
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /run:size=16m,mode=755
+    environment:
+      HERMES_WORKDIR: /work
+      HERMES_RUNTIME_TOKEN_FILE: /run/secrets/hermes_runtime_token
+    secrets:
+      - source: hermes_runtime_token
+        target: hermes_runtime_token
+    networks:
+      - hermes-private
+    cpus: "${HERMES_CPU_LIMIT:-2.0}"
+    mem_limit: "${HERMES_MEMORY_LIMIT:-1G}"
+    pids_limit: ${HERMES_PIDS_LIMIT:-256}
+    deploy:
+      resources:
+        limits:
+          cpus: "${HERMES_CPU_LIMIT:-2.0}"
+          memory: "${HERMES_MEMORY_LIMIT:-1G}"
+          pids: ${HERMES_PIDS_LIMIT:-256}
+
+  # Join the private network without changing the default production edge or
+  # database networks. The runtime URL/token remain configured in the Console.
+  console:
+    networks:
+      - edge
+      - database
+      - hermes-private
+
+networks:
+  hermes-private:
+    internal: true
+
+volumes:
+  hermes-work:
+
+secrets:
+  hermes_runtime_token:
+    file: ${HERMES_RUNTIME_TOKEN_FILE:?HERMES_RUNTIME_TOKEN_FILE must point to a local secret file}

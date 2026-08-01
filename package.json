@@ -19,6 +19,7 @@
     "db:generate": "bun --env-file=apps/server/.env.local run --filter server db:generate",
     "db:migrate": "bun --env-file=apps/server/.env.local run --filter server db:migrate",
     "proof:g1-001": "bun apps/server/scripts/prove-artifact-durability.ts",
+    "proof:g1-002a": "bun apps/server/scripts/prove-hermes-confinement.ts",
     "proof:g1-003": "bun test apps/server/drizzle/ai-disclosure-consent.integration.test.ts",
     "prepare:e2e:g1-003": "bun apps/server/scripts/prepare-ai-disclosure-e2e.ts"
   }

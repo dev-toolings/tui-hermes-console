@@ -9,7 +9,7 @@ daté seulement après exécution ; `—` signifie « non prouvé », pas « non
 | US-G0-002 | §3.1, §13 — workflow étroit par partenaire | US-G0-001 | — | `PROPOSÉE` |
 | US-G0-003 | §13, §15 — métriques et engagement payant | US-G0-002 | — | `PROPOSÉE` |
 | US-G1-001 | §9.1, §13 — artefacts persistants | US-G0-003 | [durabilité Compose locale 2026-08-01](evidence/2026-08-01-gate-1-artifact-durability-local.md) | `IMPLÉMENTÉE` — preuve locale, P-OPS production ouverte |
-| US-G1-002 | §9.5, §13 — Hermes pinné et confiné | US-G0-003 | — | `PROPOSÉE` |
+| US-G1-002 | §9.5, §13 — Hermes pinné et confiné | US-G0-003 | [manifeste local G1-002A 2026-08-01](evidence/2026-08-01-gate-1-hermes-confinement-audit.md) | `BLOQUÉE` — préparation locale ; P-SEC/P-OPS/P-E2E ouvertes |
 | US-G1-003 | §9.5, §13 — avertissement IA | US-G0-003 | [P-INT notice IA 2026-08-01](evidence/2026-08-01-gate-1-ai-disclosure-local.md), [P-E2E navigateur 2026-08-01](evidence/2026-08-01-gate-1-ai-disclosure-e2e.md) | `IMPLÉMENTÉE` — revue lecteur d’écran ouverte |
 | US-G1-004 | §9.2, §13 — policy fail-closed | US-G1-002 | — | `PROPOSÉE` |
 | US-G1-005 | §8.2, §9.2, §13 — approbation et audit | US-G1-004 | [export audit expurgé 2026-08-01](evidence/2026-08-01-gate-1-audit-export.md) | `IMPLÉMENTÉE` |
