@@ -7,7 +7,8 @@ consentement. Elle ne ferme pas la preuve P-E2E navigateur ni la revue par lecte
 
 ## Code et validation
 
-- Commit : `e471e0e` — `feat([user-story G1-003]): harden AI disclosure accessibility`
+- Commits : `e471e0e` — `feat([user-story G1-003]): harden AI disclosure accessibility` ;
+  `bf5c4a2` — `refactor([user-story G1-003]): derive consent guard from route manifest`
 - Rendu SSR contrôlé par `apps/console/src/screens/setup.a11y.test.tsx` : région nommée, titre
   `h2`, résumé et liste identifiés, checkbox reliée par `label[for]` et `aria-describedby`.
 - Tests ciblés :
@@ -20,6 +21,8 @@ consentement. Elle ne ferme pas la preuve P-E2E navigateur ni la revue par lecte
   ```
 
 - Typecheck Console : `bun run --filter console typecheck` — PASS.
+- Le middleware serveur dérive désormais les trois méthodes protégées du manifeste `ROUTES` ; aucun
+  second inventaire regex indépendant ne décide du refus `428`.
 
 ## Limites explicites
 

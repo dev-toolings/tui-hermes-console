@@ -112,8 +112,12 @@ recovery, compte SSH de service, transports Hermes, cycle de vie des identités.
 - **Préparation code disponible (`3c37900`) :** le mode SSH exige maintenant un workdir distant
   explicitement fourni, absolu et non situé sous `/tmp`, `/var/tmp`, `/run` ou `/dev/shm`. Aucun
   chemin de repli transitoire n'est inventé lorsque le champ est absent ou invalide.
+- **Slice local G1-SSH-006A (`852cad0`) :** `createScopedSftp` borne lexicalement `mkdirp`, `list`,
+  `stat`, `upload` et `download` au workdir ; les traversées, racines et sibling-prefix sont
+  refusés avant tout appel et les erreurs restent corrélées au run.
 - **État courant :** `BLOQUÉE` — le transport synthétique seul est prouvé et les erreurs applicatives
-  peuvent encore être absorbées ; la durabilité réelle du workdir reste non prouvée sans cible VPS.
+  peuvent encore être absorbées ; ce slice lexical ne constitue pas une frontière OS et la durabilité
+  réelle du workdir reste non prouvée sans cible VPS.
 
 ## US-G1-SSH-007 — Prouver concurrence et reconnexion
 

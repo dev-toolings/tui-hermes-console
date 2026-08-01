@@ -458,6 +458,9 @@ Les deux chemins, binaire SSH et ssh2 par mot de passe, vérifient désormais la
 known_hosts. Le chemin binaire impose aussi `BatchMode`, `IdentitiesOnly` et une identité SSH
 déterministe ; le déploiement doit donc fournir le `IdentityFile`/config correspondant en lecture
 seule. Les noms distants sont normalisés et les liens/fichiers spéciaux sont refusés.
+La synchronisation SFTP applique aussi une garde lexicale au workdir configuré (`852cad0`) avant
+`mkdirp`, listing, stat, upload ou download ; cette garde réduit les traversées côté Console mais
+ne constitue pas une frontière OS distante.
 
 Restent non prouvés :
 
@@ -482,7 +485,8 @@ Avant tout pilote :
 - egress et credentials scindés selon le workflow ;
 - avertissement explicite que l’utilisateur interagit avec une IA et que des commandes peuvent être
   exécutées. La notice versionnée `2026-08-01.v2` est maintenant reliée sémantiquement à son contrôle
-  de consentement, et les trois routes de démarrage/retry refusent l’absence de consentement (`428`).
+  de consentement ; le manifeste de routes porte explicitement les trois méthodes de démarrage/retry,
+  qui refusent l’absence de consentement (`428`).
 
 Cette preuve reste locale : aucun parcours navigateur automatisé, test lecteur d’écran ou consentement
 Google réel n’est encore accepté.
