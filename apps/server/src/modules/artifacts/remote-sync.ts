@@ -3,6 +3,7 @@ import { link, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { getRemoteWorkspace } from "@/modules/runtime/config";
 import type { SftpOps } from "@/modules/runtime/ssh";
+import { createScopedSftp } from "@/modules/runtime/ssh/scoped-sftp";
 import {
   assertWithinDir,
   assertSafeRegularFile,
@@ -77,9 +78,7 @@ export async function pushRunInputsToWorkspace(
   localRoot?: string,
 ): Promise<void> {
   const remote = remoteRunPaths(workspace.root, runId);
-  const sftp = await correlated(runId, "open_sftp", () =>
-    workspace.channel.sftp(),
-  );
+  const sftp = await openScopedSftp(runId, workspace);
   await correlated(runId, "prepare_remote", async () => {
     await sftp.mkdirp(remote.input);
     await sftp.mkdirp(remote.output);
@@ -130,9 +129,7 @@ export async function pullRunOutputsFromWorkspace(
   limits = getArtifactQuotas(),
 ): Promise<void> {
   const remote = remoteRunPaths(workspace.root, runId);
-  const sftp = await correlated(runId, "open_sftp", () =>
-    workspace.channel.sftp(),
-  );
+  const sftp = await openScopedSftp(runId, workspace);
   const names = await correlated(runId, "list_remote_outputs", () =>
     sftp.list(remote.output, limits.maxCount),
   );
@@ -294,4 +291,13 @@ async function correlated<T>(
       cause: error,
     });
   }
+}
+
+async function openScopedSftp(
+  runId: string,
+  workspace: RemoteWorkspace,
+): Promise<SftpOps> {
+  return correlated(runId, "open_sftp", async () =>
+    createScopedSftp(await workspace.channel.sftp(), workspace.root),
+  );
 }

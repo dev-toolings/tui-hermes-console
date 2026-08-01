@@ -16,7 +16,7 @@ import {
 } from "./remote-sync";
 import { runInputDir, runOutputDir } from "./paths";
 
-function workspace(sftp: Partial<SftpOps>) {
+function workspace(sftp: Partial<SftpOps>, root = "/srv/hermes-console") {
   const defaults: SftpOps = {
     mkdirp: async () => undefined,
     list: async () => [],
@@ -26,12 +26,39 @@ function workspace(sftp: Partial<SftpOps>) {
     ...sftp,
   };
   return {
-    root: "/srv/hermes-console",
+    root,
     channel: { sftp: async () => defaults },
   };
 }
 
 describe("remote artifact sync", () => {
+  test("rejects an unsafe remote workspace before any SFTP operation", async () => {
+    const calls: string[] = [];
+    const root = await mkdtemp(path.join(tmpdir(), "hermes-remote-sync-"));
+    try {
+      await expect(
+        pushRunInputsToWorkspace(
+          "run_invalid_remote_root",
+          workspace(
+            {
+              mkdirp: async () => {
+                calls.push("mkdirp");
+              },
+            },
+            "/",
+          ),
+          root,
+        ),
+      ).rejects.toMatchObject({
+        runId: "run_invalid_remote_root",
+        operation: "open_sftp",
+      });
+      expect(calls).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("propagates a correlated remote list failure", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "hermes-remote-sync-"));
     try {
