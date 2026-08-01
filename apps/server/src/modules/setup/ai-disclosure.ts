@@ -87,15 +87,6 @@ export function setupRequiredResponse() {
   );
 }
 
-export function isAiRunStartRequest(method: string, path: string) {
-  if (method.toUpperCase() !== "POST") return false;
-  return (
-    path === "/api/threads" ||
-    /^\/api\/threads\/[^/]+\/messages$/.test(path) ||
-    /^\/api\/runs\/[^/]+\/retry$/.test(path)
-  );
-}
-
 /** La frontière montée est 423 avant 428 : le handler ne voit que le second cas. */
 export function runStartPreconditionResponse(
   setupRequired: boolean,

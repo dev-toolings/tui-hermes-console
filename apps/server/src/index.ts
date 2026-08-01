@@ -14,6 +14,7 @@ import { cors } from "hono/cors";
 import {
   ROUTES,
   ROUTE_METHODS,
+  routeRequiresAiConsent,
   type RouteDefinition,
 } from "./routes";
 import { register } from "./instrumentation";
@@ -29,7 +30,6 @@ import {
 import { assertSameOriginMutation } from "@/modules/api/same-origin";
 import { consoleSetupRequired } from "@/modules/setup/service";
 import {
-  isAiRunStartRequest,
   runStartPreconditionResponse,
 } from "@/modules/setup/ai-disclosure";
 import {
@@ -89,7 +89,7 @@ app.use("/api/*", async (c, next) => {
       assertCsrf(c.req.raw, session);
     }
     const setupRequired = await consoleSetupRequired();
-    if (isAiRunStartRequest(c.req.method, c.req.path)) {
+    if (routeRequiresAiConsent(c.req.method, c.req.path)) {
       const precondition = runStartPreconditionResponse(setupRequired, session);
       if (precondition) return precondition;
     }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ROUTES, ROUTE_METHODS } from "./routes";
+import { ROUTES, ROUTE_METHODS, routeRequiresAiConsent } from "./routes";
 
 describe("route authorization inventory", () => {
   test("classifies every mounted handler and requires an action on site routes", () => {
@@ -69,5 +69,21 @@ describe("route authorization inventory", () => {
     expect(
       ROUTES.find(({ path }) => path === "/api/settings/data-lifecycle/exports")?.access,
     ).toEqual({ boundary: "site", actions: { POST: "data.lifecycle.export" } });
+  });
+
+  test("declares exactly the three AI-start routes in the mounted manifest", () => {
+    const consentRoutes = ROUTES.flatMap((route) =>
+      Object.entries(route.requiresAiConsent ?? {})
+        .filter(([, required]) => required)
+        .map(([method]) => `${method} ${route.path}`),
+    );
+    expect(consentRoutes).toEqual([
+      "POST /api/runs/:runId/retry",
+      "POST /api/threads",
+      "POST /api/threads/:threadId/messages",
+    ]);
+    expect(routeRequiresAiConsent("POST", "/api/runs/run_1/retry")).toBe(true);
+    expect(routeRequiresAiConsent("POST", "/api/threads/thr_1/messages")).toBe(true);
+    expect(routeRequiresAiConsent("POST", "/api/threads/thr_1/commands")).toBe(false);
   });
 });

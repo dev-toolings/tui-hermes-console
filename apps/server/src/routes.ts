@@ -72,6 +72,8 @@ export type RouteDefinition = {
   path: string;
   module: RouteModule;
   access: RouteAccess;
+  /** Mounted methods that must pass the current AI disclosure boundary. */
+  requiresAiConsent?: Partial<Record<RouteMethod, true>>;
 };
 
 const publicAccess = { boundary: "public" } as const;
@@ -195,6 +197,7 @@ export const ROUTES: RouteDefinition[] = [
     path: "/api/runs/:runId/retry",
     module: runRetry,
     access: siteAccess({ POST: "run.retry" }),
+    requiresAiConsent: { POST: true },
   },
 
   {
@@ -249,6 +252,7 @@ export const ROUTES: RouteDefinition[] = [
     path: "/api/threads",
     module: threads,
     access: siteAccess({ GET: "thread.read", POST: "thread.create" }),
+    requiresAiConsent: { POST: true },
   },
   {
     path: "/api/threads/:threadId",
@@ -269,5 +273,26 @@ export const ROUTES: RouteDefinition[] = [
     path: "/api/threads/:threadId/messages",
     module: threadMessages,
     access: siteAccess({ POST: "thread.message" }),
+    requiresAiConsent: { POST: true },
   },
 ];
+
+function routePathMatches(routePath: string, requestPath: string) {
+  const routeSegments = routePath.split("/").filter(Boolean);
+  const requestSegments = requestPath.split("/").filter(Boolean);
+  if (routeSegments.length !== requestSegments.length) return false;
+  return routeSegments.every(
+    (segment, index) => segment.startsWith(":") || segment === requestSegments[index],
+  );
+}
+
+/** Resolves consent from the mounted route manifest, not a second path regex list. */
+export function routeRequiresAiConsent(method: string, requestPath: string) {
+  const normalizedMethod = method.toUpperCase();
+  if (!(ROUTE_METHODS as readonly string[]).includes(normalizedMethod)) return false;
+  return ROUTES.some(
+    (route) =>
+      route.requiresAiConsent?.[normalizedMethod as RouteMethod] === true &&
+      routePathMatches(route.path, requestPath),
+  );
+}

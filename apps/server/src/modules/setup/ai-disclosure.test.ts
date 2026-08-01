@@ -2,10 +2,10 @@ import { describe, expect, mock, test } from "bun:test";
 import {
   CURRENT_AI_DISCLOSURE,
   hasCurrentAiDisclosureConsent,
-  isAiRunStartRequest,
   runStartPreconditionResponse,
   withCurrentAiDisclosureConsent,
 } from "./ai-disclosure";
+import { routeRequiresAiConsent } from "@/routes";
 import type { AuthSession } from "@/modules/auth/service";
 
 function session(
@@ -114,12 +114,13 @@ describe("AI disclosure consent", () => {
   });
 
   test("recognizes exactly the three run-start POST routes", () => {
-    expect(isAiRunStartRequest("POST", "/api/threads")).toBe(true);
+    expect(routeRequiresAiConsent("POST", "/api/threads")).toBe(true);
     expect(
-      isAiRunStartRequest("POST", "/api/threads/thr_1/messages"),
+      routeRequiresAiConsent("POST", "/api/threads/thr_1/messages"),
     ).toBe(true);
-    expect(isAiRunStartRequest("POST", "/api/runs/run_1/retry")).toBe(true);
-    expect(isAiRunStartRequest("GET", "/api/threads")).toBe(false);
-    expect(isAiRunStartRequest("POST", "/api/runs/run_1/cancel")).toBe(false);
+    expect(routeRequiresAiConsent("POST", "/api/runs/run_1/retry")).toBe(true);
+    expect(routeRequiresAiConsent("GET", "/api/threads")).toBe(false);
+    expect(routeRequiresAiConsent("POST", "/api/runs/run_1/cancel")).toBe(false);
+    expect(routeRequiresAiConsent("POST", "/api/threads/thr_1")).toBe(false);
   });
 });
