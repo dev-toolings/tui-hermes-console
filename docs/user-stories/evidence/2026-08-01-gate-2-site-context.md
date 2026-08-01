@@ -1,6 +1,6 @@
 # Preuve US-G2-001 — Isolation par site et projet
 
-- Date/heure UTC : 2026-08-01T00:00:00Z (validation locale)
+- Date/heure UTC : 2026-08-01T10:29:24Z (rédaction du rapport ; commandes reproduites ci-dessous)
 - Story : US-G2-001
 - Commit/build : `75075bc`, branche `feat/us-g2-001-site-context`
 - Environnement : local, PostgreSQL 17 réel en conteneur éphémère
@@ -8,7 +8,8 @@
 - Reviewer : Vador (contre-audit technique) ; product owner à faire
 - Cible : deux sites synthétiques `paris` et `lyon`
 - Versions Console/Hermes/PostgreSQL/OpenSSH : Console du commit `75075bc`, Hermes non requis,
-  PostgreSQL 17.6, OpenSSH non requis
+  image `postgres:17.6-alpine@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94`,
+  OpenSSH non requis
 - État technique : `VÉRIFIÉE`
 - Décision de Gate : non émise — Gate 1 n'est pas encore acceptée
 - Périmètre exclu : US-G2-005 et US-G2-006
