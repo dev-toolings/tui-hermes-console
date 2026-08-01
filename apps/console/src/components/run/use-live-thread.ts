@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "@/lib/router";
 import type { ThreadMessageLike } from "@assistant-ui/react";
 import type {
@@ -49,6 +49,25 @@ const TERMINAL_REVALIDATE_POLL_MS = 10_000;
 const SNAPSHOT_CACHE_LIMIT = 20;
 
 type CachedSnapshot = { thread: ThreadSnapshot; gaps: ConnectorType[] };
+
+/** Identité d'une route, invalidée au cleanup sans ref lu pendant le rendu. */
+class ThreadToken {
+  private active = true;
+
+  constructor(readonly threadId: string) {}
+
+  activate() {
+    this.active = true;
+  }
+
+  invalidate() {
+    this.active = false;
+  }
+
+  isActive() {
+    return this.active;
+  }
+}
 
 /**
  * Ce que l'écran sait de la conversation, et donc ce qu'il a le droit d'afficher.
@@ -197,12 +216,17 @@ export class ThreadAccessError extends Error {
 }
 
 export type ThreadPollingGate = {
-  threadId: string;
-  accessDenied: boolean;
+  readonly threadId: string;
+  readonly accessDenied: boolean;
 };
 
-export function createThreadPollingGate(threadId: string): ThreadPollingGate {
-  return { threadId, accessDenied: false };
+type ThreadSnapshotResult = Awaited<ReturnType<typeof fetchThreadSnapshot>>;
+
+export function createThreadPollingGate(
+  threadId: string,
+  accessDenied = false,
+): ThreadPollingGate {
+  return { threadId, accessDenied };
 }
 
 export async function pollThreadSnapshot(
@@ -211,12 +235,45 @@ export async function pollThreadSnapshot(
   fetcher: typeof fetchThreadSnapshot = fetchThreadSnapshot,
 ) {
   if (gate.threadId !== threadId || gate.accessDenied) return null;
-  try {
-    return await fetcher(threadId);
-  } catch (reason) {
-    if (isThreadAccessError(reason)) gate.accessDenied = true;
-    throw reason;
-  }
+  return fetcher(threadId);
+}
+
+/**
+ * Cycle de rattrapage autonome : une révocation ou une navigation invalide
+ * aussi les réponses déjà en vol, avant le prochain rendu React.
+ */
+export function createThreadPollingCycle(threadId: string) {
+  let active = true;
+  let accessDenied = false;
+
+  return {
+    activate() {
+      active = true;
+    },
+    invalidate() {
+      active = false;
+    },
+    revoke() {
+      accessDenied = true;
+    },
+    async poll(
+      fetcher: typeof fetchThreadSnapshot = fetchThreadSnapshot,
+    ): Promise<ThreadSnapshotResult | null> {
+      if (!active || accessDenied) return null;
+      let result: ThreadSnapshotResult | null;
+      try {
+        result = await pollThreadSnapshot(
+          threadId,
+          createThreadPollingGate(threadId, accessDenied),
+          fetcher,
+        );
+      } catch (reason) {
+        if (isThreadAccessError(reason)) accessDenied = true;
+        throw reason;
+      }
+      return active && !accessDenied ? result : null;
+    },
+  };
 }
 
 function isThreadAccessError(reason: unknown): reason is ThreadAccessError {
@@ -242,12 +299,39 @@ export function useLiveThread(threadId: string) {
   const [complete, setComplete] = useState(cached?.complete ?? false);
   const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
-  const [accessDenied, setAccessDenied] = useState(false);
+  /**
+   * Une révocation appartient à une conversation précise.  Conserver son id
+   * (plutôt qu'un booléen remis à zéro dans un effet au changement de route)
+   * évite qu'un rendu intermédiaire redémarre le polling de l'ancien thread,
+   * tout en laissant naturellement une nouvelle conversation être chargée.
+   */
+  const [deniedThreadId, setDeniedThreadId] = useState<string | null>(null);
+  const accessDenied = deniedThreadId === threadId;
   const snapshotRef = useRef<ThreadSnapshot | null>(cached?.thread ?? null);
-  const pollingGateRef = useRef(createThreadPollingGate(threadId));
-  if (pollingGateRef.current.threadId !== threadId) {
-    pollingGateRef.current = createThreadPollingGate(threadId);
-  }
+  const pollingCycle = useMemo(() => createThreadPollingCycle(threadId), [threadId]);
+  /**
+   * Chaque identité de thread possède un token d'annulation distinct. Le
+   * cleanup layout s'exécute pendant le commit, avant qu'un callback asynchrone
+   * puisse observer la nouvelle route : aucune fenêtre n'est laissée entre le
+   * rendu B et la mise à jour du garde. Les callbacks ne lisent ni n'écrivent
+   * de ref pendant le rendu.
+   */
+  const threadToken = useMemo(() => new ThreadToken(threadId), [threadId]);
+  useLayoutEffect(() => {
+    // Réactive le token lors du remount d'effet de StrictMode; une vraie
+    // navigation possède un nouveau token, donc l'ancien reste invalidé.
+    threadToken.activate();
+    return () => threadToken.invalidate();
+  }, [threadToken]);
+  useLayoutEffect(() => {
+    // Réactive le cycle lors du remount d'effet de StrictMode.
+    pollingCycle.activate();
+    return () => pollingCycle.invalidate();
+  }, [pollingCycle]);
+  const isCurrentThread = useCallback(
+    () => threadToken.threadId === threadId && threadToken.isActive(),
+    [threadId, threadToken],
+  );
   /** Un flux SSE est attaché : le filet de rattrapage n'a rien à rattraper. */
   const streamingRef = useRef(false);
   /** Le premier chargement complet. Résolue, elle ne coûte plus rien. */
@@ -260,9 +344,10 @@ export function useLiveThread(threadId: string) {
   const completeRef = useRef(cached?.complete ?? false);
 
   const clearLocalThread = useCallback((reason?: unknown) => {
+    if (!isCurrentThread()) return;
     if (isThreadAccessError(reason)) {
-      pollingGateRef.current.accessDenied = true;
-      setAccessDenied(true);
+      pollingCycle.revoke();
+      setDeniedThreadId(threadId);
     }
     snapshotRef.current = null;
     completeRef.current = false;
@@ -274,11 +359,7 @@ export function useLiveThread(threadId: string) {
     setLoading(false);
     setError(reason ? toMessage(reason) : "Cette conversation n’est plus accessible.");
     dropThreadSnapshotCache(threadId);
-  }, [threadId]);
-
-  useEffect(() => {
-    setAccessDenied(false);
-  }, [threadId]);
+  }, [isCurrentThread, pollingCycle, threadId]);
 
   useEffect(
     () => onSessionCacheScopeChange(() => {
@@ -289,22 +370,25 @@ export function useLiveThread(threadId: string) {
   );
 
   const markComplete = useCallback(() => {
+    if (!isCurrentThread()) return;
     completeRef.current = true;
     setComplete(true);
-  }, []);
+  }, [isCurrentThread]);
 
   const applySnapshot = useCallback((next: ThreadSnapshot) => {
+    if (!isCurrentThread() || next.id !== threadId) return;
     snapshotRef.current = next;
     writeSnapshotCache(next.id, { thread: next });
     setSnapshot(next);
-  }, []);
+  }, [isCurrentThread, threadId]);
 
   const applyConnectorGaps = useCallback(
     (gaps: ConnectorType[]) => {
+      if (!isCurrentThread()) return;
       writeSnapshotCache(threadId, { gaps });
       setConnectorGaps(gaps);
     },
-    [threadId],
+    [isCurrentThread, threadId],
   );
 
   const refresh = useCallback(async () => {
@@ -315,6 +399,7 @@ export function useLiveThread(threadId: string) {
       if (isThreadAccessError(reason)) clearLocalThread(reason);
       throw reason;
     }
+    if (!isCurrentThread()) return null;
     const { thread, gaps } = result;
     const current = snapshotRef.current;
     if (current) {
@@ -327,7 +412,14 @@ export function useLiveThread(threadId: string) {
     writeStoredChrome(threadId, { thread, gaps });
     setError(null);
     return thread;
-  }, [applyConnectorGaps, applySnapshot, clearLocalThread, markComplete, threadId]);
+  }, [
+    applyConnectorGaps,
+    applySnapshot,
+    clearLocalThread,
+    isCurrentThread,
+    markComplete,
+    threadId,
+  ]);
 
   useEffect(() => {
     if (accessDenied) return;
@@ -358,7 +450,14 @@ export function useLiveThread(threadId: string) {
     return () => {
       disposed = true;
     };
-  }, [applyConnectorGaps, applySnapshot, clearLocalThread, markComplete, threadId]);
+  }, [
+    accessDenied,
+    applyConnectorGaps,
+    applySnapshot,
+    clearLocalThread,
+    markComplete,
+    threadId,
+  ]);
 
   /** Échange affiché côté client seulement — rien n'est persisté ni exécuté. */
   const pushLocalExchange = useCallback((userText: string, systemText: string) => {
@@ -599,18 +698,18 @@ export function useLiveThread(threadId: string) {
     if (accessDenied) return;
     let disposed = false;
     let refreshing = false;
+    // Ferme immédiatement le timer après une révocation, sans attendre que le
+    // setState de `deniedThreadId` déclenche le rendu suivant.
+    let revoked = false;
     const reconcile = async () => {
-      if (disposed || refreshing || streamingRef.current) return;
+      if (disposed || revoked || refreshing || streamingRef.current) return;
       refreshing = true;
       try {
-        const polled = await pollThreadSnapshot(
-          threadId,
-          pollingGateRef.current,
-        );
+        const polled = await pollingCycle.poll();
         if (!polled) return;
         const { thread: server } = polled;
         const local = snapshotRef.current;
-        if (!local || disposed) return;
+        if (!local || disposed || !isCurrentThread()) return;
 
         const merged = mergeThreadSnapshots(local, server);
         const newEvents = merged.events.filter((event) => event.cursor > local.cursor);
@@ -630,7 +729,10 @@ export function useLiveThread(threadId: string) {
         }
       } catch (reason) {
         if (!disposed) {
-          if (isThreadAccessError(reason)) clearLocalThread(reason);
+          if (isThreadAccessError(reason)) {
+            revoked = true;
+            clearLocalThread(reason);
+          }
           else setError(toMessage(reason));
         }
       } finally {
@@ -646,7 +748,16 @@ export function useLiveThread(threadId: string) {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [accessDenied, applySnapshot, clearLocalThread, isRunning, refresh, threadId]);
+  }, [
+    accessDenied,
+    applySnapshot,
+    clearLocalThread,
+    isCurrentThread,
+    isRunning,
+    pollingCycle,
+    refresh,
+    threadId,
+  ]);
 
   const cancel = useCallback(async () => {
     const run = snapshotRef.current?.runs.at(-1);
