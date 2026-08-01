@@ -9,12 +9,15 @@
 Le vérificateur `apps/server/scripts/verify-lifecycle-export.ts` contrôle sans écriture :
 
 - JSON/version/type du bundle ;
+- `siteId`, manifeste canonique et digest du manifeste ;
+- unicité des IDs et relations threads → runs → messages/événements/artefacts, sans orphelin ni
+  mélange de sites ;
 - SHA-256 global fourni hors bande ;
 - unicité des artefacts ;
 - décodage base64, taille déclarée et SHA-256 de chaque octet.
 
-Tests locaux : `bun test apps/server/src/modules/retention/verify-export.test.ts` — PASS ; suite
-complète `bun test` : 390 pass, 0 fail.
+Tests locaux : `bun test apps/server/src/modules/retention/export.test.ts apps/server/src/modules/retention/verify-export.test.ts`
+— PASS ; le backup externe et la restauration scratch restent non exécutés.
 
 Ce n’est pas encore une preuve de backup externe ni de restauration scratch. Aucun statut de story
 complète n’est changé.

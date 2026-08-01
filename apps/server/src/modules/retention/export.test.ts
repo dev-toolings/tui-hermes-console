@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   assertLifecycleExportSourceMatches,
+  buildLifecycleExportManifest,
+  hashLifecycleExportManifest,
   LifecycleExportError,
   MAX_LIFECYCLE_EXPORT_BYTES,
   lifecycleExportSchema,
@@ -26,20 +28,34 @@ describe("lifecycle business export", () => {
     const payload = {
       version: 1 as const,
       type: "hermes_console_business_export" as const,
+      siteId: "site_paris",
       previewId: "preview_1",
       policyVersion: 2,
       retentionDays: 30,
       cutoffAt: "2026-07-01T00:00:00.000Z",
       generatedAt: "2026-08-01T00:00:00.000Z",
-      threads: [{ id: "thread_1" }],
-      runs: [{ id: "run_1" }],
+      threads: [{ id: "thread_1", siteId: "site_paris" }],
+      runs: [{ id: "run_1", siteId: "site_paris", threadId: "thread_1" }],
       messages: [],
       events: [],
-      artifacts: [{ id: "artifact_1", bytesBase64: Buffer.from("hello").toString("base64") }],
+      artifacts: [{
+        id: "artifact_1",
+        siteId: "site_paris",
+        runId: "run_1",
+        sizeBytes: 5,
+        checksumSha256: createHash("sha256").update("hello").digest("hex"),
+        bytesBase64: Buffer.from("hello").toString("base64"),
+      }],
     };
-    const result = serializeLifecycleExport(payload);
+    const manifest = buildLifecycleExportManifest(payload);
+    const fullPayload = {
+      ...payload,
+      manifest,
+      manifestSha256: hashLifecycleExportManifest(manifest),
+    };
+    const result = serializeLifecycleExport(fullPayload);
     expect(result.sha256).toBe(createHash("sha256").update(result.body).digest("hex"));
-    expect(JSON.parse(result.body)).toEqual(payload);
+    expect(JSON.parse(result.body)).toEqual(fullPayload);
     expect(result.body).toContain("hermes_console_business_export");
   });
 

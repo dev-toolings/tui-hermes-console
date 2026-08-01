@@ -23,7 +23,11 @@ bun apps/server/scripts/verify-lifecycle-export.ts \
 ```
 
 Le vérificateur est sans écriture, sans shell et sans accès réseau. Il contrôle le JSON, le digest
-du bundle, les doublons, la taille et le SHA-256 de chaque artefact base64.
+du bundle, le site et le manifeste relationnel canonique (threads, runs, messages, événements et
+artefacts), les relations sans orphelin, les doublons, la taille et le SHA-256 de chaque artefact
+base64.
+
+Cette vérification locale ne constitue toujours ni un backup externe ni une restauration scratch.
 
 ## Ce qui reste à produire pour fermer G1-006C
 

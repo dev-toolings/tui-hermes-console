@@ -50,6 +50,7 @@ export class LifecycleExportError extends Error {
 export type LifecycleExportPayload = {
   version: 1;
   type: "hermes_console_business_export";
+  siteId: string;
   previewId: string;
   policyVersion: number;
   retentionDays: number;
@@ -60,7 +61,92 @@ export type LifecycleExportPayload = {
   messages: readonly Record<string, unknown>[];
   events: readonly Record<string, unknown>[];
   artifacts: readonly Record<string, unknown>[];
+  manifest: LifecycleExportManifest;
+  manifestSha256: string;
 };
+
+export type LifecycleExportManifest = {
+  version: 1;
+  siteId: string;
+  previewId: string;
+  threadIds: readonly string[];
+  runIds: readonly string[];
+  messageIds: readonly string[];
+  eventIds: readonly string[];
+  artifactIds: readonly string[];
+  relations: {
+    runToThread: readonly { runId: string; threadId: string }[];
+    messageToThread: readonly { messageId: string; threadId: string }[];
+    messageToRun: readonly { messageId: string; runId: string | null }[];
+    eventToRun: readonly { eventId: string; runId: string }[];
+    artifactToRun: readonly { artifactId: string; runId: string }[];
+  };
+  artifactBytes: number;
+};
+
+type LifecycleExportCollections = Pick<
+  LifecycleExportPayload,
+  | "siteId"
+  | "previewId"
+  | "threads"
+  | "runs"
+  | "messages"
+  | "events"
+  | "artifacts"
+>;
+
+/** Builds the deterministic relationship manifest embedded in each bundle. */
+export function buildLifecycleExportManifest(
+  collections: LifecycleExportCollections,
+): LifecycleExportManifest {
+  const sorted = (values: readonly string[]) => [...values].map(String).sort();
+  const threads = collections.threads;
+  const runs = collections.runs;
+  const messages = collections.messages;
+  const events = collections.events;
+  const artifacts = collections.artifacts;
+  const relationSort = <T extends Record<string, unknown>>(rows: readonly T[]) =>
+    [...rows].sort((left, right) => {
+      const leftValue = JSON.stringify(left);
+      const rightValue = JSON.stringify(right);
+      return leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
+    });
+  return {
+    version: 1,
+    siteId: collections.siteId,
+    previewId: collections.previewId,
+    threadIds: sorted(threads.map((row) => String(row.id))),
+    runIds: sorted(runs.map((row) => String(row.id))),
+    messageIds: sorted(messages.map((row) => String(row.id))),
+    eventIds: sorted(events.map((row) => String(row.id))),
+    artifactIds: sorted(artifacts.map((row) => String(row.id))),
+    relations: {
+      runToThread: relationSort(
+        runs.map((row) => ({ runId: String(row.id), threadId: String(row.threadId) })),
+      ),
+      messageToThread: relationSort(
+        messages.map((row) => ({ messageId: String(row.id), threadId: String(row.threadId) })),
+      ),
+      messageToRun: relationSort(
+        messages.map((row) => ({
+          messageId: String(row.id),
+          runId: row.runId == null ? null : String(row.runId),
+        })),
+      ),
+      eventToRun: relationSort(
+        events.map((row) => ({ eventId: String(row.id), runId: String(row.runId) })),
+      ),
+      artifactToRun: relationSort(
+        artifacts.map((row) => ({ artifactId: String(row.id), runId: String(row.runId) })),
+      ),
+    },
+    artifactBytes: artifacts.reduce((sum, row) => sum + Number(row.sizeBytes ?? 0), 0),
+  };
+}
+
+export function hashLifecycleExportManifest(manifest: LifecycleExportManifest) {
+  return createHash("sha256").update(JSON.stringify(manifest), "utf8").digest("hex");
+}
 
 export function serializeLifecycleExport(payload: LifecycleExportPayload) {
   const body = JSON.stringify(payload);
@@ -248,6 +334,7 @@ export async function createLifecycleExport(
       }
       exportedArtifacts.push({
         id: artifact.id,
+        siteId: context.siteId,
         runId: artifact.runId,
         direction: artifact.direction,
         filename: artifact.filename,
@@ -259,19 +346,26 @@ export async function createLifecycleExport(
       });
     }
 
-    const payload: LifecycleExportPayload = {
-      version: 1,
-      type: "hermes_console_business_export",
+    const collections: LifecycleExportCollections = {
+      siteId: context.siteId,
       previewId: preview.id,
-      policyVersion: preview.policyVersion,
-      retentionDays: preview.retentionDays,
-      cutoffAt: preview.cutoffAt.toISOString(),
-      generatedAt: now.toISOString(),
       threads: threadRows.map((row) => serializeRow(row)),
       runs: runRows.map((row) => serializeRow(row)),
       messages: messageRows.map((row) => serializeRow(row)),
       events: eventRows.map((row) => serializeRow(row)),
       artifacts: exportedArtifacts,
+    };
+    const manifest = buildLifecycleExportManifest(collections);
+    const payload: LifecycleExportPayload = {
+      version: 1,
+      type: "hermes_console_business_export",
+      policyVersion: preview.policyVersion,
+      retentionDays: preview.retentionDays,
+      cutoffAt: preview.cutoffAt.toISOString(),
+      generatedAt: now.toISOString(),
+      ...collections,
+      manifest,
+      manifestSha256: hashLifecycleExportManifest(manifest),
     };
     const serialized = serializeLifecycleExport(payload);
     if (Buffer.byteLength(serialized.body, "utf8") > MAX_LIFECYCLE_EXPORT_BYTES) {
