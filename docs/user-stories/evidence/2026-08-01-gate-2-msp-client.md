@@ -55,8 +55,10 @@
 - Then attendu : `/api/auth` expose uniquement les candidats actifs sans capacités, la route métier
   reste bloquée tant qu’aucun choix n’est fait, le contexte sélectionné reste strictement projet-scoped,
   la tentative voisine renvoie 403 et produit un `site.access` denied sans changer la session.
-- Résultat observé : **vert** ; P-INT couvre aussi la révocation du mandat sélectionné : la session
-  est nettoyée, aucun mandat voisin n’est choisi implicitement et l’UI redemande une sélection.
+- Résultat observé : **vert** pour le contrat API et la persistance ; le composant setup/nav-user
+  consomme ce signal mais reste à prouver en navigateur. P-INT couvre aussi la révocation du mandat
+  sélectionné : la session est nettoyée, aucun mandat voisin n’est choisi implicitement et l’API
+  redemande une sélection.
 
 ### Révocation d’un run actif
 
