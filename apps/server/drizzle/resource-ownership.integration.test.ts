@@ -345,6 +345,50 @@ describeWithDocker("explicit resource ownership through Hono and PostgreSQL", ()
     }
   });
 
+  test("artifact audit resolves a concurrent author role change inside its transaction", async () => {
+    psql(`
+      INSERT INTO console_users (id, email, google_subject)
+        VALUES ('usr_artifact_race', 'artifact-race@example.com', 'sub-artifact-race');
+      INSERT INTO site_memberships (user_id, site_id, role)
+        VALUES ('usr_artifact_race', 'paris', 'requester');
+      INSERT INTO threads
+        (id, site_id, owner_user_id, author_user_id, title, agent_id, agent_name, instructions, hermes_conversation)
+      VALUES
+        ('thr_artifact_race', 'paris', 'usr_bob', 'usr_artifact_race', 'Artifact race', 'agt_bob', 'Bob agent', 'Bob', 'console:artifact-race');
+      INSERT INTO runs
+        (id, site_id, owner_user_id, author_user_id, thread_id, input, status)
+      VALUES
+        ('run_artifact_race', 'paris', 'usr_bob', 'usr_artifact_race', 'thr_artifact_race', 'Race', 'completed');
+    `);
+    const outputDir = runOutputDir("run_artifact_race");
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(`${outputDir}/race.txt`, "race output");
+    const roleChange = spawnPsql(`
+      BEGIN;
+      UPDATE site_memberships SET role = 'auditor'
+        WHERE site_id = 'paris' AND user_id = 'usr_artifact_race';
+      SELECT pg_sleep(1);
+      COMMIT;
+    `);
+    await Bun.sleep(150);
+    try {
+      const created = await scanOutputArtifacts({ siteId: "paris" }, "run_artifact_race");
+      expect(created).toHaveLength(1);
+      await Promise.all([
+        roleChange.exited,
+        new Response(roleChange.stdout).text(),
+        new Response(roleChange.stderr).text(),
+      ]);
+      expect(psql(`SELECT actor_role FROM audit_ledger_entries
+        WHERE action = 'ownership.create'
+          AND resource_type = 'artifact'
+          AND after_state->>'authorUserId' = 'usr_artifact_race'
+        ORDER BY sequence DESC LIMIT 1;`)).toBe("auditor");
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
   test("thread transfer is atomic, audited, and revokes the previous requester", async () => {
     const operatorDenied = await appFetch(request("operator", "/api/ownership/thread/thr_alice", {
       method: "PUT",

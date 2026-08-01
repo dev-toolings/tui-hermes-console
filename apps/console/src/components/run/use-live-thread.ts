@@ -186,13 +186,36 @@ type ApiErrorBody = {
   };
 };
 
-class ThreadAccessError extends Error {
+export class ThreadAccessError extends Error {
   constructor(
     readonly status: 403 | 404,
     message: string,
   ) {
     super(message);
     this.name = "ThreadAccessError";
+  }
+}
+
+export type ThreadPollingGate = {
+  threadId: string;
+  accessDenied: boolean;
+};
+
+export function createThreadPollingGate(threadId: string): ThreadPollingGate {
+  return { threadId, accessDenied: false };
+}
+
+export async function pollThreadSnapshot(
+  threadId: string,
+  gate: ThreadPollingGate,
+  fetcher: typeof fetchThreadSnapshot = fetchThreadSnapshot,
+) {
+  if (gate.threadId !== threadId || gate.accessDenied) return null;
+  try {
+    return await fetcher(threadId);
+  } catch (reason) {
+    if (isThreadAccessError(reason)) gate.accessDenied = true;
+    throw reason;
   }
 }
 
@@ -219,7 +242,12 @@ export function useLiveThread(threadId: string) {
   const [complete, setComplete] = useState(cached?.complete ?? false);
   const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
+  const [accessDenied, setAccessDenied] = useState(false);
   const snapshotRef = useRef<ThreadSnapshot | null>(cached?.thread ?? null);
+  const pollingGateRef = useRef(createThreadPollingGate(threadId));
+  if (pollingGateRef.current.threadId !== threadId) {
+    pollingGateRef.current = createThreadPollingGate(threadId);
+  }
   /** Un flux SSE est attaché : le filet de rattrapage n'a rien à rattraper. */
   const streamingRef = useRef(false);
   /** Le premier chargement complet. Résolue, elle ne coûte plus rien. */
@@ -232,6 +260,10 @@ export function useLiveThread(threadId: string) {
   const completeRef = useRef(cached?.complete ?? false);
 
   const clearLocalThread = useCallback((reason?: unknown) => {
+    if (isThreadAccessError(reason)) {
+      pollingGateRef.current.accessDenied = true;
+      setAccessDenied(true);
+    }
     snapshotRef.current = null;
     completeRef.current = false;
     streamingRef.current = false;
@@ -242,6 +274,10 @@ export function useLiveThread(threadId: string) {
     setLoading(false);
     setError(reason ? toMessage(reason) : "Cette conversation n’est plus accessible.");
     dropThreadSnapshotCache(threadId);
+  }, [threadId]);
+
+  useEffect(() => {
+    setAccessDenied(false);
   }, [threadId]);
 
   useEffect(
@@ -294,6 +330,7 @@ export function useLiveThread(threadId: string) {
   }, [applyConnectorGaps, applySnapshot, clearLocalThread, markComplete, threadId]);
 
   useEffect(() => {
+    if (accessDenied) return;
     let disposed = false;
     const settled = fetchThreadSnapshot(threadId)
       .then(({ thread, gaps }) => {
@@ -559,13 +596,19 @@ export function useLiveThread(threadId: string) {
   }, [latestRun, snapshot]);
 
   useEffect(() => {
+    if (accessDenied) return;
     let disposed = false;
     let refreshing = false;
     const reconcile = async () => {
       if (disposed || refreshing || streamingRef.current) return;
       refreshing = true;
       try {
-        const { thread: server } = await fetchThreadSnapshot(threadId);
+        const polled = await pollThreadSnapshot(
+          threadId,
+          pollingGateRef.current,
+        );
+        if (!polled) return;
+        const { thread: server } = polled;
         const local = snapshotRef.current;
         if (!local || disposed) return;
 
@@ -603,7 +646,7 @@ export function useLiveThread(threadId: string) {
       disposed = true;
       window.clearInterval(timer);
     };
-  }, [applySnapshot, clearLocalThread, isRunning, refresh, threadId]);
+  }, [accessDenied, applySnapshot, clearLocalThread, isRunning, refresh, threadId]);
 
   const cancel = useCallback(async () => {
     const run = snapshotRef.current?.runs.at(-1);

@@ -10,7 +10,7 @@ import { open, opendir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
 import { artifacts, runs, siteMemberships, type ArtifactDirection } from "@/db/schema";
 import type { SiteRequestContext, SiteScope } from "@/modules/auth/service";
@@ -34,8 +34,8 @@ export type { ArtifactDto } from "@console/core/types/api";
 import type { ArtifactDto } from "@console/core/types/api";
 
 type ArtifactAudit = {
-  context: SiteRequestContext;
-  reasonCode?: string;
+  requestedContext?: SiteRequestContext;
+  correlationId: string;
 };
 
 export class ArtifactError extends Error {
@@ -128,7 +128,7 @@ export async function depositInputFile(
       mimeType: file.type || null,
       sizeBytes,
       checksumSha256: checksum,
-    }, { context });
+    }, { requestedContext: context, correlationId: context.correlationId });
   } catch (error) {
     await Promise.all([
       rm(storagePath, { force: true }),
@@ -144,12 +144,12 @@ export async function scanOutputArtifacts(
   runId: string,
 ): Promise<ArtifactDto[]> {
   const runScope = await resolveRunScope(scope, runId, false);
-  const audit = await resolveArtifactAuditContext(
-    scope,
-    runId,
-    runScope.authorUserId,
-    runScope.ownerUserId,
-  );
+  const audit: ArtifactAudit = {
+    ...(isRequesterScope(scope) ? { requestedContext: scope } : {}),
+    correlationId: isRequesterScope(scope)
+      ? scope.correlationId
+      : `artifact:${runId}`,
+  };
   const outDir = runOutputDir(runId);
   const existing = await listArtifactsForRun(scope, runId, "output");
   const quotas = getArtifactQuotas();
@@ -246,56 +246,6 @@ export async function scanOutputArtifacts(
   }
 
   return created;
-}
-
-async function resolveArtifactAuditContext(
-  scope: SiteScope,
-  runId: string,
-  authorUserId: string,
-  ownerUserId: string,
-): Promise<ArtifactAudit> {
-  const [membership] = await getDatabase()
-    .select({ role: siteMemberships.role })
-    .from(siteMemberships)
-    .where(and(
-      eq(siteMemberships.siteId, scope.siteId),
-      eq(siteMemberships.userId, authorUserId),
-    ))
-    .limit(1);
-  if (membership) {
-    return {
-      context: {
-        siteId: scope.siteId,
-        userId: authorUserId,
-        role: membership.role,
-        correlationId: `artifact:${runId}`,
-      },
-    };
-  }
-  // L'auteur est une identité historique et immuable : sa révocation ne doit
-  // pas empêcher la livraison asynchrone d'une sortie. Le propriétaire actif
-  // devient alors l'acteur explicitement traçable de cette livraison tardive;
-  // ce n'est pas une élévation de rôle ni un remplacement de l'auteur.
-  const [ownerMembership] = await getDatabase()
-    .select({ role: siteMemberships.role })
-    .from(siteMemberships)
-    .where(and(
-      eq(siteMemberships.siteId, scope.siteId),
-      eq(siteMemberships.userId, ownerUserId),
-    ))
-    .limit(1);
-  if (!ownerMembership) {
-    throw new Error("Le propriétaire du run n'a plus de membership active pour auditer l'artefact.");
-  }
-  return {
-    context: {
-      siteId: scope.siteId,
-      userId: ownerUserId,
-      role: ownerMembership.role,
-      correlationId: `artifact:${runId}`,
-    },
-    reasonCode: "RESOURCE_OUTPUT_DELIVERED_AFTER_AUTHOR_REVOCATION",
-  };
 }
 
 export async function readDirectoryBounded(
@@ -472,14 +422,98 @@ async function insertArtifact(input: {
   };
   if (audit) {
     await getDatabase().transaction(async (tx) => {
-      await tx.insert(artifacts).values(values);
-      await auditOwnershipCreation(tx, audit.context, {
+      // Première lecture sans verrou : elle identifie les memberships à
+      // verrouiller sans inverser l'ordre membership → ressource utilisé par
+      // les transferts. La seconde lecture FOR UPDATE valide ensuite que le
+      // run n'a pas changé entre les deux.
+      const [runSnapshot] = await tx
+        .select({
+          siteId: runs.siteId,
+          projectId: runs.projectId,
+          ownerUserId: runs.ownerUserId,
+          authorUserId: runs.authorUserId,
+        })
+        .from(runs)
+        .where(and(eq(runs.siteId, input.siteId), eq(runs.id, input.runId)))
+        .limit(1);
+      if (!runSnapshot) {
+        throw new ArtifactError("RUN_REQUIRED", "Mission introuvable.");
+      }
+
+      const candidateActorUserId = audit.requestedContext?.userId ?? runSnapshot.authorUserId;
+      const membershipUserIds = [...new Set([
+        runSnapshot.ownerUserId,
+        candidateActorUserId,
+      ])].sort();
+      const membershipRows = await tx
+        .select({ userId: siteMemberships.userId, role: siteMemberships.role })
+        .from(siteMemberships)
+        .where(and(
+          eq(siteMemberships.siteId, runSnapshot.siteId),
+          inArray(siteMemberships.userId, membershipUserIds),
+        ))
+        .orderBy(asc(siteMemberships.userId))
+        .for("update");
+      const memberships = new Map(membershipRows.map((row) => [row.userId, row.role]));
+      const ownerRole = memberships.get(runSnapshot.ownerUserId);
+      if (!ownerRole) {
+        throw new Error("Le propriétaire du run n'a plus de membership active pour auditer l'artefact.");
+      }
+
+      let actorUserId = candidateActorUserId;
+      let actorRole = memberships.get(actorUserId);
+      let reasonCode: string | undefined;
+      if (!actorRole && !audit.requestedContext) {
+        actorUserId = runSnapshot.ownerUserId;
+        actorRole = ownerRole;
+        reasonCode = "RESOURCE_OUTPUT_DELIVERED_AFTER_AUTHOR_REVOCATION";
+      }
+      if (!actorRole) {
+        throw new Error("La membership de l'auteur de l'artefact n'est plus active.");
+      }
+      if (audit.requestedContext && actorRole !== audit.requestedContext.role) {
+        throw new Error("Le rôle de l'auteur de l'artefact a changé pendant la requête.");
+      }
+
+      const [lockedRun] = await tx
+        .select({
+          siteId: runs.siteId,
+          projectId: runs.projectId,
+          ownerUserId: runs.ownerUserId,
+          authorUserId: runs.authorUserId,
+        })
+        .from(runs)
+        .where(and(eq(runs.siteId, input.siteId), eq(runs.id, input.runId)))
+        .for("update");
+      if (
+        !lockedRun ||
+        lockedRun.projectId !== runSnapshot.projectId ||
+        lockedRun.ownerUserId !== runSnapshot.ownerUserId ||
+        lockedRun.authorUserId !== runSnapshot.authorUserId
+      ) {
+        throw new Error("La propriété du run a changé pendant la création de l'artefact.");
+      }
+
+      const persistedValues = {
+        ...values,
+        siteId: lockedRun.siteId,
+        projectId: lockedRun.projectId,
+        ownerUserId: lockedRun.ownerUserId,
+        authorUserId: audit.requestedContext?.userId ?? lockedRun.authorUserId,
+      };
+      await tx.insert(artifacts).values(persistedValues);
+      await auditOwnershipCreation(tx, {
+        siteId: lockedRun.siteId,
+        userId: actorUserId,
+        role: actorRole,
+        correlationId: audit.correlationId,
+      }, {
         resourceType: "artifact",
         resourceId: id,
-        projectId: input.projectId,
-        ownerUserId: input.ownerUserId,
-        authorUserId: input.authorUserId,
-      }, { reasonCode: audit.reasonCode });
+        projectId: lockedRun.projectId,
+        ownerUserId: lockedRun.ownerUserId,
+        authorUserId: persistedValues.authorUserId,
+      }, { reasonCode });
     });
   } else {
     await getDatabase().insert(artifacts).values(values);
