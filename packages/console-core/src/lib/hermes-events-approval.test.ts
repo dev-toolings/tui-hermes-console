@@ -61,6 +61,18 @@ describe("normalisation d’approval.responded", () => {
       "approval.requested",
       "approval.responded",
     ]);
+    expect(produced[0]?.payload.approvalRequestId).toBe("approval_0");
     expect(produced.map((item) => item.sequence)).toEqual([0, 1]);
+  });
+
+  test("l’identifiant local suit la séquence après flush d’un delta", () => {
+    const normalizer = new HermesEventNormalizer();
+    normalizer.push(event({ event: "message.delta", delta: "avant" }));
+    const [message, approval] = normalizer.push(
+      event({ event: "approval.request", choices: ["once", "deny"] }),
+    );
+    expect(message?.sequence).toBe(0);
+    expect(approval?.sequence).toBe(1);
+    expect(approval?.payload.approvalRequestId).toBe("approval_1");
   });
 });

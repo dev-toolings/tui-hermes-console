@@ -64,7 +64,7 @@ function psql(statement: string, database = "site_api") {
 }
 
 function applyMigrations() {
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 27)) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= 28)) {
     psql(readFileSync(join(import.meta.dir, `${entry.tag}.sql`), "utf8"));
   }
 }
@@ -170,6 +170,10 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
         (id, site_id, owner_user_id, author_user_id, thread_id, input, status, hermes_response_id) VALUES
         ('run_paris', 'paris', 'usr_paris', 'usr_paris', 'thr_paris', 'Paris', 'completed', 'hermes-paris'),
         ('run_lyon', 'lyon', 'usr_lyon', 'usr_lyon', 'thr_lyon', 'Lyon', 'awaiting_approval', 'hermes-lyon');
+      INSERT INTO approval_requests
+        (id, site_id, run_id, hermes_run_id, approval_request_id, nonce, claim_state, expires_at)
+      VALUES
+        ('approval-row-paris', 'paris', 'run_paris', 'hermes-paris', 'approval_0', 'nonce-paris', 'pending', now() + interval '5 minutes');
       INSERT INTO artifacts
         (id, site_id, owner_user_id, author_user_id, run_id, direction, filename, storage_path, size_bytes, checksum_sha256) VALUES
         ('file_paris', 'paris', 'usr_paris', 'usr_paris', 'run_paris', 'output', 'paris.txt', '/vault/paris.txt', 1, '00'),
@@ -265,7 +269,7 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
       "RUN_NOT_FOUND",
     );
     await expectSameNotFound(
-      await approveRun(request("/api/runs/run_lyon/approval", "POST", { choice: "once" }), approvalContext({ runId: "run_lyon" }), {
+      await approveRun(request("/api/runs/run_lyon/approval", "POST", { choice: "once", approvalRequestId: "approval_0" }), approvalContext({ runId: "run_lyon" }), {
         approve: (ctx, id, body) => approveRunScoped(ctx, id, body, {
           resolveRuntime: async () => { runtimeEffect(); return runtime; },
           respondRemote: async () => { approvalEffect(); },
@@ -273,7 +277,7 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
           resume: () => { approvalEffect(); },
         }),
       }),
-      await approveRun(request("/api/runs/run_random/approval", "POST", { choice: "once" }), approvalContext({ runId: "run_random" }), {
+      await approveRun(request("/api/runs/run_random/approval", "POST", { choice: "once", approvalRequestId: "approval_0" }), approvalContext({ runId: "run_random" }), {
         approve: (ctx, id, body) => approveRunScoped(ctx, id, body, {
           resolveRuntime: async () => { runtimeEffect(); return runtime; },
           respondRemote: async () => { approvalEffect(); },
@@ -313,7 +317,7 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
   });
 
   test("approval claim serializes concurrent decisions before Hermes", async () => {
-    psql("UPDATE runs SET status = 'awaiting_approval', started_at = NULL, error = NULL WHERE id = 'run_paris';");
+    psql("UPDATE runs SET status = 'awaiting_approval', started_at = NULL, error = NULL WHERE id = 'run_paris'; UPDATE approval_requests SET claim_state = 'pending', outcome = NULL, claimed_at = NULL, resolved_at = NULL, expires_at = now() + interval '5 minutes' WHERE id = 'approval-row-paris';");
     const remoteCalls: unknown[] = [];
     const approvalDependencies = {
       resolveRuntime: async () => runtime,
@@ -325,12 +329,12 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
     try {
       const responses = await Promise.all([
         approveRun(
-          request("/api/runs/run_paris/approval", "POST", { choice: "once" }),
+          request("/api/runs/run_paris/approval", "POST", { choice: "once", approvalRequestId: "approval_0" }),
           approvalContext({ runId: "run_paris" }),
           { approve: (ctx, id, body) => approveRunScoped(ctx, id, body, approvalDependencies) },
         ),
         approveRun(
-          request("/api/runs/run_paris/approval", "POST", { choice: "once" }),
+          request("/api/runs/run_paris/approval", "POST", { choice: "once", approvalRequestId: "approval_0" }),
           approvalContext({ runId: "run_paris" }),
           { approve: (ctx, id, body) => approveRunScoped(ctx, id, body, approvalDependencies) },
         ),
@@ -354,12 +358,12 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
       resume: () => undefined,
     });
     const approve = (respondRemote: (input: unknown) => Promise<void>) =>
-      approveRunScoped(approvalActor, "run_paris", { choice: "once" }, {
+      approveRunScoped(approvalActor, "run_paris", { choice: "once", approvalRequestId: "approval_0" }, {
         ...base(),
         respondRemote,
       });
 
-    psql("UPDATE runs SET status = 'awaiting_approval', started_at = NULL, error = NULL, approval_claim_id = NULL WHERE id = 'run_paris';");
+    psql("UPDATE runs SET status = 'awaiting_approval', started_at = NULL, error = NULL, approval_claim_id = NULL WHERE id = 'run_paris'; UPDATE approval_requests SET claim_state = 'pending', outcome = NULL, claimed_at = NULL, resolved_at = NULL, expires_at = now() + interval '5 minutes' WHERE id = 'approval-row-paris';");
     try {
       const definitive = await approve(async () => {
         throw new HermesRuntimeError("rejected", 400, "HERMES_HTTP_ERROR");

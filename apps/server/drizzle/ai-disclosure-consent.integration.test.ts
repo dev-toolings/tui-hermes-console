@@ -63,7 +63,7 @@ function sqlString(value: string) {
 function applyMigrations() {
   // The consent boundary does not exercise lifecycle policy, but the current
   // runs table also carries the nullable approval claim introduced in 0026.
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 27)) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= 28)) {
     psql(readFileSync(join(import.meta.dir, `${entry.tag}.sql`), "utf8"));
   }
 }

@@ -52,6 +52,9 @@ export type SiteMembershipRole =
 
 export type OrganizationKind = "client" | "msp";
 
+export type ApprovalRequestState = "pending" | "claimed" | "resolved" | "expired";
+export type ApprovalOutcome = "once" | "deny";
+
 export const organizations = pgTable(
   "organizations",
   {
@@ -790,6 +793,62 @@ export const runs = pgTable(
       table.status,
     ),
     index("runs_approval_claim_idx").on(table.siteId, table.approvalClaimId),
+  ],
+);
+
+/**
+ * Persisted approval.request state. This is deliberately independent from the
+ * run approval claim: it records the exact Hermes request and gives the local
+ * service a nonce/TTL/CAS boundary before any future remote relay integration.
+ */
+export const approvalRequests = pgTable(
+  "approval_requests",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(),
+    hermesRunId: text("hermes_run_id").notNull(),
+    approvalRequestId: text("approval_request_id").notNull(),
+    nonce: text("nonce").notNull(),
+    claimState: text("claim_state")
+      .notNull()
+      .default("pending")
+      .$type<ApprovalRequestState>(),
+    outcome: text("outcome").$type<ApprovalOutcome>(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("approval_requests_scope_idx").on(
+      table.siteId,
+      table.runId,
+      table.hermesRunId,
+      table.approvalRequestId,
+    ),
+    uniqueIndex("approval_requests_nonce_idx").on(table.nonce),
+    index("approval_requests_expiry_idx").on(
+      table.siteId,
+      table.claimState,
+      table.expiresAt,
+    ),
+    foreignKey({
+      columns: [table.siteId, table.runId],
+      foreignColumns: [runs.siteId, runs.id],
+      name: "approval_requests_site_run_fk",
+    }),
+    check(
+      "approval_requests_state_check",
+      sql`${table.claimState} IN ('pending', 'claimed', 'resolved', 'expired')`,
+    ),
+    check(
+      "approval_requests_outcome_check",
+      sql`(${table.claimState} = 'resolved' AND ${table.outcome} IN ('once', 'deny')) OR (${table.claimState} <> 'resolved' AND ${table.outcome} IS NULL)`,
+    ),
   ],
 );
 

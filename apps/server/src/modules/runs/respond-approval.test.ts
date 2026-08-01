@@ -81,14 +81,41 @@ function dependencies(overrides: Record<string, unknown> = {}) {
   const audits: AppendAuditEntryInput[] = [];
   const remoteCalls: unknown[] = [];
   const releases: string[] = [];
+  const persistedReleases: string[] = [];
+  const persistedResolutions: string[] = [];
+  const persisted = {
+    id: "approval-row",
+    siteId: context.siteId,
+    runId: run.id,
+    hermesRunId: run.hermesResponseId!,
+    approvalRequestId: "approval_1",
+    nonce: "nonce-approval",
+    claimState: "pending" as const,
+    outcome: null,
+    expiresAt: new Date("2030-01-01T00:00:00.000Z"),
+    claimedAt: null,
+    resolvedAt: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+  };
   return {
     audits,
     remoteCalls,
     releases,
+    persistedReleases,
+    persistedResolutions,
+    persisted,
     lookup: async () => run,
     claim: async () => claim,
     release: async (_scope: SiteScope, runId: string, _claimId: string) => { releases.push(runId); },
     finalize: async () => undefined,
+    claimPersisted: async () => ({ ...persisted, claimState: "claimed" as const, claimedAt: new Date() }),
+    releasePersisted: async () => { persistedReleases.push(run.id); return persisted; },
+    resolvePersisted: async (_scope: unknown, rawOutcome: unknown) => {
+      const outcome = rawOutcome as "once" | "deny";
+      persistedResolutions.push(outcome);
+      return { ...persisted, claimState: "resolved" as const, outcome, resolvedAt: new Date() };
+    },
     resolveRuntime: async () => runtime,
     respondRemote: async (input: unknown) => { remoteCalls.push(input); },
     isActive: () => true,
@@ -102,19 +129,60 @@ function dependencies(overrides: Record<string, unknown> = {}) {
 }
 
 describe("respondRunApproval G1-004B claim and truthful audit", () => {
+  test("requires the persisted approval identity before any remote call", async () => {
+    const deps = dependencies({
+      claimPersisted: async () => {
+        const { ApprovalRequestError } = await import("./approval-requests");
+        throw new ApprovalRequestError("APPROVAL_REQUEST_SCOPE_MISMATCH", "wrong request", 404);
+      },
+    });
+    await expect(
+      (await import("./respond-approval")).respondRunApproval(
+        context,
+        run.id,
+        { choice: "once", approvalRequestId: "approval_wrong" },
+        deps,
+      ),
+    ).rejects.toMatchObject({ code: "APPROVAL_REQUEST_SCOPE_MISMATCH", status: 404 });
+    expect(deps.remoteCalls).toHaveLength(0);
+    expect(deps.releases).toEqual([run.id]);
+  });
+
+  test("writes intent before Hermes and resolves only after the remote result", async () => {
+    const order: string[] = [];
+    const deps = dependencies({
+      audit: async (input: AppendAuditEntryInput) => {
+        order.push(input.reasonCode === "RUN_APPROVAL_INTENT" ? "intent" : "outcome");
+        return {} as Awaited<ReturnType<typeof import("@/modules/audit/service").appendAuditEntry>>;
+      },
+      respondRemote: async () => { order.push("remote"); },
+      resolvePersisted: async (_scope: unknown, rawOutcome: unknown) => {
+        order.push(`resolve:${String(rawOutcome)}`);
+        return { ...dependencies().persisted, claimState: "resolved" as const, outcome: rawOutcome as "once" | "deny" };
+      },
+    });
+    await (await import("./respond-approval")).respondRunApproval(
+      context,
+      run.id,
+      { choice: "once", approvalRequestId: "approval_1" },
+      deps,
+    );
+    expect(order).toEqual(["intent", "remote", "resolve:once", "outcome"]);
+  });
+
   test("claims once, calls Hermes, then records an allowed decision", async () => {
     const deps = dependencies();
     const result = await (await import("./respond-approval")).respondRunApproval(
       context,
       run.id,
-      { choice: "once" },
+      { choice: "once", approvalRequestId: "approval_1" },
       deps,
     );
 
     expect(result).toEqual({ runId: run.id, choice: "once", approved: true, status: "running" });
     expect(deps.remoteCalls).toHaveLength(1);
-    expect(deps.audits).toHaveLength(1);
-    expect(deps.audits[0]).toMatchObject({
+    expect(deps.audits).toHaveLength(2);
+    expect(deps.audits.at(-1)).toMatchObject({
       decision: "allowed",
       reasonCode: "RUN_APPROVAL_ALLOWED",
       beforeState: { status: "running", approvalClaimed: true },
@@ -127,12 +195,12 @@ describe("respondRunApproval G1-004B claim and truthful audit", () => {
     await (await import("./respond-approval")).respondRunApproval(
       context,
       run.id,
-      { choice: "deny" },
+      { choice: "deny", approvalRequestId: "approval_1" },
       deps,
     );
 
     expect(deps.remoteCalls).toHaveLength(1);
-    expect(deps.audits[0]).toMatchObject({
+    expect(deps.audits.at(-1)).toMatchObject({
       decision: "denied",
       reasonCode: "RUN_APPROVAL_DENIED",
       beforeState: { status: "running", choice: "deny", approved: false },
@@ -149,14 +217,16 @@ describe("respondRunApproval G1-004B claim and truthful audit", () => {
     });
 
     await expect(
-      (await import("./respond-approval")).respondRunApproval(context, run.id, { choice: "once" }, deps),
+      (await import("./respond-approval")).respondRunApproval(context, run.id, { choice: "once", approvalRequestId: "approval_1" }, deps),
     ).rejects.toThrow("hermes unavailable");
     expect(deps.releases).toEqual([run.id]);
-    expect(deps.audits[0]).toMatchObject({
+    expect(deps.audits.at(-1)).toMatchObject({
       decision: "denied",
       reasonCode: "RUN_APPROVAL_REMOTE_FAILED",
     });
-    expect(deps.audits.some((entry) => entry.decision === "allowed")).toBe(false);
+    expect(deps.audits.some((entry) =>
+      entry.decision === "allowed" && entry.reasonCode !== "RUN_APPROVAL_INTENT"
+    )).toBe(false);
   });
 
   test("keeps the durable claim when the remote result is ambiguous", async () => {
@@ -165,10 +235,10 @@ describe("respondRunApproval G1-004B claim and truthful audit", () => {
     });
 
     await expect(
-      (await import("./respond-approval")).respondRunApproval(context, run.id, { choice: "once" }, deps),
+      (await import("./respond-approval")).respondRunApproval(context, run.id, { choice: "once", approvalRequestId: "approval_1" }, deps),
     ).rejects.toThrow("connection lost after send");
     expect(deps.releases).toHaveLength(0);
-    expect(deps.audits[0]).toMatchObject({
+    expect(deps.audits.at(-1)).toMatchObject({
       decision: "denied",
       reasonCode: "RUN_APPROVAL_REMOTE_UNKNOWN",
       beforeState: { status: "running", choice: "once" },
@@ -180,7 +250,7 @@ describe("respondRunApproval G1-004B claim and truthful audit", () => {
     const deps = dependencies({ claim: async () => null });
 
     await expect(
-      (await import("./respond-approval")).respondRunApproval(context, run.id, { choice: "once" }, deps),
+      (await import("./respond-approval")).respondRunApproval(context, run.id, { choice: "once", approvalRequestId: "approval_1" }, deps),
     ).rejects.toMatchObject({ code: "RUN_NOT_AWAITING_APPROVAL" });
     expect(deps.remoteCalls).toHaveLength(0);
     expect(deps.audits).toHaveLength(0);

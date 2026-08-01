@@ -5,6 +5,7 @@ import type {
 } from "../modules/runs/types";
 
 export type ApprovalRequest = {
+  approvalRequestId: string;
   command: string | null;
   choices: string[];
   description: string | null;
@@ -94,6 +95,9 @@ export function latestOpenApproval(
     if (event.type === "approval.responded") return null;
     if (event.type === "approval.requested") {
       return {
+        approvalRequestId: typeof event.payload.approvalRequestId === "string"
+          ? event.payload.approvalRequestId
+          : `approval_${event.sequence}`,
         command: typeof event.payload.command === "string" ? event.payload.command : null,
         choices: Array.isArray(event.payload.choices)
           ? event.payload.choices.map(String)

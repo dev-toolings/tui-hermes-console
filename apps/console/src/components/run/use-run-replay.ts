@@ -12,6 +12,7 @@ import { FIXTURE_RUN, replayFixtures, type ReplaySpeed } from "@/lib/fixture-rep
 import type { RunStatus } from "@console/core/lib/run-status";
 
 export type ApprovalRequest = {
+  approvalRequestId: string;
   command: string | null;
   choices: string[];
   description: string | null;
@@ -125,6 +126,9 @@ function applyEvents(prev: RunState, incoming: RunEvent[]): RunState {
           ...next,
           status: "awaiting_approval",
           approval: {
+            approvalRequestId: typeof ev.payload.approvalRequestId === "string"
+              ? ev.payload.approvalRequestId
+              : `approval_${ev.sequence}`,
             command: (ev.payload.command as string) ?? null,
             choices: (ev.payload.choices as string[]) ?? [],
             description: (ev.payload.description as string) ?? null,

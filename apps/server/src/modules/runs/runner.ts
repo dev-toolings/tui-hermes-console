@@ -37,6 +37,7 @@ import {
 } from "@/modules/artifacts/prompt";
 import { pushRunInputs, resolveRunRoot } from "@/modules/artifacts/remote-sync";
 import type { SiteScope } from "@/modules/auth/service";
+import { persistApprovalRequest } from "./approval-requests";
 
 type ActiveRun = {
   siteId: string;
@@ -254,6 +255,14 @@ async function consumeAgentStream(
       if (controller.signal.aborted) break;
       const productEvents = toProductEvents(normalizer.push(raw));
       if (productEvents.length === 0) continue;
+      for (const event of productEvents) {
+        if (event.type !== "approval.requested") continue;
+        await persistApprovalRequest(scope, {
+          runId,
+          hermesRunId: raw.run_id,
+          approvalRequestId: String(event.payload.approvalRequestId ?? `approval_${event.sequence}`),
+        });
+      }
       await persistEvents(scope, threadId, runId, productEvents);
       for (const event of productEvents) {
         if (event.type === "approval.requested") {

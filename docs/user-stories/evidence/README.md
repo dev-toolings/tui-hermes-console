@@ -54,6 +54,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
   G1-004B réclame atomiquement une approbation PostgreSQL avec token durable, empêche la double
   réponse Hermes et conserve les résultats distants ambigus ; la policy pré-effet et Gate 1 restent
   ouvertes.
+- [01-08-2026 — identité et CAS pré-effet](2026-08-01-gate-1-g1-004c-pre-effect-approval.md) :
+  G1-004C-local persiste l’identité Hermes, consomme un claim PostgreSQL single-use et audite
+  l’intention avant le relais ; Hermes réel, P-SEC/P-E2E et Gate 1 restent ouverts.
 - [01-08-2026 — parcours navigateur notice IA](2026-08-01-gate-1-ai-disclosure-e2e.md) : redirection,
   arbre accessible, clavier et persistance scratch ; lecteur d’écran et acceptation Gate encore ouverts.
 

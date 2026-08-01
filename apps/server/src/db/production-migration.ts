@@ -6,6 +6,7 @@ import postgres, { type Sql } from "postgres";
 const ROLE_NAME_PATTERN = /^[a-z_][a-z0-9_]{0,62}$/;
 const MUTABLE_APPLICATION_TABLES = [
   "agents",
+  "approval_requests",
   "artifacts",
   "connectors",
   "console_auth_transactions",

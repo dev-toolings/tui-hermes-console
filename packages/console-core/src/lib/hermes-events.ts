@@ -142,9 +142,16 @@ export class HermesEventNormalizer {
       }
 
       case "approval.request": {
+        // Hermes does not provide an approval identifier. Flush first so the
+        // id matches the sequence assigned to this approval event even when a
+        // buffered assistant delta precedes it. The sequence is monotone and
+        // resumed from persisted events, so it is stable within the run.
+        const flushed = this.flush();
+        const approvalRequestId = `approval_${this.sequence}`;
         return [
-          ...this.flush(),
+          ...flushed,
           this.next("approval.requested", at, {
+            approvalRequestId,
             command: ev.command ?? null,
             choices: Array.isArray(ev.choices) ? ev.choices : [],
             description: ev.description ?? null,

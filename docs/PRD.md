@@ -433,7 +433,10 @@ Donc :
   agent, avec décision signée et auditée.
 
 La politique de sécurité officielle Hermes confirme que l’isolation OS est la frontière réelle et
-que les heuristiques in-process, dont l’approbation, ne constituent pas un confinement.
+que les heuristiques in-process, dont l’approbation, ne constituent pas un confinement. Le slice
+G1-004C-local persiste désormais l’identité de `approval.request`, consomme un CAS et audite
+l’intention avant le relais ; il ne prouve pas que le runtime émet toujours cet événement et ne
+remplace donc pas P-SEC/P-E2E.
 
 ### 9.3 Authentification livrée, autorisation locale implémentée
 

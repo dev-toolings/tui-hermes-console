@@ -66,7 +66,7 @@ function sqlString(value: string) {
 }
 
 function applyMigrations() {
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 27)) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= 28)) {
     psql(readFileSync(join(import.meta.dir, `${entry.tag}.sql`), "utf8"));
   }
 }
@@ -293,6 +293,10 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
         ('run_operator', 'paris', 'usr_operator', 'usr_operator', 'thr_operator', 'Cancel me', 'running', NULL),
         ('run_approval', 'paris', 'usr_admin', 'usr_approver', 'thr_approval', 'Approve me', 'awaiting_approval', 'hermes-approval'),
         ('run_denied', 'paris', 'usr_admin', 'usr_admin', 'thr_shared', 'Do not mutate', 'running', NULL);
+      INSERT INTO approval_requests
+        (id, site_id, run_id, hermes_run_id, approval_request_id, nonce, claim_state, expires_at)
+      VALUES
+        ('approval-row-role', 'paris', 'run_approval', 'hermes-approval', 'approval_0', 'nonce-role', 'pending', now() + interval '5 minutes');
     `);
   }, 30_000);
 
@@ -326,14 +330,14 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
       }),
       authenticatedRequest("operator", "/api/runs/run_approval/approval", {
         method: "POST",
-        body: { choice: "once" },
+        body: { choice: "once", approvalRequestId: "approval_0" },
       }),
       authenticatedRequest("approver", "/api/runs/run_denied/cancel", {
         method: "POST",
       }),
       authenticatedRequest("auditor", "/api/runs/run_approval/approval", {
         method: "POST",
-        body: { choice: "once" },
+        body: { choice: "once", approvalRequestId: "approval_0" },
       }),
       authenticatedRequest("operator", "/api/threads/thr_shared/commands", {
         method: "POST",
@@ -392,7 +396,7 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
       const response = await appFetch(
         authenticatedRequest("approver", "/api/runs/run_approval/approval", {
           method: "POST",
-          body: { choice },
+          body: { choice, approvalRequestId: "approval_0" },
         }),
       );
       expect(response.status).toBe(403);
@@ -526,7 +530,7 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
       const approved = await appFetch(
         authenticatedRequest("approver", "/api/runs/run_approval/approval", {
           method: "POST",
-          body: { choice: "once" },
+          body: { choice: "once", approvalRequestId: "approval_0" },
         }),
       );
       expect(approved.status).toBe(200);

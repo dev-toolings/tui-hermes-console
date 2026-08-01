@@ -18,9 +18,16 @@ import type { SiteRequestContext } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
 import { assertSiteAction, denySiteAction } from "@/modules/auth/site-authorization";
 import { appendAuditEntry } from "@/modules/audit/service";
+import {
+  claimApprovalRequestForScope,
+  releaseApprovalRequestForScope,
+  resolveApprovalRequestForScope,
+  type PersistedApprovalRequest,
+} from "./approval-requests";
 
 const bodySchema = z.object({
   choice: z.enum(APPROVAL_CHOICES),
+  approvalRequestId: z.string().trim().min(1).max(200),
 }).strict();
 
 export type RespondApprovalResult = {
@@ -40,6 +47,9 @@ type ApprovalDependencies = {
   release?: typeof releaseRunApprovalClaim;
   finalize?: typeof finalizeRunApprovalClaim;
   audit?: typeof appendAuditEntry;
+  claimPersisted?: typeof claimApprovalRequestForScope;
+  releasePersisted?: typeof releaseApprovalRequestForScope;
+  resolvePersisted?: typeof resolveApprovalRequestForScope;
 };
 
 function canReleaseApprovalClaim(error: unknown, remoteAttempted: boolean) {
@@ -65,7 +75,7 @@ export async function respondRunApproval(
     resume: resumeAgentRun,
   },
 ): Promise<RespondApprovalResult> {
-  const { choice } = bodySchema.parse(rawBody);
+  const { choice, approvalRequestId } = bodySchema.parse(rawBody);
   // Routes already enforce this action, but keep the service fail-closed when
   // it is called directly by a worker or another internal entry point.
   await assertSiteAction(context, "run.approve");
@@ -100,6 +110,7 @@ export async function respondRunApproval(
       "Aucun identifiant Hermes pour cette mission.",
     );
   }
+  const hermesRunId = run.hermesResponseId;
 
   const approved = choice !== "deny";
   const claimed = await (dependencies.claim ?? claimRunApproval)(context, runId);
@@ -111,6 +122,52 @@ export async function respondRunApproval(
   }
 
   const audit = dependencies.audit ?? appendAuditEntry;
+  const persistedScope = {
+    ...context,
+    runId,
+    hermesRunId,
+    approvalRequestId,
+  } as const;
+  let persistedClaim: PersistedApprovalRequest;
+  try {
+    persistedClaim = await (dependencies.claimPersisted ?? claimApprovalRequestForScope)(
+      persistedScope,
+    );
+  } catch (error) {
+    await (dependencies.release ?? releaseRunApprovalClaim)(context, runId, claimed.approvalClaimId);
+    throw error;
+  }
+
+  try {
+    await audit({
+    eventId: randomUUID(),
+    actorSiteId: context.siteId,
+    targetSiteId: context.siteId,
+    actorUserId: context.userId,
+    actorRole: context.role,
+    actorOrganizationId: context.actorOrganizationId,
+    clientOrganizationId: context.clientOrganizationId,
+    mandateId: context.mandateId,
+    action: "run.approve",
+    resourceType: "run",
+    resourceId: runId,
+    // The intent is an authorized relay operation even when the selected
+    // choice is `deny`; the final outcome carries the denied decision. Keeping
+    // this entry allowed also satisfies the append-only ledger invariant that
+    // denied entries cannot describe a state transition.
+    decision: "allowed",
+    reasonCode: "RUN_APPROVAL_INTENT",
+    beforeState: { status: "awaiting_approval", approvalRequestId },
+    afterState: { status: "running", approvalClaimed: true, approvalRequestId },
+    correlationId: context.correlationId,
+    occurredAt: new Date(),
+    });
+  } catch (error) {
+    await (dependencies.releasePersisted ?? releaseApprovalRequestForScope)(persistedScope);
+    await (dependencies.release ?? releaseRunApprovalClaim)(context, runId, claimed.approvalClaimId);
+    throw error;
+  }
+
   let runtime: Awaited<ReturnType<typeof dependencies.resolveRuntime>>;
   let remoteAttempted = false;
   try {
@@ -127,6 +184,7 @@ export async function respondRunApproval(
     const releaseClaim = canReleaseApprovalClaim(error, remoteAttempted);
     if (releaseClaim) {
       await (dependencies.release ?? releaseRunApprovalClaim)(context, runId, claimed.approvalClaimId);
+      await (dependencies.releasePersisted ?? releaseApprovalRequestForScope)(persistedScope);
     }
     // An ambiguous remote failure never becomes an allowed audit entry and
     // keeps the claim for reconciliation. Denied ledger states remain equal.
@@ -155,6 +213,14 @@ export async function respondRunApproval(
     });
     throw error;
   }
+
+  // Resolve the single-use request before declaring the remote response
+  // successful. If this CAS fails, keep both claims for reconciliation rather
+  // than risking a replay or a false durable success.
+  await (dependencies.resolvePersisted ?? resolveApprovalRequestForScope)(
+    persistedScope,
+    choice === "deny" ? "deny" : "once",
+  );
 
   await audit({
     eventId: randomUUID(),

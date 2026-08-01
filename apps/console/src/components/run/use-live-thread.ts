@@ -797,11 +797,17 @@ export function useLiveThread(threadId: string) {
     async (choice: ApprovalChoice) => {
       const run = snapshotRef.current?.runs.at(-1);
       if (!run || run.status !== "awaiting_approval") return;
+      const approvalRequestId = latestOpenApproval(snapshotRef.current?.events ?? [], run.id)?.approvalRequestId;
+      if (!approvalRequestId) {
+        const message = "La demande d’autorisation n’a pas d’identité persistée.";
+        setError(message);
+        throw new Error(message);
+      }
 
       const response = await fetch(`/api/runs/${encodeURIComponent(run.id)}/approval`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ choice }),
+        body: JSON.stringify({ choice, approvalRequestId }),
       });
       if (!response.ok) {
         const message = await readApiError(response);

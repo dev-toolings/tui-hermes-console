@@ -197,6 +197,13 @@
       "when": 1785733200000,
       "tag": "0027_data_lifecycle_purge",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1785736800000,
+      "tag": "0028_approval_requests",
+      "breakpoints": true
     }
   ]
 }

@@ -120,7 +120,7 @@ function applyMigrations() {
 function resetBusinessRows() {
   psql(
     "TRUNCATE data_lifecycle_preview_items, data_lifecycle_previews, site_data_lifecycle_policies, " +
-      "artifacts, messages, run_events, runs, threads RESTART IDENTITY;",
+      "approval_requests, artifacts, messages, run_events, runs, threads RESTART IDENTITY;",
   );
 }
 
