@@ -488,8 +488,8 @@ Avant tout pilote :
   de consentement ; le manifeste de routes porte explicitement les trois méthodes de démarrage/retry,
   qui refusent l’absence de consentement (`428`).
 
-Cette preuve reste locale : aucun parcours navigateur automatisé, test lecteur d’écran ou consentement
-Google réel n’est encore accepté.
+Cette preuve reste locale : un parcours navigateur/clavier scratch est maintenant exécuté, mais aucun
+test lecteur d’écran, consentement Google réel ou verdict indépendant n’est encore accepté.
 
 La Console fournit des éléments de preuve utiles à la conformité ; elle n’est pas « AI Act
 compliant » par elle-même.

@@ -32,6 +32,8 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
   P-E2E navigateur et revue clavier/lecteur d’écran encore ouverts.
 - [01-08-2026 — garde SFTP locale](2026-08-01-gate-1-ssh-sftp-006a-local.md) : US-G1-SSH-006A
   borne les chemins distants avant les appels SFTP ; aucune preuve de frontière OS/VPS.
+- [01-08-2026 — parcours navigateur notice IA](2026-08-01-gate-1-ai-disclosure-e2e.md) : redirection,
+  arbre accessible, clavier et persistance scratch ; lecteur d’écran et acceptation Gate encore ouverts.
 
 ## Modèle
 
