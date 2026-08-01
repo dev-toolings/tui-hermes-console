@@ -10,9 +10,28 @@ import {
   sites,
   threads,
 } from "@/db/schema";
-import { parseVerifiedLifecycleExport, type LifecycleExportBundle } from "./verify-export";
+import { verifyLifecycleExport } from "./verify-export";
 
 type LifecycleRestoreDatabase = ReturnType<typeof getDatabase>;
+
+type LifecycleExportRow = Record<string, unknown> & { id: string | number };
+type LifecycleExportArtifact = LifecycleExportRow & {
+  siteId: string;
+  runId: string;
+  sizeBytes: number;
+  checksumSha256: string;
+  bytesBase64: string;
+};
+type LifecycleExportBundle = {
+  siteId: string;
+  previewId: string;
+  manifestSha256: string;
+  threads: LifecycleExportRow[];
+  runs: LifecycleExportRow[];
+  messages: LifecycleExportRow[];
+  events: LifecycleExportRow[];
+  artifacts: LifecycleExportArtifact[];
+};
 
 export type LifecycleRestoreDependencies = {
   database?: LifecycleRestoreDatabase;
@@ -317,6 +336,15 @@ async function assertEmptyBusinessScope(
 
 function digest(input: string | Uint8Array) {
   return createHash("sha256").update(input).digest("hex");
+}
+
+function parseVerifiedLifecycleExport(
+  input: string | Uint8Array,
+  expectedSha256: string | undefined,
+): LifecycleExportBundle {
+  verifyLifecycleExport(input, expectedSha256);
+  const bytes = typeof input === "string" ? new TextEncoder().encode(input) : input;
+  return JSON.parse(new TextDecoder().decode(bytes)) as LifecycleExportBundle;
 }
 
 function requiredString(row: Record<string, unknown>, key: string) {
