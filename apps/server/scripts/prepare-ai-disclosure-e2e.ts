@@ -70,7 +70,7 @@ function applyMigrations() {
   const journal = JSON.parse(
     readFileSync(join(root, "apps/server/drizzle/meta/_journal.json"), "utf8"),
   ) as { entries: Array<{ idx: number; tag: string }> };
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 26)) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= 27)) {
     psql(readFileSync(join(root, `apps/server/drizzle/${entry.tag}.sql`), "utf8"));
   }
 }

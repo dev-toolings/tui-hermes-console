@@ -52,6 +52,16 @@ export class DataLifecycleError extends Error {
       | "LEGAL_HOLD_ACTIVE"
       | "LIFECYCLE_VERSION_CONFLICT"
       | "LIFECYCLE_PREVIEW_NOT_FOUND"
+      | "LIFECYCLE_PURGE_NOT_FOUND"
+      | "LIFECYCLE_PURGE_ALREADY_CONSUMED"
+      | "LIFECYCLE_PURGE_LEGAL_HOLD"
+      | "LIFECYCLE_PURGE_POLICY_CHANGED"
+      | "LIFECYCLE_PURGE_MANIFEST_MISMATCH"
+      | "LIFECYCLE_PURGE_SOURCE_CHANGED"
+      | "LIFECYCLE_PURGE_ACTIVE_RUN"
+      | "LIFECYCLE_PURGE_STORAGE_INVALID"
+      | "LIFECYCLE_PURGE_AUDIT_UNAVAILABLE"
+      | "LIFECYCLE_PURGE_CLEANUP_PENDING"
       | "LIFECYCLE_AUDIT_UNAVAILABLE",
     message: string,
     readonly status: number,
@@ -215,7 +225,7 @@ export async function createDataLifecyclePreview(
       if (policy.legalHoldEnabled) throw legalHoldActive();
 
       const cutoffAt = new Date(now.getTime() - policy.retentionDays * 24 * 60 * 60 * 1000);
-      const candidates = await findCandidates(tx, context.siteId, cutoffAt);
+      const candidates = await findLifecycleCandidates(tx, context.siteId, cutoffAt);
       const manifest = buildLifecycleManifest(policy, cutoffAt, candidates);
       const manifestSha256 = hashLifecycleManifest(manifest);
       const previewId = randomUUID();
@@ -358,7 +368,7 @@ type CandidateRow = Record<string, unknown> & {
   artifact_hashes: string[];
 };
 
-async function findCandidates(
+export async function findLifecycleCandidates(
   tx: AuditTransaction,
   siteId: string,
   cutoffAt: Date,

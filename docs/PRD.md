@@ -395,8 +395,9 @@ Le `run_events` actuel reste un ledger technique, distinct du ledger d'audit :
 - une policy de rétention site-wide versionnée, un legal hold, un aperçu de purge dry-run et un
   export métier JSON avec octets d'artefacts vérifiés sont désormais implémentés (G1-006A/B), sans
   suppression ni mutation Hermes ; le vérificateur relationnel local G1-006C valide désormais le
-  manifeste site-scoped et les relations sans orphelin, mais le backup/restauration externe et la
-  purge conditionnée restent à livrer et à prouver ;
+  manifeste site-scoped et les relations sans orphelin, et G1-006E ajoute une purge conditionnée
+  locale avec preview single-use, legal hold, audit et quarantaine filesystem ; le backup/
+  restauration externe, P-OPS/P-SEC et le rollback opérateur restent à livrer et à prouver ;
 
 Ajouter davantage d’utilisateurs sans modèle d’autorisation élargirait le risque. Le RBAC et
 l’attribution précèdent toute croissance multi-user.

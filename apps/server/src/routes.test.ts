@@ -69,6 +69,9 @@ describe("route authorization inventory", () => {
     expect(
       ROUTES.find(({ path }) => path === "/api/settings/data-lifecycle/exports")?.access,
     ).toEqual({ boundary: "site", actions: { POST: "data.lifecycle.export" } });
+    expect(
+      ROUTES.find(({ path }) => path === "/api/settings/data-lifecycle/purges")?.access,
+    ).toEqual({ boundary: "site", actions: { POST: "data.lifecycle.purge" } });
   });
 
   test("declares exactly the three AI-start routes in the mounted manifest", () => {

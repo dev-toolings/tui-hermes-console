@@ -19,9 +19,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 - [01-08-2026 — export d’audit expurgé](2026-08-01-gate-1-audit-export.md) : préparation code
   locale pour US-G1-005 ; P-SEC/P-E2E et acceptation Gate encore ouvertes.
 - [01-08-2026 — policy de cycle de vie et aperçu dry-run](2026-08-01-gate-1-lifecycle-preview.md) :
-  slice G1-006A local ; backup/restauration, purge et acceptation Gate encore ouverts.
+  slice G1-006A local ; backup/restauration et acceptation Gate encore ouverts.
 - [01-08-2026 — export métier vérifié](2026-08-01-gate-1-lifecycle-export.md) : slice G1-006B
-  local ; backup/restauration, purge et acceptation Gate encore ouverts.
+  local ; backup/restauration et acceptation Gate encore ouverts.
 - [01-08-2026 — vérificateur relationnel de bundle](2026-08-01-gate-1-lifecycle-verifier.md) : slice
   G1-006C implémenté localement ; aucune preuve de backup/restauration réelle.
 - [01-08-2026 — restauration business-export scratch](2026-08-01-gate-1-lifecycle-business-export-scratch.md) :
@@ -30,6 +30,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 - [01-08-2026 — backup/restore disaster-recovery local](2026-08-01-gate-1-lifecycle-dr-local.md) :
   G1-006D2-local restaure un dump PostgreSQL et une archive `files-data` vers une cible éphémère,
   vérifie les SHA-256 et refuse les altérations/cibles occupées ; aucune preuve externe P-OPS/P-SEC.
+- [01-08-2026 — purge conditionnée locale](2026-08-01-gate-1-lifecycle-purge.md) :
+  G1-006E reverifie le preview/policy/legal hold, audite avant effet et purge les rows/fichiers
+  bornés ; backup externe, P-OPS/P-SEC et acceptation Gate restent ouverts.
 - [01-08-2026 — durabilité Compose des artefacts](2026-08-01-gate-1-artifact-durability-local.md) :
   remplacement réel du conteneur Console, volume `files-data` conservé et refus d’intégrité ;
   même hôte uniquement, P-OPS production et reprise après sinistre encore ouvertes.

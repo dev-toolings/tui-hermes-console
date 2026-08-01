@@ -463,6 +463,8 @@ export const dataLifecyclePreviews = pgTable(
     manifestSha256: text("manifest_sha256").notNull(),
     createdByUserId: text("created_by_user_id").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    purgedAt: timestamp("purged_at", { withTimezone: true }),
+    cleanupPending: boolean("cleanup_pending").notNull().default(false),
   },
   (table) => [
     uniqueIndex("data_lifecycle_previews_site_id_idx").on(table.siteId, table.id),

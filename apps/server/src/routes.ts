@@ -39,6 +39,7 @@ import * as settingsDataLifecycle from "@/api/settings/data-lifecycle/route";
 import * as settingsDataLifecyclePreviews from "@/api/settings/data-lifecycle/previews/route";
 import * as settingsDataLifecyclePreview from "@/api/settings/data-lifecycle/previews/[previewId]/route";
 import * as settingsDataLifecycleExports from "@/api/settings/data-lifecycle/exports/route";
+import * as settingsDataLifecyclePurges from "@/api/settings/data-lifecycle/purges/route";
 import * as setup from "@/api/setup/route";
 import * as threads from "@/api/threads/route";
 import * as threadDetail from "@/api/threads/[threadId]/route";
@@ -227,6 +228,11 @@ export const ROUTES: RouteDefinition[] = [
     path: "/api/settings/data-lifecycle/exports",
     module: settingsDataLifecycleExports,
     access: siteAccess({ POST: "data.lifecycle.export" }),
+  },
+  {
+    path: "/api/settings/data-lifecycle/purges",
+    module: settingsDataLifecyclePurges,
+    access: siteAccess({ POST: "data.lifecycle.purge" }),
   },
 
   { path: "/api/runtime", module: runtime, access: installationAccess },

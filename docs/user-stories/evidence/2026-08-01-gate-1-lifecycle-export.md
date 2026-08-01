@@ -29,8 +29,9 @@ bun run typecheck                                                       PASS
 git diff --check                                                        PASS
 ```
 
-La preuve P-OPS du backup externe, de la restauration scratch, du rollback et de la purge réelle
-reste à produire. Ce rapport ne vaut pas acceptation Gate 1.
+La preuve P-OPS du backup externe, de la restauration scratch et du rollback reste à produire ; la
+purge conditionnée locale est documentée dans le rapport G1-006E. Ce rapport ne vaut pas
+acceptation Gate 1.
 
 ## Verdict
 
