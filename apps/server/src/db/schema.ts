@@ -726,6 +726,9 @@ export const runs = pgTable(
     output: text("output"),
     usage: jsonb("usage").$type<Usage>(),
     error: text("error"),
+    // Nonce for the one in-flight approval relay. A claim is cleared only
+    // after the remote decision is durably observed or explicitly released.
+    approvalClaimId: text("approval_claim_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     endedAt: timestamp("ended_at", { withTimezone: true }),
@@ -784,6 +787,7 @@ export const runs = pgTable(
       table.mandateId,
       table.status,
     ),
+    index("runs_approval_claim_idx").on(table.siteId, table.approvalClaimId),
   ],
 );
 

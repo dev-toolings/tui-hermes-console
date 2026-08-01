@@ -64,7 +64,7 @@ function psql(statement: string, database = "lifecycle_restore") {
 }
 
 function applyMigrations() {
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 24)) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= 26)) {
     psql(readTextFile(join(import.meta.dir, `${entry.tag}.sql`), "utf8"));
   }
 }

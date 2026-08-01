@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 import { APPROVAL_CHOICES } from "@console/core/lib/thread-snapshot-mutations";
+import type { SiteRequestContext, SiteScope } from "@/modules/auth/service";
+import type { AppendAuditEntryInput } from "@/modules/audit/service";
+import type { RunCancelTarget } from "./repository";
 
 /**
  * Contrat d'autorisation — Hermes valide `choice`, pas un booléen.
@@ -41,5 +44,145 @@ describe("respondRunApproval contract", () => {
   test("`deny` est le seul choix qui refuse", () => {
     const approvedFor = (choice: string) => choice !== "deny";
     expect(APPROVAL_CHOICES.filter((choice) => !approvedFor(choice))).toEqual(["deny"]);
+  });
+});
+
+const context: SiteRequestContext = {
+  siteId: "site-approval",
+  userId: "user-approver",
+  role: "approver",
+  actorOrganizationId: "org-client",
+  clientOrganizationId: "org-client",
+  mandateId: null,
+  mandateProjectId: null,
+  correlationId: "corr-approval",
+};
+
+const run: RunCancelTarget = {
+  id: "run-approval",
+  siteId: context.siteId,
+  projectId: null,
+  threadId: "thread-approval",
+  status: "awaiting_approval",
+  hermesResponseId: "hermes-run-approval",
+  input: "sensitive action",
+};
+const claim = { ...run, approvalClaimId: "claim-approval" };
+
+const runtime = {
+  baseUrl: "http://hermes.test",
+  remoteBaseUrl: "http://hermes.test",
+  token: "runtime-token",
+  transport: "direct" as const,
+  source: "database" as const,
+};
+
+function dependencies(overrides: Record<string, unknown> = {}) {
+  const audits: AppendAuditEntryInput[] = [];
+  const remoteCalls: unknown[] = [];
+  const releases: string[] = [];
+  return {
+    audits,
+    remoteCalls,
+    releases,
+    lookup: async () => run,
+    claim: async () => claim,
+    release: async (_scope: SiteScope, runId: string, _claimId: string) => { releases.push(runId); },
+    finalize: async () => undefined,
+    resolveRuntime: async () => runtime,
+    respondRemote: async (input: unknown) => { remoteCalls.push(input); },
+    isActive: () => true,
+    resume: () => undefined,
+    audit: async (input: AppendAuditEntryInput) => {
+      audits.push(input);
+      return {} as Awaited<ReturnType<typeof import("@/modules/audit/service").appendAuditEntry>>;
+    },
+    ...overrides,
+  };
+}
+
+describe("respondRunApproval G1-004B claim and truthful audit", () => {
+  test("claims once, calls Hermes, then records an allowed decision", async () => {
+    const deps = dependencies();
+    const result = await (await import("./respond-approval")).respondRunApproval(
+      context,
+      run.id,
+      { choice: "once" },
+      deps,
+    );
+
+    expect(result).toEqual({ runId: run.id, choice: "once", approved: true, status: "running" });
+    expect(deps.remoteCalls).toHaveLength(1);
+    expect(deps.audits).toHaveLength(1);
+    expect(deps.audits[0]).toMatchObject({
+      decision: "allowed",
+      reasonCode: "RUN_APPROVAL_ALLOWED",
+      beforeState: { status: "running", approvalClaimed: true },
+      afterState: { status: "running", approvalClaimed: false, choice: "once", approved: true },
+    });
+  });
+
+  test("records deny as denied after the remote decision", async () => {
+    const deps = dependencies();
+    await (await import("./respond-approval")).respondRunApproval(
+      context,
+      run.id,
+      { choice: "deny" },
+      deps,
+    );
+
+    expect(deps.remoteCalls).toHaveLength(1);
+    expect(deps.audits[0]).toMatchObject({
+      decision: "denied",
+      reasonCode: "RUN_APPROVAL_DENIED",
+      beforeState: { status: "running", choice: "deny", approved: false },
+      afterState: { status: "running", choice: "deny", approved: false },
+    });
+  });
+
+  test("releases the claim and never writes allowed when Hermes fails", async () => {
+    const deps = dependencies({
+      respondRemote: async () => {
+        const { HermesRuntimeError } = await import("@/modules/runtime/hermes-adapter");
+        throw new HermesRuntimeError("hermes unavailable", 400, "HERMES_HTTP_ERROR");
+      },
+    });
+
+    await expect(
+      (await import("./respond-approval")).respondRunApproval(context, run.id, { choice: "once" }, deps),
+    ).rejects.toThrow("hermes unavailable");
+    expect(deps.releases).toEqual([run.id]);
+    expect(deps.audits[0]).toMatchObject({
+      decision: "denied",
+      reasonCode: "RUN_APPROVAL_REMOTE_FAILED",
+    });
+    expect(deps.audits.some((entry) => entry.decision === "allowed")).toBe(false);
+  });
+
+  test("keeps the durable claim when the remote result is ambiguous", async () => {
+    const deps = dependencies({
+      respondRemote: async () => { throw new Error("connection lost after send"); },
+    });
+
+    await expect(
+      (await import("./respond-approval")).respondRunApproval(context, run.id, { choice: "once" }, deps),
+    ).rejects.toThrow("connection lost after send");
+    expect(deps.releases).toHaveLength(0);
+    expect(deps.audits[0]).toMatchObject({
+      decision: "denied",
+      reasonCode: "RUN_APPROVAL_REMOTE_UNKNOWN",
+      beforeState: { status: "running", choice: "once" },
+      afterState: { status: "running", choice: "once" },
+    });
+  });
+
+  test("does not call Hermes when the atomic claim was already consumed", async () => {
+    const deps = dependencies({ claim: async () => null });
+
+    await expect(
+      (await import("./respond-approval")).respondRunApproval(context, run.id, { choice: "once" }, deps),
+    ).rejects.toMatchObject({ code: "RUN_NOT_AWAITING_APPROVAL" });
+    expect(deps.remoteCalls).toHaveLength(0);
+    expect(deps.audits).toHaveLength(0);
   });
 });

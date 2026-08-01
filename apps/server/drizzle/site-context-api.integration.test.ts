@@ -34,6 +34,7 @@ import { deleteAgent as deleteAgentScoped } from "@/modules/agents/repository";
 import { deleteThread as deleteThreadScoped } from "@/modules/runs/delete-thread";
 import { cancelRun as cancelRunScoped } from "@/modules/runs/cancel-run";
 import { respondRunApproval as approveRunScoped } from "@/modules/runs/respond-approval";
+import { HermesRuntimeError } from "@/modules/runtime/hermes-adapter";
 
 const POSTGRES_IMAGE =
   "postgres:17.6-alpine@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94";
@@ -63,7 +64,7 @@ function psql(statement: string, database = "site_api") {
 }
 
 function applyMigrations() {
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 24)) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= 26)) {
     psql(readFileSync(join(import.meta.dir, `${entry.tag}.sql`), "utf8"));
   }
 }
@@ -79,8 +80,23 @@ const actor = {
   correlationId: "p-int-site-scope",
 };
 
+// The approval route is exercised directly here (without the route registry's
+// access middleware), so use an approver context to keep this test focused on
+// foreign/random resource scoping rather than role denial.
+const approvalActor = {
+  ...actor,
+  userId: "usr_approver",
+  role: "approver" as const,
+  actorOrganizationId: "org_client_paris",
+  mandateId: null,
+};
+
 function context<T extends Record<string, string>>(params: T): AuthenticatedRouteContext<T> {
   return { params: Promise.resolve(params), siteContext: actor };
+}
+
+function approvalContext<T extends Record<string, string>>(params: T): AuthenticatedRouteContext<T> {
+  return { params: Promise.resolve(params), siteContext: approvalActor };
 }
 
 function request(path: string, method = "GET", body?: object) {
@@ -126,11 +142,13 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
         ('lyon', 'org_client_lyon', 'Lyon', 'lyon');
       INSERT INTO console_users (id, email, google_subject) VALUES
         ('usr_paris', 'paris@example.com', 'sub-paris'),
+        ('usr_approver', 'approver@example.com', 'sub-approver'),
         ('usr_lyon', 'lyon@example.com', 'sub-lyon');
       INSERT INTO organization_memberships (user_id, organization_id)
-        VALUES ('usr_paris', 'org_msp_default'), ('usr_lyon', 'org_client_lyon');
+        VALUES ('usr_paris', 'org_msp_default'), ('usr_approver', 'org_client_paris'), ('usr_lyon', 'org_client_lyon');
       INSERT INTO site_memberships (user_id, site_id, organization_id, role)
         VALUES ('usr_paris', 'paris', 'org_msp_default', 'operator'),
+               ('usr_approver', 'paris', 'org_client_paris', 'approver'),
                ('usr_lyon', 'lyon', 'org_client_lyon', 'admin');
       INSERT INTO msp_mandates
         (id, operator_organization_id, client_organization_id, site_id)
@@ -247,7 +265,7 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
       "RUN_NOT_FOUND",
     );
     await expectSameNotFound(
-      await approveRun(request("/api/runs/run_lyon/approval", "POST", { choice: "once" }), context({ runId: "run_lyon" }), {
+      await approveRun(request("/api/runs/run_lyon/approval", "POST", { choice: "once" }), approvalContext({ runId: "run_lyon" }), {
         approve: (ctx, id, body) => approveRunScoped(ctx, id, body, {
           resolveRuntime: async () => { runtimeEffect(); return runtime; },
           respondRemote: async () => { approvalEffect(); },
@@ -255,7 +273,7 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
           resume: () => { approvalEffect(); },
         }),
       }),
-      await approveRun(request("/api/runs/run_random/approval", "POST", { choice: "once" }), context({ runId: "run_random" }), {
+      await approveRun(request("/api/runs/run_random/approval", "POST", { choice: "once" }), approvalContext({ runId: "run_random" }), {
         approve: (ctx, id, body) => approveRunScoped(ctx, id, body, {
           resolveRuntime: async () => { runtimeEffect(); return runtime; },
           respondRemote: async () => { approvalEffect(); },
@@ -292,5 +310,72 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
       WHERE target_site_id = 'paris'
         AND decision = 'denied'
         AND reason_code = 'RESOURCE_NOT_FOUND_OR_OUT_OF_SCOPE';`)).toBe("12");
+  });
+
+  test("approval claim serializes concurrent decisions before Hermes", async () => {
+    psql("UPDATE runs SET status = 'awaiting_approval', started_at = NULL, error = NULL WHERE id = 'run_paris';");
+    const remoteCalls: unknown[] = [];
+    const approvalDependencies = {
+      resolveRuntime: async () => runtime,
+      respondRemote: async (input: unknown) => { remoteCalls.push(input); },
+      isActive: () => true,
+      resume: () => undefined,
+    };
+
+    try {
+      const responses = await Promise.all([
+        approveRun(
+          request("/api/runs/run_paris/approval", "POST", { choice: "once" }),
+          approvalContext({ runId: "run_paris" }),
+          { approve: (ctx, id, body) => approveRunScoped(ctx, id, body, approvalDependencies) },
+        ),
+        approveRun(
+          request("/api/runs/run_paris/approval", "POST", { choice: "once" }),
+          approvalContext({ runId: "run_paris" }),
+          { approve: (ctx, id, body) => approveRunScoped(ctx, id, body, approvalDependencies) },
+        ),
+      ]);
+
+      expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+      expect(remoteCalls).toHaveLength(1);
+      expect(psql(`SELECT count(*) FROM audit_ledger_entries
+        WHERE target_site_id = 'paris'
+          AND resource_id = 'run_paris'
+          AND reason_code = 'RUN_APPROVAL_ALLOWED';`)).toBe("1");
+    } finally {
+      psql("UPDATE runs SET status = 'completed', started_at = NULL, error = NULL WHERE id = 'run_paris';");
+    }
+  });
+
+  test("releases only definitive remote refusals and retains ambiguous claims", async () => {
+    const base = () => ({
+      resolveRuntime: async () => runtime,
+      isActive: () => true,
+      resume: () => undefined,
+    });
+    const approve = (respondRemote: (input: unknown) => Promise<void>) =>
+      approveRunScoped(approvalActor, "run_paris", { choice: "once" }, {
+        ...base(),
+        respondRemote,
+      });
+
+    psql("UPDATE runs SET status = 'awaiting_approval', started_at = NULL, error = NULL, approval_claim_id = NULL WHERE id = 'run_paris';");
+    try {
+      const definitive = await approve(async () => {
+        throw new HermesRuntimeError("rejected", 400, "HERMES_HTTP_ERROR");
+      }).catch(() => null);
+      expect(definitive).toBeNull();
+      expect(psql("SELECT status || ':' || coalesce(approval_claim_id, 'none') FROM runs WHERE id = 'run_paris';")).toBe("awaiting_approval:none");
+
+      psql("UPDATE runs SET status = 'awaiting_approval', started_at = NULL, error = NULL, approval_claim_id = NULL WHERE id = 'run_paris';");
+      const ambiguous = await approve(async () => {
+        throw new Error("connection lost after send");
+      }).catch(() => null);
+      expect(ambiguous).toBeNull();
+      expect(psql("SELECT status || ':' || (approval_claim_id IS NOT NULL) FROM runs WHERE id = 'run_paris';")).toBe("running:true");
+      expect(psql("SELECT count(*) FROM audit_ledger_entries WHERE target_site_id = 'paris' AND resource_id = 'run_paris' AND reason_code = 'RUN_APPROVAL_REMOTE_UNKNOWN';")).toBe("1");
+    } finally {
+      psql("UPDATE runs SET status = 'completed', started_at = NULL, error = NULL, approval_claim_id = NULL WHERE id = 'run_paris';");
+    }
   });
 });

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, max } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, max, sql } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
 import {
   artifacts,
@@ -818,6 +818,105 @@ export type RunCancelTarget = {
   hermesResponseId: string | null;
   input: string;
 };
+
+/**
+ * Claim an approval with a database compare-and-set before calling Hermes.
+ *
+ * The previous read-only lookup allowed two approvers to both observe
+ * `awaiting_approval` and relay two remote decisions.  The conditional update
+ * below is the single ownership transition: only one request can move the run
+ * out of `awaiting_approval`, and every later request receives no claim.
+ */
+export type RunApprovalClaim = RunCancelTarget & {
+  approvalClaimId: string;
+};
+
+export async function claimRunApproval(
+  scope: SiteScope,
+  runId: string,
+): Promise<RunApprovalClaim | null> {
+  if (isSiteRequestScope(scope) && !(await isSiteRequestContextActive(scope))) return null;
+  const approvalClaimId = randomUUID();
+  const [row] = await getDatabase()
+    .update(runs)
+    .set({
+      status: "running",
+      startedAt: sql`coalesce(${runs.startedAt}, now())`,
+      error: null,
+      approvalClaimId,
+    })
+    .where(and(
+      eq(runs.siteId, scope.siteId),
+      eq(runs.id, runId),
+      eq(runs.status, "awaiting_approval"),
+      isNull(runs.approvalClaimId),
+      isSiteRequestScope(scope) && scope.mandateId !== null
+        ? eq(runs.mandateId, scope.mandateId)
+        : undefined,
+      isSiteRequestScope(scope) && scope.mandateProjectId
+        ? eq(runs.projectId, scope.mandateProjectId)
+        : undefined,
+      isRequesterScope(scope) ? eq(runs.ownerUserId, scope.userId) : undefined,
+    ))
+    .returning({
+      id: runs.id,
+      siteId: runs.siteId,
+      projectId: runs.projectId,
+      authorUserId: runs.authorUserId,
+      mandateId: runs.mandateId,
+      operatorOrganizationId: runs.operatorOrganizationId,
+      clientOrganizationId: runs.clientOrganizationId,
+      threadId: runs.threadId,
+      hermesResponseId: runs.hermesResponseId,
+      input: runs.input,
+      approvalClaimId: runs.approvalClaimId,
+    });
+
+  if (!row || row.approvalClaimId !== approvalClaimId) return null;
+  return {
+    ...row,
+    status: "awaiting_approval",
+    approvalClaimId,
+  };
+}
+
+/** Release only the caller's claim; an unrelated running transition is untouched. */
+export async function releaseRunApprovalClaim(
+  scope: SiteScope,
+  runId: string,
+  approvalClaimId: string,
+) {
+  await getDatabase()
+    .update(runs)
+    .set({
+      status: "awaiting_approval",
+      error: null,
+      approvalClaimId: null,
+    })
+    .where(and(
+      eq(runs.siteId, scope.siteId),
+      eq(runs.id, runId),
+      eq(runs.status, "running"),
+      eq(runs.approvalClaimId, approvalClaimId),
+    ));
+}
+
+/** Clear a successfully completed claim without changing the Hermes status. */
+export async function finalizeRunApprovalClaim(
+  scope: SiteScope,
+  runId: string,
+  approvalClaimId: string,
+) {
+  await getDatabase()
+    .update(runs)
+    .set({ approvalClaimId: null })
+    .where(and(
+      eq(runs.siteId, scope.siteId),
+      eq(runs.id, runId),
+      eq(runs.status, "running"),
+      eq(runs.approvalClaimId, approvalClaimId),
+    ));
+}
 
 export async function getRunCancelTarget(
   scope: SiteScope,

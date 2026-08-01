@@ -47,6 +47,10 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 - [01-08-2026 — enveloppe et enforcer policy](2026-08-01-gate-1-g1-004a-local.md) :
   G1-004A local (tuple Ed25519 stricte, TTL/nonce/payload/portée, consommation anti-rejeu et
   effet synthétique) ; P-SEC/P-E2E et intégration Hermes encore ouvertes, story `BLOQUÉE`.
+- [01-08-2026 — claim d’approbation et audit fidèle](2026-08-01-gate-1-g1-004b-approval-claim.md) :
+  G1-004B réclame atomiquement une approbation PostgreSQL avec token durable, empêche la double
+  réponse Hermes et conserve les résultats distants ambigus ; la policy pré-effet et Gate 1 restent
+  ouvertes.
 - [01-08-2026 — parcours navigateur notice IA](2026-08-01-gate-1-ai-disclosure-e2e.md) : redirection,
   arbre accessible, clavier et persistance scratch ; lecteur d’écran et acceptation Gate encore ouverts.
 

@@ -66,7 +66,7 @@ function sqlString(value: string) {
 }
 
 function applyMigrations() {
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 24)) {
+  for (const entry of journal.entries.filter(({ idx }) => idx <= 26)) {
     psql(readFileSync(join(import.meta.dir, `${entry.tag}.sql`), "utf8"));
   }
 }

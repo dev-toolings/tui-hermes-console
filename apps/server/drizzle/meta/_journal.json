@@ -183,6 +183,13 @@
       "when": 1785726000000,
       "tag": "0025_data_lifecycle_preview",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1785729600000,
+      "tag": "0026_approval_claim",
+      "breakpoints": true
     }
   ]
 }
