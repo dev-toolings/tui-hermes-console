@@ -102,5 +102,15 @@ describeWithCompose("production Compose secret boundaries", () => {
     expect(config.services.console?.environment?.HERMES_SSH_KNOWN_HOSTS_FILE).toBe(
       "/home/bun/.ssh/known_hosts",
     );
+    const guide = readFileSync(
+      resolve(repositoryRoot, "docs/user-stories/guides/SSH-VPS-VIERGE.md"),
+      "utf8",
+    );
+    const deployGuide = readFileSync(resolve(repositoryRoot, "deploy/README.md"), "utf8");
+    expect(guide).toContain("/home/bun/.ssh/known_hosts");
+    expect(guide).toContain(
+      'install -m 0600 "$HOME/.ssh/<site>.known_hosts" "$ssh_dir/known_hosts"',
+    );
+    expect(deployGuide).toContain("HERMES_SSH_KNOWN_HOSTS_FILE=/home/bun/.ssh/known_hosts");
   });
 });
