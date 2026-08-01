@@ -151,7 +151,8 @@ finale partenaire restent à exécuter.
 - `bun run lint` reste rouge sur trois erreurs préexistantes de `use-live-thread.ts` (hors diff
   G2-004), malgré les typechecks et la suite Bun verte.
 - P-E2E navigateur, P-SEC multi-compte et acceptation produit/sécurité restent ouverts.
-- Gate 1 reste bloquée par US-G1-008 ; ce rapport ne vaut pas acceptation de Gate 2.
+- Gate 1 reste bloquée par plusieurs critères non prouvés, notamment US-G1-008 ; ce rapport ne vaut
+  pas acceptation de Gate 2.
 
 ## Verdict
 

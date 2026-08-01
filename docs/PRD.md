@@ -447,7 +447,9 @@ Limites d’authentification et de gouvernance :
 ### 9.4 SSH
 
 Les deux chemins, binaire SSH et ssh2 par mot de passe, vérifient désormais la clé d’hôte contre les
-known_hosts. Les noms distants sont normalisés et les liens/fichiers spéciaux sont refusés.
+known_hosts. Le chemin binaire impose aussi `BatchMode`, `IdentitiesOnly` et une identité SSH
+déterministe ; le déploiement doit donc fournir le `IdentityFile`/config correspondant en lecture
+seule. Les noms distants sont normalisés et les liens/fichiers spéciaux sont refusés.
 
 Restent non prouvés :
 
