@@ -17,6 +17,7 @@
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun run --filter '*' test",
     "db:generate": "bun --env-file=apps/server/.env.local run --filter server db:generate",
-    "db:migrate": "bun --env-file=apps/server/.env.local run --filter server db:migrate"
+    "db:migrate": "bun --env-file=apps/server/.env.local run --filter server db:migrate",
+    "proof:g1-001": "bun apps/server/scripts/prove-artifact-durability.ts"
   }
 }

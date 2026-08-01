@@ -408,9 +408,11 @@ HERMES_CONSOLE_ARTIFACTS_DIR=/data/files, chemin porté par le volume files-data
 vérifient taille et SHA-256 avant réponse, et une absence ou corruption des octets produit une
 erreur explicite au lieu d’un succès partiel.
 
-Le défaut de chemin /tmp est donc supprimé. La Gate 1 n’est pas déclarée franchie : un test de
-redémarrage/remplacement avec récupération effective des octets, puis les procédures de backup et
-restauration, restent requis avant toute promesse de custody ou rétention client.
+Le défaut de chemin /tmp est donc supprimé. Le harness G1-001 a maintenant exécuté un remplacement
+réel du conteneur Console dans un projet Compose isolé : le volume `files-data`, les métadonnées et
+les octets vérifiés survivent, tandis que corruption et absence répondent explicitement. Cette preuve
+couvre le même hôte et le même volume ; elle ne remplace ni une sauvegarde/restauration, ni une perte
+d’hôte, ni l’acceptation P-OPS. La Gate 1 reste donc ouverte.
 
 ### 9.2 P0 — approbation non fail-closed
 

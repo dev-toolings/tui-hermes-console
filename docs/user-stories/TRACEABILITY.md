@@ -8,7 +8,7 @@ daté seulement après exécution ; `—` signifie « non prouvé », pas « non
 | US-G0-001 | §13 Gate 0 — trois partenaires | aucune | — | `PROPOSÉE` |
 | US-G0-002 | §3.1, §13 — workflow étroit par partenaire | US-G0-001 | — | `PROPOSÉE` |
 | US-G0-003 | §13, §15 — métriques et engagement payant | US-G0-002 | — | `PROPOSÉE` |
-| US-G1-001 | §9.1, §13 — artefacts persistants | US-G0-003 | — | `PROPOSÉE` |
+| US-G1-001 | §9.1, §13 — artefacts persistants | US-G0-003 | [durabilité Compose locale 2026-08-01](evidence/2026-08-01-gate-1-artifact-durability-local.md) | `IMPLÉMENTÉE` — preuve locale, P-OPS production ouverte |
 | US-G1-002 | §9.5, §13 — Hermes pinné et confiné | US-G0-003 | — | `PROPOSÉE` |
 | US-G1-003 | §9.5, §13 — avertissement IA | US-G0-003 | — | `PROPOSÉE` |
 | US-G1-004 | §9.2, §13 — policy fail-closed | US-G1-002 | — | `PROPOSÉE` |
