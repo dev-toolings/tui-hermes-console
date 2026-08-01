@@ -11,6 +11,7 @@
  */
 
 import * as agents from "@/api/agents/route";
+import * as auth from "@/api/auth/route";
 import * as agentDetail from "@/api/agents/[agentId]/route";
 import * as connectors from "@/api/connectors/route";
 import * as connectorDetail from "@/api/connectors/[type]/route";
@@ -32,6 +33,7 @@ import * as runtimeRestart from "@/api/runtime/restart/route";
 import * as sshHosts from "@/api/runtime/ssh-hosts/route";
 import * as runtimeTest from "@/api/runtime/test/route";
 import * as settingsStorage from "@/api/settings/storage/route";
+import * as setup from "@/api/setup/route";
 import * as threads from "@/api/threads/route";
 import * as threadDetail from "@/api/threads/[threadId]/route";
 import * as threadCommands from "@/api/threads/[threadId]/commands/route";
@@ -43,6 +45,8 @@ export type RouteModule = Record<string, unknown>;
 export const ROUTES: Array<{ path: string; module: RouteModule }> = [
   { path: "/api/healthz", module: healthz },
   { path: "/api/readyz", module: readyz },
+  { path: "/api/auth", module: auth },
+  { path: "/api/setup", module: setup },
 
   { path: "/api/agents", module: agents },
   { path: "/api/agents/:agentId", module: agentDetail },

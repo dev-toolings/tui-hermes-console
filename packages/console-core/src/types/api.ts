@@ -18,6 +18,7 @@ import type {
 /** `GET /api/agents`, `GET /api/agents/:agentId` */
 export type AgentDto = {
   id: string;
+  projectId?: string | null;
   name: string;
   slug: string;
   description: string | null;

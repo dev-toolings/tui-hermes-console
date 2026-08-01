@@ -14,6 +14,20 @@ import { cors } from "hono/cors";
 import { ROUTES, type RouteModule } from "./routes";
 import { register } from "./instrumentation";
 import { isAllowedOrigin } from "@/modules/api/origins";
+import { apiErrorResponse } from "@/modules/api/errors";
+import {
+  assertCsrf,
+  AuthError,
+  getSession,
+  requireSiteRequestContext,
+  type SiteRequestContext,
+} from "@/modules/auth/service";
+import { assertSameOriginMutation } from "@/modules/api/same-origin";
+import { consoleSetupRequired } from "@/modules/setup/service";
+import {
+  isAiRunStartRequest,
+  runStartPreconditionResponse,
+} from "@/modules/setup/ai-disclosure";
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 type HttpMethod = (typeof HTTP_METHODS)[number];
@@ -25,10 +39,15 @@ type HttpMethod = (typeof HTTP_METHODS)[number];
  */
 type RouteHandler = (
   request: Request,
-  context: { params: Promise<Record<string, string>> },
+  context: {
+    params: Promise<Record<string, string>>;
+    siteContext: SiteRequestContext | null;
+  },
 ) => Response | Promise<Response>;
 
-const app = new Hono();
+const app = new Hono<{
+  Variables: { siteContext: SiteRequestContext | null };
+}>();
 
 /**
  * Le SPA est servi depuis une autre origine en dev (Vite sur :1420) et depuis
@@ -44,6 +63,45 @@ app.use(
   }),
 );
 
+const PUBLIC_API_PATHS = new Set(["/api/healthz", "/api/readyz", "/api/auth"]);
+const SETUP_API_PATHS = new Set(["/api/setup", "/api/runtime", "/api/runtime/test", "/api/agents"]);
+
+/**
+ * La garde est centrale : une nouvelle route produit est protégée dès son
+ * montage, au lieu de dépendre d'un oubli éventuel dans son handler.
+ */
+app.use("/api/*", async (c, next) => {
+  if (c.req.method === "OPTIONS" || PUBLIC_API_PATHS.has(c.req.path)) return next();
+
+  try {
+    const session = await getSession(c.req.raw);
+    if (!session) {
+      return c.json({ error: { code: "AUTH_REQUIRED", message: "Authentification requise." } }, 401);
+    }
+    c.set("siteContext", requireSiteRequestContext(session));
+    if (!["GET", "HEAD"].includes(c.req.method)) {
+      assertSameOriginMutation(c.req.raw);
+      assertCsrf(c.req.raw, session);
+    }
+    const setupRequired = await consoleSetupRequired();
+    if (isAiRunStartRequest(c.req.method, c.req.path)) {
+      const precondition = runStartPreconditionResponse(setupRequired, session);
+      if (precondition) return precondition;
+    }
+    if (setupRequired && !SETUP_API_PATHS.has(c.req.path)) {
+      return c.json(
+        { error: { code: "SETUP_REQUIRED", message: "La configuration initiale doit être terminée." } },
+        423,
+      );
+    }
+    return next();
+  } catch (error) {
+    if (error instanceof AuthError) return apiErrorResponse(error);
+    console.error("Authentication middleware failed", error);
+    return c.json({ error: { code: "AUTH_UNAVAILABLE", message: "Authentification indisponible." } }, 503);
+  }
+});
+
 function mountRoute(path: string, module: RouteModule) {
   for (const method of HTTP_METHODS) {
     const handler = module[method];
@@ -52,6 +110,7 @@ function mountRoute(path: string, module: RouteModule) {
     app.on(method, path, (c) =>
       (handler as RouteHandler)(c.req.raw, {
         params: Promise.resolve(c.req.param() as Record<string, string>),
+        siteContext: c.get("siteContext") ?? null,
       }),
     );
   }
@@ -112,9 +171,10 @@ if (hasSpa) {
 void register();
 
 const port = Number(process.env.CONSOLE_SERVER_PORT ?? 3170);
+const hostname = process.env.CONSOLE_SERVER_HOST ?? "127.0.0.1";
 
 console.info(
-  `[hermes-console] API sur :${port}${hasSpa ? ` · SPA servi depuis ${spaDir}` : " · SPA non compilé (dev : Vite sur :1420)"}`,
+  `[hermes-console] API sur ${hostname}:${port}${hasSpa ? ` · SPA servi depuis ${spaDir}` : " · SPA non compilé (dev : Vite sur :1420)"}`,
 );
 
-export default { port, fetch: app.fetch, idleTimeout: 0 };
+export default { hostname, port, fetch: app.fetch, idleTimeout: 0 };

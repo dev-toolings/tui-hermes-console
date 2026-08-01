@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
 import { threads } from "@/db/schema";
 import {
@@ -18,8 +18,11 @@ import {
 import { ProductRepositoryError } from "@/modules/runs/repository";
 import type { ConnectorType } from "@/db/schema";
 import { CONNECTOR_TYPE_LABELS } from "@console/core/modules/connectors/requirements";
+import type { SiteRequestContext } from "@/modules/auth/service";
+import { auditScopedMiss } from "@/modules/auth/site-access";
 
 export async function executeSessionCommand(input: {
+  context: SiteRequestContext;
   threadId: string;
   raw: string;
 }): Promise<SessionCommandResult> {
@@ -33,8 +36,9 @@ export async function executeSessionCommand(input: {
   if (!command) return { handled: false };
 
   const db = getDatabase();
-  const [thread] = await db.select().from(threads).where(eq(threads.id, input.threadId)).limit(1);
+  const [thread] = await db.select().from(threads).where(and(eq(threads.siteId, input.context.siteId), eq(threads.id, input.threadId))).limit(1);
   if (!thread) {
+    await auditScopedMiss(input.context, { action: "thread.command", resourceType: "thread", resourceId: input.threadId });
     throw new ProductRepositoryError("THREAD_NOT_FOUND", "Session introuvable.");
   }
 
@@ -67,11 +71,11 @@ export async function executeSessionCommand(input: {
     }
 
     case "agent_create": {
-      const agent = await createAgent({
+      const agent = await createAgent(input.context, {
         name: command.name,
         instructions: command.instructions,
       });
-      await applyAgentToThread(input.threadId, agent);
+      await applyAgentToThread(input.context, input.threadId, agent);
       return {
         handled: true,
         refreshThread: true,
@@ -94,8 +98,8 @@ export async function executeSessionCommand(input: {
             : command.field === "model"
               ? { model: command.value }
               : { description: command.value };
-      const agent = await updateAgent(thread.agentId, patch);
-      await syncThreadFromAgent(input.threadId, agent);
+      const agent = await updateAgent(input.context, thread.agentId, patch);
+      await syncThreadFromAgent(input.context, input.threadId, agent);
       return {
         handled: true,
         refreshThread: true,
@@ -104,8 +108,8 @@ export async function executeSessionCommand(input: {
     }
 
     case "agent_switch": {
-      const agent = await resolveActiveAgentRef(command.target);
-      await applyAgentToThread(input.threadId, agent);
+      const agent = await resolveActiveAgentRef(input.context, command.target);
+      await applyAgentToThread(input.context, input.threadId, agent);
       return {
         handled: true,
         refreshThread: true,
@@ -118,9 +122,9 @@ export async function executeSessionCommand(input: {
       await db
         .update(threads)
         .set({ model: command.model, updatedAt: now })
-        .where(eq(threads.id, input.threadId));
+        .where(and(eq(threads.siteId, input.context.siteId), eq(threads.id, input.threadId)));
       if (thread.agentId) {
-        await updateAgent(thread.agentId, { model: command.model });
+        await updateAgent(input.context, thread.agentId, { model: command.model });
       }
       return {
         handled: true,
@@ -135,7 +139,7 @@ export async function executeSessionCommand(input: {
         name: thread.agentName,
         instructions: thread.instructions,
       });
-      const all = await listConnectors();
+      const all = await listConnectors(input.context);
       const lines = required.length
         ? required.map((type) => {
             const row = all.find((item) => item.type === type);
@@ -163,7 +167,7 @@ export async function executeSessionCommand(input: {
   }
 }
 
-export async function applyAgentToThread(threadId: string, agent: AgentDto) {
+export async function applyAgentToThread(context: SiteRequestContext, threadId: string, agent: AgentDto) {
   const db = getDatabase();
   const now = new Date();
   await db
@@ -178,11 +182,11 @@ export async function applyAgentToThread(threadId: string, agent: AgentDto) {
       source: "mission",
       updatedAt: now,
     })
-    .where(eq(threads.id, threadId));
+    .where(and(eq(threads.siteId, context.siteId), eq(threads.id, threadId)));
 }
 
-async function syncThreadFromAgent(threadId: string, agent: AgentDto) {
-  await applyAgentToThread(threadId, agent);
+async function syncThreadFromAgent(context: SiteRequestContext, threadId: string, agent: AgentDto) {
+  await applyAgentToThread(context, threadId, agent);
 }
 
 function formatAgentSnapshot(input: {
@@ -212,15 +216,15 @@ function formatAgentSnapshotFromDto(agent: AgentDto) {
   });
 }
 
-export async function getSessionConnectorGaps(threadId: string): Promise<ConnectorType[]> {
+export async function getSessionConnectorGaps(context: SiteRequestContext, threadId: string): Promise<ConnectorType[]> {
   const db = getDatabase();
-  const [thread] = await db.select().from(threads).where(eq(threads.id, threadId)).limit(1);
+  const [thread] = await db.select().from(threads).where(and(eq(threads.siteId, context.siteId), eq(threads.id, threadId))).limit(1);
   if (!thread) return [];
 
   let slug = thread.agentName.toLowerCase().replace(/\s+/g, "-");
   if (thread.agentId) {
     try {
-      const agent = await getAgent(thread.agentId);
+      const agent = await getAgent(context, thread.agentId);
       slug = agent.slug;
     } catch {
       // ignore
@@ -235,7 +239,7 @@ export async function getSessionConnectorGaps(threadId: string): Promise<Connect
 
   const missing: ConnectorType[] = [];
   for (const type of required) {
-    const connector = await getConnector(type);
+    const connector = await getConnector(context, type);
     if (!connector?.passwordConfigured) missing.push(type);
   }
   return missing;

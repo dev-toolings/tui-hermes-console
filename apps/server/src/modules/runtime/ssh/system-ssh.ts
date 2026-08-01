@@ -1,8 +1,11 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { createWriteStream, mkdirSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
+import { pipeline } from "node:stream/promises";
+import { createByteLimit } from "./byte-limit";
 import { mapSystemSshStderr, sshBinaryMissing } from "./errors";
+import { configuredKnownHostsPath } from "./known-hosts";
 import type { SftpOps, SshChannel, SshTarget } from "./types";
 
 /** Socket ControlMaster. `/tmp` plutôt que os.tmpdir() : sur macOS ce dernier est un chemin
@@ -31,6 +34,14 @@ export function baseSshArgs(target: SshTarget): string[] {
     `ControlPersist=${CONTROL_PERSIST}`,
     "-o",
     `ConnectTimeout=${CONNECT_TIMEOUT_S}`,
+    "-o",
+    "StrictHostKeyChecking=yes",
+    "-o",
+    "UpdateHostKeys=no",
+    "-o",
+    `UserKnownHostsFile=${configuredKnownHostsPath()}`,
+    "-o",
+    "GlobalKnownHostsFile=/dev/null",
     "-o",
     "ServerAliveInterval=15",
     "-o",
@@ -120,16 +131,25 @@ export function createSystemSshChannel(target: SshTarget): SshChannel {
       async mkdirp(remotePath: string) {
         await run(["mkdir", "-p", "--", shellQuote(remotePath)]);
       },
-      async list(remotePath: string) {
-        // `ls -1` sur un dossier absent renvoie une erreur : on la traite comme "vide".
-        const out = await run(["ls", "-1", "--", shellQuote(remotePath)]).catch(() => "");
-        return out.split(/\r?\n/).filter((line) => line.trim().length > 0);
+      async list(remotePath: string, maxEntries: number) {
+        // Un dossier absent/illisible est un échec de livraison, pas une liste vide.
+        const out = await run([systemSftpListCommand(remotePath, maxEntries)]);
+        return parseSystemSftpList(out, maxEntries);
+      },
+      async stat(remotePath: string) {
+        const out = await run([
+          "stat",
+          "--format=%f:%s",
+          "--",
+          shellQuote(remotePath),
+        ]);
+        return parseSystemSftpStat(out);
       },
       async upload(localPath: string, remotePath: string) {
         await scp(localPath, `${target.user}@${target.host}:${remotePath}`);
       },
-      async download(remotePath: string, localPath: string) {
-        await scp(`${target.user}@${target.host}:${remotePath}`, localPath);
+      async download(remotePath: string, localPath: string, maxBytes: number) {
+        await downloadBounded(remotePath, localPath, maxBytes);
       },
     };
   }
@@ -168,6 +188,14 @@ export function createSystemSshChannel(target: SshTarget): SshChannel {
       "ControlMaster=auto",
       "-o",
       `ControlPath=${controlPath(target)}`,
+      "-o",
+      "StrictHostKeyChecking=yes",
+      "-o",
+      "UpdateHostKeys=no",
+      "-o",
+      `UserKnownHostsFile=${configuredKnownHostsPath()}`,
+      "-o",
+      "GlobalKnownHostsFile=/dev/null",
       "-P",
       String(target.port),
       "--",
@@ -176,7 +204,109 @@ export function createSystemSshChannel(target: SshTarget): SshChannel {
     ]);
   }
 
+  async function downloadBounded(
+    remotePath: string,
+    localPath: string,
+    maxBytes: number,
+  ) {
+    const child = spawn(
+      "ssh",
+      [
+        ...baseSshArgs(target),
+        `${target.user}@${target.host}`,
+        `cat -- ${shellQuote(remotePath)}`,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let stderr = "";
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr = (stderr + chunk.toString()).slice(-4_000);
+    });
+    const completed = new Promise<void>((resolve, reject) => {
+      child.on("error", (error: NodeJS.ErrnoException) => {
+        reject(
+          error.code === "ENOENT"
+            ? sshBinaryMissing()
+            : mapSystemSshStderr(error.message, ""),
+        );
+      });
+      child.on("close", (code) => {
+        if (code === 0) resolve();
+        else reject(mapSystemSshStderr(stderr || `ssh a échoué (code ${code})`, ""));
+      });
+    });
+    try {
+      await Promise.all([
+        pipeline(
+          child.stdout!,
+          createByteLimit(maxBytes),
+          createWriteStream(localPath, { flags: "wx", mode: 0o600 }),
+        ),
+        completed,
+      ]);
+    } catch (error) {
+      child.kill("SIGTERM");
+      throw error;
+    }
+  }
+
   return { forward, sftp, close };
+}
+
+export function systemSftpListCommand(remotePath: string, maxEntries: number) {
+  if (!Number.isSafeInteger(maxEntries) || maxEntries < 0) {
+    throw new Error("limite de liste SSH invalide");
+  }
+  return [
+    "{ find --",
+    shellQuote(remotePath),
+    "-mindepth 1 -maxdepth 1 -printf '%f\\0';",
+    "printf '/__hermes_find_status__:%s\\0' \"$?\"; }",
+    "| head -z -n",
+    String(maxEntries + 2),
+  ].join(" ");
+}
+
+export function parseSystemSftpList(output: string, maxEntries: number) {
+  if (!Number.isSafeInteger(maxEntries) || maxEntries < 0) {
+    throw new Error("limite de liste SSH invalide");
+  }
+  const fields = output.split("\0").filter((name) => name.length > 0);
+  const markerIndex = fields.findIndex((field) =>
+    field.startsWith("/__hermes_find_status__:"),
+  );
+  if (markerIndex >= 0) {
+    const status = Number(fields[markerIndex]!.slice("/__hermes_find_status__:".length));
+    if (!Number.isSafeInteger(status) || status !== 0) {
+      throw new Error(`énumération distante échouée (find=${String(status)})`);
+    }
+    return fields.slice(0, Math.min(markerIndex, maxEntries + 1));
+  }
+  // Le marqueur n'est normalement absent que lorsque `head` a atteint sa
+  // borne avant la fin de find : on garde maxCount+1 pour signaler le quota.
+  if (fields.length >= maxEntries + 2) {
+    return fields.slice(0, maxEntries + 1);
+  }
+  throw new Error("énumération distante incomplète (statut find absent)");
+}
+
+export function parseSystemSftpStat(output: string) {
+  const [modeHex, sizeRaw] = output.trim().split(":");
+  const mode = Number.parseInt(modeHex ?? "", 16);
+  const size = Number(sizeRaw);
+  if (!Number.isSafeInteger(mode) || !Number.isSafeInteger(size) || size < 0) {
+    throw new Error("stat distant invalide");
+  }
+  const kind = mode & 0o170000;
+  const type =
+    kind === 0o100000
+      ? ("file" as const)
+      : kind === 0o040000
+        ? ("directory" as const)
+        : kind === 0o120000
+          ? ("symlink" as const)
+          : ("other" as const);
+  return { size, type };
 }
 
 function exec(command: string, args: string[]): Promise<string> {

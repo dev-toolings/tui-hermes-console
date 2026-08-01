@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
 import { agents } from "@/db/schema";
 import {
@@ -6,6 +6,7 @@ import {
   type HermesReasoningEffort,
 } from "@console/core/lib/runtime/reasoning-effort";
 import { getRuntimeModelSelection } from "@/modules/runtime/model-settings";
+import type { SiteScope } from "@/modules/auth/service";
 
 const LEGACY_MODEL_ALIASES = new Set(["", "hermes-agent"]);
 
@@ -23,11 +24,11 @@ function normalizeEffort(value: string | null | undefined): HermesReasoningEffor
  * Les settings Console conservent une sélection globale ; les threads historiques
  * peuvent encore porter l’alias `hermes-agent`.
  */
-export async function resolveEffectiveModel(input: {
+export async function resolveEffectiveModel(scope: SiteScope, input: {
   threadModel: string;
   agentId: string | null;
 }): Promise<string> {
-  return (await resolveEffectiveInference({
+  return (await resolveEffectiveInference(scope, {
     threadProvider: null,
     threadModel: input.threadModel,
     threadReasoningEffort: null,
@@ -35,7 +36,7 @@ export async function resolveEffectiveModel(input: {
   })).model;
 }
 
-export async function resolveEffectiveInference(input: {
+export async function resolveEffectiveInference(scope: SiteScope, input: {
   threadProvider: string | null;
   threadModel: string;
   threadReasoningEffort?: string | null;
@@ -69,7 +70,7 @@ export async function resolveEffectiveInference(input: {
         reasoningEffort: agents.reasoningEffort,
       })
       .from(agents)
-      .where(eq(agents.id, input.agentId))
+      .where(and(eq(agents.siteId, scope.siteId), eq(agents.id, input.agentId)))
       .limit(1);
 
     const agentModel = agent?.model ?? null;

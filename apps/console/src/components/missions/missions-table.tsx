@@ -9,20 +9,28 @@
 import { Link } from "@/lib/router";
 import { PlusIcon } from "lucide-react";
 import { Badge, ButtonLink } from "@/components/ui/boardui";
-import { RUN_STATUS, formatTokens } from "@console/core/lib/run-status";
-import { formatWhen, type MissionRow } from "./mission-row";
+import {
+  RUN_STATUS,
+  formatTokens,
+  isArtifactDeliveryFailure,
+} from "@console/core/lib/run-status";
+import { formatWhen, missionStatusStyle, type MissionRow } from "./mission-row";
 
 const FILTERS = [
   { label: "Toutes", value: undefined },
   { label: "En cours", value: "active" },
   { label: "Terminées", value: "completed" },
   { label: "Échecs", value: "failed" },
+  { label: "Livraison échouée", value: "delivery_failed" },
 ] as const;
 
-function matchesFilter(row: MissionRow, filter?: string) {
+export function matchesFilter(row: MissionRow, filter?: string) {
   if (filter === "active") return !RUN_STATUS[row.status].terminal;
   if (filter === "completed") return row.status === "completed";
   if (filter === "failed") return row.status === "failed";
+  if (filter === "delivery_failed") {
+    return isArtifactDeliveryFailure(row.error);
+  }
   return true;
 }
 
@@ -81,7 +89,7 @@ export function MissionsTable({
             </thead>
             <tbody className="divide-y divide-border">
               {visible.map((run) => {
-                const status = RUN_STATUS[run.status];
+                const status = missionStatusStyle(run);
                 return (
                   <tr key={run.id} className="text-[0.75rem] transition-colors hover:bg-muted">
                     <td className="px-4 py-3">
@@ -95,7 +103,9 @@ export function MissionsTable({
                     <td className="px-4 py-3">
                       <Badge
                         tone={
-                          run.status === "completed"
+                          isArtifactDeliveryFailure(run.error)
+                            ? "danger"
+                            : run.status === "completed"
                             ? "success"
                             : run.status === "running" || run.status === "starting"
                               ? "info"

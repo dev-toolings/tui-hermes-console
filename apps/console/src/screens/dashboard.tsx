@@ -40,6 +40,7 @@ export function DashboardScreen({ data }: { data: DashboardData }) {
     agentName: thread.agentName,
     updatedAt: thread.updatedAt,
     status: (thread.latestRun?.status ?? "pending") as RunStatus,
+    error: thread.latestRun?.error ?? null,
     totalTokens: thread.latestRun?.usage?.totalTokens ?? null,
   }));
 

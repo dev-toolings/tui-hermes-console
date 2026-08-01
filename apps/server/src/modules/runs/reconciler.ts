@@ -106,6 +106,7 @@ async function reconcileOne(
 ): Promise<void> {
   if (!run.hermesResponseId) {
     await closeAsFailed(
+      run,
       run.threadId,
       run.id,
       "Processus Console redémarré avant la soumission au runtime Hermes.",
@@ -122,6 +123,7 @@ async function reconcileOne(
 
   if (protocol === "responses") {
     await closeAsFailed(
+      run,
       run.threadId,
       run.id,
       "Processus Console redémarré pendant une mission (/v1/responses) : reprise du flux impossible.",
@@ -140,22 +142,22 @@ async function reconcileOne(
 
     switch (decision.action) {
       case "complete": {
-        await completeRun(run.id, decision.output, decision.usage);
+        await completeRun(run, run.id, decision.output, decision.usage);
         result.completed += 1;
         break;
       }
       case "fail": {
-        await closeAsFailed(run.threadId, run.id, decision.message);
+        await closeAsFailed(run, run.threadId, run.id, decision.message);
         result.failed += 1;
         break;
       }
       case "cancel": {
-        await failRun(run.id, "", "cancelled");
+        await failRun(run, run.id, "", "cancelled");
         result.cancelled += 1;
         break;
       }
       case "resume": {
-        resumeAgentRun(run.id, run.hermesResponseId, runtime);
+        resumeAgentRun(run, run.id, run.hermesResponseId, runtime);
         result.resumed += 1;
         break;
       }
@@ -163,6 +165,7 @@ async function reconcileOne(
   } catch (error) {
     if (error instanceof HermesRuntimeError && error.status === 404) {
       await closeAsFailed(
+        run,
         run.threadId,
         run.id,
         "Le runtime Hermes ne connaît plus cette mission (expirée ou perdue après redémarrage).",
@@ -175,22 +178,22 @@ async function reconcileOne(
       error instanceof Error
         ? error.message
         : "Réconciliation impossible après redémarrage.";
-    await closeAsFailed(run.threadId, run.id, message);
+    await closeAsFailed(run, run.threadId, run.id, message);
     result.failed += 1;
   }
 }
 
-async function closeAsFailed(threadId: string, runId: string, message: string) {
+async function closeAsFailed(scope: { siteId: string }, threadId: string, runId: string, message: string) {
   // La trace est un confort ; la transition d'état est le contrat (§29 : une
   // mission ne doit jamais rester `running`). Si l'écriture de l'événement
   // échoue, on clôture quand même.
   try {
-    const normalizer = new HermesEventNormalizer(await nextRunSequence(runId));
+    const normalizer = new HermesEventNormalizer(await nextRunSequence(scope, runId));
     const event = toProductEvents([normalizer.error(message)])[0]!;
-    const stored = await appendRunEvents(threadId, runId, [event]);
+    const stored = await appendRunEvents(scope, threadId, runId, [event]);
     for (const item of stored) publishThreadEvent(threadId, item);
   } catch (error) {
     console.error("[reconcile] event append failed", { runId, error });
   }
-  await failRun(runId, message);
+  await failRun(scope, runId, message);
 }

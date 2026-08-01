@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { apiErrorResponse } from "@/modules/api/errors";
 import { deleteAgent, getAgent, updateAgent } from "@/modules/agents/repository";
+import type { AuthenticatedRouteContext } from "@/modules/api/route-context";
+
+const agentIdSchema = z.string().trim().min(1).max(200);
 
 const patchAgentSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
@@ -8,15 +11,16 @@ const patchAgentSchema = z.object({
   instructions: z.string().trim().min(1).max(20_000).optional(),
   model: z.string().trim().max(200).optional().nullable(),
   archive: z.boolean().optional(),
-});
+}).strict();
 
 export async function GET(
   _request: Request,
-  context: { params: Promise<{ agentId: string }> },
+  context: AuthenticatedRouteContext<{ agentId: string }>,
 ) {
   try {
-    const { agentId } = await context.params;
-    return Response.json({ agent: await getAgent(agentId) });
+    const { agentId: rawAgentId } = await context.params;
+    const agentId = agentIdSchema.parse(rawAgentId);
+    return Response.json({ agent: await getAgent(context.siteContext, agentId) });
   } catch (error) {
     return apiErrorResponse(error);
   }
@@ -24,12 +28,13 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  context: { params: Promise<{ agentId: string }> },
+  context: AuthenticatedRouteContext<{ agentId: string }>,
 ) {
   try {
-    const { agentId } = await context.params;
+    const { agentId: rawAgentId } = await context.params;
+    const agentId = agentIdSchema.parse(rawAgentId);
     const input = patchAgentSchema.parse(await request.json());
-    const agent = await updateAgent(agentId, input);
+    const agent = await updateAgent(context.siteContext, agentId, input);
     return Response.json({ agent });
   } catch (error) {
     return apiErrorResponse(error);
@@ -38,11 +43,13 @@ export async function PATCH(
 
 export async function DELETE(
   _request: Request,
-  context: { params: Promise<{ agentId: string }> },
+  context: AuthenticatedRouteContext<{ agentId: string }>,
+  dependencies: { delete: typeof deleteAgent } = { delete: deleteAgent },
 ) {
   try {
-    const { agentId } = await context.params;
-    await deleteAgent(agentId);
+    const { agentId: rawAgentId } = await context.params;
+    const agentId = agentIdSchema.parse(rawAgentId);
+    await dependencies.delete(context.siteContext, agentId);
     return new Response(null, { status: 204 });
   } catch (error) {
     return apiErrorResponse(error);

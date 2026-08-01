@@ -11,10 +11,12 @@ import {
   markRunStarted,
 } from "./repository";
 import { isRunActive, resumeAgentRun } from "./runner";
+import type { SiteRequestContext } from "@/modules/auth/service";
+import { auditScopedMiss } from "@/modules/auth/site-access";
 
 const bodySchema = z.object({
   choice: z.enum(APPROVAL_CHOICES),
-});
+}).strict();
 
 export type RespondApprovalResult = {
   runId: string;
@@ -23,17 +25,32 @@ export type RespondApprovalResult = {
   status: "running";
 };
 
+type ApprovalDependencies = {
+  resolveRuntime: typeof resolveHermesRuntimeConfig;
+  respondRemote: typeof respondHermesApproval;
+  isActive: typeof isRunActive;
+  resume: typeof resumeAgentRun;
+};
+
 /**
  * Relaye une décision humaine vers Hermes (`POST /v1/runs/:id/approval`)
  * puis repasse la mission en `running` (PRD §9.5).
  */
 export async function respondRunApproval(
+  context: SiteRequestContext,
   runId: string,
   rawBody: unknown,
+  dependencies: ApprovalDependencies = {
+    resolveRuntime: resolveHermesRuntimeConfig,
+    respondRemote: respondHermesApproval,
+    isActive: isRunActive,
+    resume: resumeAgentRun,
+  },
 ): Promise<RespondApprovalResult> {
   const { choice } = bodySchema.parse(rawBody);
-  const run = await getRunCancelTarget(runId);
+  const run = await getRunCancelTarget(context, runId);
   if (!run) {
+    await auditScopedMiss(context, { action: "run.approval", resourceType: "run", resourceId: runId });
     throw new ProductRepositoryError("RUN_NOT_FOUND", "Mission introuvable.");
   }
   if (run.status !== "awaiting_approval") {
@@ -50,21 +67,21 @@ export async function respondRunApproval(
   }
 
   const approved = choice !== "deny";
-  const runtime = await resolveHermesRuntimeConfig();
-  await respondHermesApproval({
+  const runtime = await dependencies.resolveRuntime();
+  await dependencies.respondRemote({
     hermesRunId: run.hermesResponseId,
     choice,
     approved,
     baseUrl: runtime.baseUrl,
     token: runtime.token,
   });
-  await markRunStarted(runId);
+  await markRunStarted(context, runId);
 
   // Une demande d'autorisation attend un humain : le flux SSE a pu tomber
   // entre-temps (tunnel, veille, socket fermée) sans que la mission échoue.
   // Répondre ne sert à rien si plus personne n'écoute Hermes — on se rebranche.
-  if (!isRunActive(runId)) {
-    resumeAgentRun(runId, run.hermesResponseId, runtime);
+  if (!dependencies.isActive(runId)) {
+    dependencies.resume(context, runId, run.hermesResponseId, runtime);
   }
 
   return { runId, choice, approved, status: "running" };

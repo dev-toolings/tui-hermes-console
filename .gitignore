@@ -11,5 +11,7 @@ auth.md
 # Icônes de l'app desktop : `tauri.conf.json` les référence pour le bundle,
 # la règle `*.png` ci-dessus les excluait et `tauri build` cassait au clone.
 !apps/console/src-tauri/icons/**/*.png
+# Visuel d'onboarding généré, référencé par le bundle Vite.
+!apps/console/src/assets/setup-operation-board.png
 .playwright-mcp/
 .impeccable/

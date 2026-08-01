@@ -1,0 +1,29 @@
+{
+	admin off
+}
+
+{$CONSOLE_SITE_ADDRESS:http://localhost} {
+	encode zstd gzip
+
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options DENY
+	}
+
+	reverse_proxy console:3170 {
+		# The API may use this identity only when Compose explicitly enables
+		# CONSOLE_TRUST_PROXY. Replace, do not append, an untrusted client value.
+		header_up -X-Forwarded-For
+		header_up X-Forwarded-For {remote_host}
+		# Product events are streamed over SSE. Immediate flushing prevents the
+		# proxy from batching deltas and approval events.
+		flush_interval -1
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

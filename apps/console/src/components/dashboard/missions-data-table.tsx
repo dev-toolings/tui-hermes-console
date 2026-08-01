@@ -83,7 +83,13 @@ import {
 } from "@boardui/ui";
 import { Link, useRouter } from "@/lib/router";
 import { cn } from "@/lib/cn";
-import { RUN_STATUS, formatTokens, type RunStatus } from "@console/core/lib/run-status";
+import {
+  RUN_STATUS,
+  formatTokens,
+  isArtifactDeliveryFailure,
+  runStatusStyle,
+  type RunStatus,
+} from "@console/core/lib/run-status";
 
 export type MissionRow = {
   id: string;
@@ -91,6 +97,7 @@ export type MissionRow = {
   agentName: string;
   updatedAt: string;
   status: RunStatus;
+  error: string | null;
   totalTokens: number | null;
 };
 
@@ -99,6 +106,7 @@ const TABS = [
   { value: "active", label: "En cours" },
   { value: "done", label: "Terminées" },
   { value: "failed", label: "Échecs" },
+  { value: "delivery_failed", label: "Livraison échouée" },
 ] as const;
 
 type TabValue = (typeof TABS)[number]["value"];
@@ -112,10 +120,13 @@ const COLUMN_LABELS: Record<string, string> = {
   totalTokens: "Tokens",
 };
 
-function matchesTab(row: MissionRow, tab: TabValue) {
+export function matchesTab(row: MissionRow, tab: TabValue) {
   if (tab === "active") return !RUN_STATUS[row.status].terminal;
   if (tab === "done") return row.status === "completed";
   if (tab === "failed") return row.status === "failed";
+  if (tab === "delivery_failed") {
+    return isArtifactDeliveryFailure(row.error);
+  }
   return true;
 }
 
@@ -128,8 +139,14 @@ function formatWhen(iso: string) {
   });
 }
 
-function StatusBadge({ status }: { status: RunStatus }) {
-  const style = RUN_STATUS[status];
+export function dashboardMissionStatusStyle(
+  mission: Pick<MissionRow, "status" | "error">,
+) {
+  return runStatusStyle(mission.status, mission.error);
+}
+
+function StatusBadge({ mission }: { mission: MissionRow }) {
+  const style = dashboardMissionStatusStyle(mission);
   return (
     <Badge variant="outline" className={cn("px-1.5", style.badge)}>
       <span aria-hidden>{style.glyph}</span>
@@ -206,7 +223,7 @@ const columns: ColumnDef<MissionRow>[] = [
   {
     accessorKey: "status",
     header: "État",
-    cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    cell: ({ row }) => <StatusBadge mission={row.original} />,
   },
   {
     accessorKey: "updatedAt",
@@ -575,7 +592,7 @@ export function MissionsDataTable({ rows }: { rows: MissionRow[] }) {
  */
 function MissionCellViewer({ mission }: { mission: MissionRow }) {
   const isMobile = useIsMobile();
-  const status = RUN_STATUS[mission.status];
+  const status = dashboardMissionStatusStyle(mission);
 
   return (
     <Drawer direction={isMobile ? "bottom" : "right"}>
@@ -596,7 +613,7 @@ function MissionCellViewer({ mission }: { mission: MissionRow }) {
 
         <div className="flex flex-col gap-4 overflow-y-auto px-4 text-sm">
           <div className="flex items-center gap-2">
-            <StatusBadge status={mission.status} />
+            <StatusBadge mission={mission} />
             <span className="text-muted-foreground">
               {status.terminal ? "Exécution terminée" : "Exécution en cours"}
             </span>

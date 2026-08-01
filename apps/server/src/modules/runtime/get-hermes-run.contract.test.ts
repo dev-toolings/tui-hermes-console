@@ -10,14 +10,20 @@ describe("getHermesRun contract", () => {
   test("spike fixture exposes status/output/usage", () => {
     const fixture = JSON.parse(
       readFileSync(
-        join(process.cwd(), "../../spike/fixtures/run-status.json"),
+        // `bun run --filter server test` keeps the workspace root as cwd.
+        // The fixture belongs to this package, independently of the caller.
+        join(import.meta.dir, "../../../../../spike/fixtures/run-status.json"),
         "utf8",
       ),
     ) as {
       body: {
         status: string;
         output: string;
-        usage: { input_tokens: number; output_tokens: number; total_tokens: number };
+        usage: {
+          input_tokens: number;
+          output_tokens: number;
+          total_tokens: number;
+        };
       };
     };
 

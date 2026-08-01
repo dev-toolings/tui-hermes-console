@@ -105,9 +105,13 @@ export function useRuntimeStatus() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    const timeout = window.setTimeout(() => void refresh(), 0);
     const onRefresh = () => void refresh(true);
-    return subscribeRuntimePublic(onRefresh);
+    const unsubscribe = subscribeRuntimePublic(onRefresh);
+    return () => {
+      window.clearTimeout(timeout);
+      unsubscribe();
+    };
   }, [refresh]);
 
   return { ...toView(runtime, loading), refresh: () => refresh(true), runtime };

@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
 import { connectors, type ConnectorTestStatus, type ConnectorType } from "@/db/schema";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { ImapTestError, testImapLogin } from "./imap-test";
 import { CONNECTOR_PRESETS, type ConnectorPublicDto } from "@console/core/modules/connectors/types";
+import type { SiteRequestContext } from "@/modules/auth/service";
+import { auditScopedMiss } from "@/modules/auth/site-access";
 
 export class ConnectorRepositoryError extends Error {
   constructor(
@@ -20,22 +22,22 @@ export function isConnectorType(value: string): value is ConnectorType {
   return value === "gmail_imap" || value === "outlook_imap" || value === "pro_imap";
 }
 
-export async function listConnectors(): Promise<ConnectorPublicDto[]> {
-  const rows = await getDatabase().select().from(connectors);
+export async function listConnectors(context: SiteRequestContext): Promise<ConnectorPublicDto[]> {
+  const rows = await getDatabase().select().from(connectors).where(eq(connectors.siteId, context.siteId));
   return rows.map(toPublicDto);
 }
 
-export async function getConnector(type: ConnectorType): Promise<ConnectorPublicDto | null> {
-  const [row] = await getDatabase().select().from(connectors).where(eq(connectors.type, type)).limit(1);
+export async function getConnector(context: SiteRequestContext, type: ConnectorType): Promise<ConnectorPublicDto | null> {
+  const [row] = await getDatabase().select().from(connectors).where(and(eq(connectors.siteId, context.siteId), eq(connectors.type, type))).limit(1);
   return row ? toPublicDto(row) : null;
 }
 
-export async function isConnectorConfigured(type: ConnectorType): Promise<boolean> {
-  const connector = await getConnector(type);
+export async function isConnectorConfigured(context: SiteRequestContext, type: ConnectorType): Promise<boolean> {
+  const connector = await getConnector(context, type);
   return Boolean(connector?.passwordConfigured);
 }
 
-export async function saveConnector(input: {
+export async function saveConnector(context: SiteRequestContext, input: {
   type: ConnectorType;
   label?: string;
   email: string;
@@ -46,7 +48,7 @@ export async function saveConnector(input: {
   const preset = CONNECTOR_PRESETS[input.type];
   const db = getDatabase();
   const now = new Date();
-  const [existing] = await db.select().from(connectors).where(eq(connectors.type, input.type)).limit(1);
+  const [existing] = await db.select().from(connectors).where(and(eq(connectors.siteId, context.siteId), eq(connectors.type, input.type))).limit(1);
 
   const imapHost = input.imapHost?.trim() || preset.imapHost;
   if (!imapHost) {
@@ -73,8 +75,8 @@ export async function saveConnector(input: {
           ? { encryptedPassword: encryptSecret(input.password.trim()) }
           : {}),
       })
-      .where(eq(connectors.id, existing.id));
-    return (await getConnector(input.type))!;
+      .where(and(eq(connectors.siteId, context.siteId), eq(connectors.id, existing.id)));
+    return (await getConnector(context, input.type))!;
   }
 
   if (!input.password?.trim()) {
@@ -87,6 +89,7 @@ export async function saveConnector(input: {
   const id = `conn_${randomUUID().replaceAll("-", "")}`;
   await db.insert(connectors).values({
     id,
+    siteId: context.siteId,
     type: input.type,
     ...values,
     encryptedPassword: encryptSecret(input.password.trim()),
@@ -94,22 +97,24 @@ export async function saveConnector(input: {
     createdAt: now,
   });
 
-  return (await getConnector(input.type))!;
+  return (await getConnector(context, input.type))!;
 }
 
-export async function deleteConnector(type: ConnectorType): Promise<void> {
+export async function deleteConnector(context: SiteRequestContext, type: ConnectorType): Promise<void> {
   const db = getDatabase();
-  const [existing] = await db.select({ id: connectors.id }).from(connectors).where(eq(connectors.type, type)).limit(1);
+  const [existing] = await db.select({ id: connectors.id }).from(connectors).where(and(eq(connectors.siteId, context.siteId), eq(connectors.type, type))).limit(1);
   if (!existing) {
+    await auditScopedMiss(context, { action: "connector.delete", resourceType: "connector", resourceId: type });
     throw new ConnectorRepositoryError("CONNECTOR_NOT_FOUND", "Connecteur introuvable.");
   }
-  await db.delete(connectors).where(eq(connectors.id, existing.id));
+  await db.delete(connectors).where(and(eq(connectors.siteId, context.siteId), eq(connectors.id, existing.id)));
 }
 
-export async function testConnector(type: ConnectorType): Promise<ConnectorPublicDto> {
+export async function testConnector(context: SiteRequestContext, type: ConnectorType): Promise<ConnectorPublicDto> {
   const db = getDatabase();
-  const [row] = await db.select().from(connectors).where(eq(connectors.type, type)).limit(1);
+  const [row] = await db.select().from(connectors).where(and(eq(connectors.siteId, context.siteId), eq(connectors.type, type))).limit(1);
   if (!row) {
+    await auditScopedMiss(context, { action: "connector.test", resourceType: "connector", resourceId: type });
     throw new ConnectorRepositoryError("CONNECTOR_NOT_FOUND", "Connecteur introuvable.");
   }
 
@@ -130,7 +135,7 @@ export async function testConnector(type: ConnectorType): Promise<ConnectorPubli
       await db
         .update(connectors)
         .set({ lastTestStatus: status, lastTestedAt: now, updatedAt: now })
-        .where(eq(connectors.id, row.id));
+        .where(and(eq(connectors.siteId, context.siteId), eq(connectors.id, row.id)));
       throw error;
     }
     throw error;
@@ -139,9 +144,9 @@ export async function testConnector(type: ConnectorType): Promise<ConnectorPubli
   await db
     .update(connectors)
     .set({ lastTestStatus: status, lastTestedAt: now, updatedAt: now })
-    .where(eq(connectors.id, row.id));
+    .where(and(eq(connectors.siteId, context.siteId), eq(connectors.id, row.id)));
 
-  return (await getConnector(type))!;
+  return (await getConnector(context, type))!;
 }
 
 function toPublicDto(row: typeof connectors.$inferSelect): ConnectorPublicDto {

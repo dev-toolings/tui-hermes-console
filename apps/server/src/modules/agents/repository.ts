@@ -4,6 +4,8 @@ import { getDatabase } from "@/db/client";
 import { agents, runs, threads } from "@/db/schema";
 import { resolveHermesRuntimeConfig } from "@/modules/runtime/config";
 import { deleteHermesSession, HermesRuntimeError } from "@/modules/runtime/hermes-adapter";
+import type { SiteRequestContext } from "@/modules/auth/service";
+import { auditScopedMiss } from "@/modules/auth/site-access";
 
 export class AgentRepositoryError extends Error {
   constructor(
@@ -18,26 +20,27 @@ export class AgentRepositoryError extends Error {
 export type { AgentDto } from "@console/core/types/api";
 import type { AgentDto } from "@console/core/types/api";
 
-export async function listAgents(options?: { includeArchived?: boolean }): Promise<AgentDto[]> {
+export async function listAgents(context: SiteRequestContext, options?: { includeArchived?: boolean }): Promise<AgentDto[]> {
   const query = getDatabase().select().from(agents);
   const rows = await (
     options?.includeArchived
-      ? query.orderBy(desc(agents.updatedAt))
-      : query.where(isNull(agents.archivedAt)).orderBy(desc(agents.updatedAt))
+      ? query.where(eq(agents.siteId, context.siteId)).orderBy(desc(agents.updatedAt))
+      : query.where(and(eq(agents.siteId, context.siteId), isNull(agents.archivedAt))).orderBy(desc(agents.updatedAt))
   );
 
   return Promise.all(rows.map(toAgentDto));
 }
 
-export async function getAgent(agentId: string): Promise<AgentDto> {
-  const [row] = await getDatabase().select().from(agents).where(eq(agents.id, agentId)).limit(1);
+export async function getAgent(context: SiteRequestContext, agentId: string): Promise<AgentDto> {
+  const [row] = await getDatabase().select().from(agents).where(and(eq(agents.siteId, context.siteId), eq(agents.id, agentId))).limit(1);
   if (!row) {
+    await auditScopedMiss(context, { action: "agent.read", resourceType: "agent", resourceId: agentId });
     throw new AgentRepositoryError("AGENT_NOT_FOUND", "Agent introuvable.");
   }
   return toAgentDto(row);
 }
 
-export async function createAgent(input: {
+export async function createAgent(context: SiteRequestContext, input: {
   name: string;
   description?: string | null;
   instructions: string;
@@ -48,10 +51,11 @@ export async function createAgent(input: {
   const db = getDatabase();
   const now = new Date();
   const id = makeId("agent");
-  const slug = await uniqueSlug(slugify(input.name));
+  const slug = await uniqueSlug(context.siteId, slugify(input.name));
 
   await db.insert(agents).values({
     id,
+    siteId: context.siteId,
     name: input.name,
     slug,
     description: input.description?.trim() || null,
@@ -63,10 +67,11 @@ export async function createAgent(input: {
     updatedAt: now,
   });
 
-  return getAgent(id);
+  return getAgent(context, id);
 }
 
 export async function updateAgent(
+  context: SiteRequestContext,
   agentId: string,
   input: {
     name?: string;
@@ -79,8 +84,9 @@ export async function updateAgent(
   },
 ): Promise<AgentDto> {
   const db = getDatabase();
-  const [existing] = await db.select().from(agents).where(eq(agents.id, agentId)).limit(1);
+  const [existing] = await db.select().from(agents).where(and(eq(agents.siteId, context.siteId), eq(agents.id, agentId))).limit(1);
   if (!existing) {
+    await auditScopedMiss(context, { action: "agent.update", resourceType: "agent", resourceId: agentId });
     throw new AgentRepositoryError("AGENT_NOT_FOUND", "Agent introuvable.");
   }
 
@@ -88,7 +94,7 @@ export async function updateAgent(
   const name = input.name?.trim() ?? existing.name;
   let slug = existing.slug;
   if (input.name && input.name.trim() !== existing.name) {
-    slug = await uniqueSlug(slugify(name), agentId);
+    slug = await uniqueSlug(context.siteId, slugify(name), agentId);
   }
 
   await db
@@ -112,13 +118,13 @@ export async function updateAgent(
       archivedAt: input.archive === true ? now : input.archive === false ? null : existing.archivedAt,
       updatedAt: now,
     })
-    .where(eq(agents.id, agentId));
+    .where(and(eq(agents.siteId, context.siteId), eq(agents.id, agentId)));
 
-  return getAgent(agentId);
+  return getAgent(context, agentId);
 }
 
-export async function requireActiveAgent(agentId: string) {
-  const agent = await getAgent(agentId);
+export async function requireActiveAgent(context: SiteRequestContext, agentId: string) {
+  const agent = await getAgent(context, agentId);
   if (agent.archivedAt) {
     throw new AgentRepositoryError("AGENT_ARCHIVED", "Cet agent est archivé.");
   }
@@ -129,7 +135,7 @@ export async function requireActiveAgent(agentId: string) {
  * Résout une référence d'agent saisie à la main — `/agent switch <ref>` ou une
  * mention `@ref`. Cherche par id, puis slug, puis nom, parmi les agents actifs.
  */
-export async function resolveActiveAgentRef(target: string): Promise<AgentDto> {
+export async function resolveActiveAgentRef(context: SiteRequestContext, target: string): Promise<AgentDto> {
   const db = getDatabase();
   const normalized = target.trim();
 
@@ -144,17 +150,18 @@ export async function resolveActiveAgentRef(target: string): Promise<AgentDto> {
           eq(agents.slug, normalized.toLowerCase()),
           eq(agents.name, normalized),
         ),
+        eq(agents.siteId, context.siteId),
         isNull(agents.archivedAt),
       ),
     )
     .limit(1);
 
-  if (match) return requireActiveAgent(match.id);
+  if (match) return requireActiveAgent(context, match.id);
 
   const available = await db
     .select({ slug: agents.slug })
     .from(agents)
-    .where(isNull(agents.archivedAt))
+    .where(and(eq(agents.siteId, context.siteId), isNull(agents.archivedAt)))
     .orderBy(desc(agents.updatedAt))
     .limit(10);
 
@@ -168,10 +175,23 @@ export async function resolveActiveAgentRef(target: string): Promise<AgentDto> {
   );
 }
 
-export async function deleteAgent(agentId: string): Promise<void> {
+type DeleteAgentDependencies = {
+  resolveRuntime: typeof resolveHermesRuntimeConfig;
+  deleteSession: typeof deleteHermesSession;
+};
+
+export async function deleteAgent(
+  context: SiteRequestContext,
+  agentId: string,
+  dependencies: DeleteAgentDependencies = {
+    resolveRuntime: resolveHermesRuntimeConfig,
+    deleteSession: deleteHermesSession,
+  },
+): Promise<void> {
   const db = getDatabase();
-  const [existing] = await db.select({ id: agents.id }).from(agents).where(eq(agents.id, agentId)).limit(1);
+  const [existing] = await db.select({ id: agents.id }).from(agents).where(and(eq(agents.siteId, context.siteId), eq(agents.id, agentId))).limit(1);
   if (!existing) {
+    await auditScopedMiss(context, { action: "agent.delete", resourceType: "agent", resourceId: agentId });
     throw new AgentRepositoryError("AGENT_NOT_FOUND", "Agent introuvable.");
   }
 
@@ -179,15 +199,15 @@ export async function deleteAgent(agentId: string): Promise<void> {
     .selectDistinct({ id: runs.hermesResponseId })
     .from(runs)
     .innerJoin(threads, eq(runs.threadId, threads.id))
-    .where(and(eq(threads.agentId, agentId), isNotNull(runs.hermesResponseId)));
+    .where(and(eq(threads.siteId, context.siteId), eq(runs.siteId, context.siteId), eq(threads.agentId, agentId), isNotNull(runs.hermesResponseId)));
 
   try {
-    const runtime = await resolveHermesRuntimeConfig();
+    const runtime = await dependencies.resolveRuntime();
     await Promise.all(
       sessionRows.map(async (row) => {
         if (!row.id) return;
         try {
-          await deleteHermesSession(runtime, row.id);
+          await dependencies.deleteSession(runtime, row.id);
         } catch (error) {
           if (error instanceof HermesRuntimeError && error.status === 404) return;
           console.warn("Hermes session cleanup skipped", { sessionId: row.id, error });
@@ -199,7 +219,7 @@ export async function deleteAgent(agentId: string): Promise<void> {
     console.warn("Hermes unreachable during agent deletion", error);
   }
 
-  await db.delete(agents).where(eq(agents.id, agentId));
+  await db.delete(agents).where(and(eq(agents.siteId, context.siteId), eq(agents.id, agentId)));
 }
 
 async function toAgentDto(row: typeof agents.$inferSelect): Promise<AgentDto> {
@@ -210,10 +230,11 @@ async function toAgentDto(row: typeof agents.$inferSelect): Promise<AgentDto> {
       lastRunAt: sql<Date | null>`max(${threads.updatedAt})`,
     })
     .from(threads)
-    .where(and(eq(threads.agentId, row.id), eq(threads.source, "mission")));
+    .where(and(eq(threads.siteId, row.siteId), eq(threads.agentId, row.id), eq(threads.source, "mission")));
 
   return {
     id: row.id,
+    projectId: row.projectId,
     name: row.name,
     slug: row.slug,
     description: row.description,
@@ -229,7 +250,7 @@ async function toAgentDto(row: typeof agents.$inferSelect): Promise<AgentDto> {
   };
 }
 
-async function uniqueSlug(base: string, excludeId?: string) {
+async function uniqueSlug(siteId: string, base: string, excludeId?: string) {
   const db = getDatabase();
   let candidate = base || "agent";
   let attempt = 0;
@@ -237,7 +258,7 @@ async function uniqueSlug(base: string, excludeId?: string) {
     const [existing] = await db
       .select({ id: agents.id })
       .from(agents)
-      .where(excludeId ? and(eq(agents.slug, candidate), ne(agents.id, excludeId)) : eq(agents.slug, candidate))
+      .where(excludeId ? and(eq(agents.siteId, siteId), eq(agents.slug, candidate), ne(agents.id, excludeId)) : and(eq(agents.siteId, siteId), eq(agents.slug, candidate)))
       .limit(1);
     if (!existing) return candidate;
     attempt += 1;

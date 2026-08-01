@@ -14,10 +14,13 @@ import { CSS } from "@dnd-kit/utilities";
 import { ClockIcon } from "lucide-react";
 import { Link } from "@/lib/router";
 import { cn } from "@/lib/cn";
-import { RUN_STATUS, formatTokens } from "@console/core/lib/run-status";
+import {
+  formatTokens,
+  isArtifactDeliveryFailure,
+} from "@console/core/lib/run-status";
 import { LANE_BY_ID, type LaneId } from "./kanban-columns";
 import { StatusIcon } from "./status-icon";
-import { formatWhen, type MissionRow } from "./mission-row";
+import { formatWhen, missionStatusStyle, type MissionRow } from "./mission-row";
 
 /** Le corps visuel, partagé par la carte triable et le fantôme du DragOverlay. */
 export const MissionCardContent = memo(function MissionCardContent({
@@ -28,11 +31,12 @@ export const MissionCardContent = memo(function MissionCardContent({
   lane: LaneId;
 }) {
   const config = LANE_BY_ID.get(lane)!;
-  const status = RUN_STATUS[row.status];
+  const status = missionStatusStyle(row);
   // La colonne dit déjà l'état ; on ne le répète sur la carte que là où deux
   // statuts partagent une voie — « en attente » vs « démarrage », « échec »
   // vs « annulée ».
-  const showStatusChip = config.statuses.length > 1;
+  const showStatusChip =
+    config.statuses.length > 1 || isArtifactDeliveryFailure(row.error);
 
   return (
     <div className="rounded-lg border-[0.5px] border-border bg-card px-2.5 py-3 shadow-[var(--shadow-elevated)] transition-colors group-hover/card:border-foreground/15 group-hover/card:bg-surface-hover dark:bg-surface">

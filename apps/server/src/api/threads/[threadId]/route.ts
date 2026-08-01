@@ -4,14 +4,19 @@ import { deleteThread } from "@/modules/runs/delete-thread";
 import { getThreadSnapshot } from "@/modules/runs/repository";
 import { resolveHermesRuntimeConfig } from "@/modules/runtime/config";
 import { getHermesSession } from "@/modules/runtime/hermes-adapter";
+import type { AuthenticatedRouteContext } from "@/modules/api/route-context";
+import { z } from "zod";
+
+const threadIdSchema = z.string().trim().min(1).max(200);
 
 export async function GET(
   _request: Request,
-  context: { params: Promise<{ threadId: string }> },
+  context: AuthenticatedRouteContext<{ threadId: string }>,
 ) {
   try {
-    const { threadId } = await context.params;
-    const thread = await getThreadSnapshot(threadId);
+    const { threadId: rawThreadId } = await context.params;
+    const threadId = threadIdSchema.parse(rawThreadId);
+    const thread = await getThreadSnapshot(context.siteContext, threadId);
     if (!thread) {
       return Response.json(
         { error: { code: "THREAD_NOT_FOUND", message: "Conversation introuvable." } },
@@ -35,7 +40,7 @@ export async function GET(
 
     return Response.json({
       thread,
-      connectorGaps: await getSessionConnectorGaps(threadId),
+      connectorGaps: await getSessionConnectorGaps(context.siteContext, threadId),
     });
   } catch (error) {
     return apiErrorResponse(error);
@@ -44,11 +49,13 @@ export async function GET(
 
 export async function DELETE(
   _request: Request,
-  context: { params: Promise<{ threadId: string }> },
+  context: AuthenticatedRouteContext<{ threadId: string }>,
+  dependencies: { delete: typeof deleteThread } = { delete: deleteThread },
 ) {
   try {
-    const { threadId } = await context.params;
-    const result = await deleteThread(threadId);
+    const { threadId: rawThreadId } = await context.params;
+    const threadId = threadIdSchema.parse(rawThreadId);
+    const result = await dependencies.delete(context.siteContext, threadId);
     return Response.json({ deleted: true, ...result });
   } catch (error) {
     return apiErrorResponse(error);

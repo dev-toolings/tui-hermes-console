@@ -8,7 +8,11 @@
  * dernier run n'ont pas le même identifiant, les confondre casserait la
  * mutation en silence.
  */
-import { formatDuration, type RunStatus } from "@console/core/lib/run-status";
+import {
+  formatDuration,
+  runStatusStyle,
+  type RunStatus,
+} from "@console/core/lib/run-status";
 import type { ThreadListItemDto } from "@console/core/modules/runs/types";
 
 export type MissionRow = {
@@ -19,6 +23,7 @@ export type MissionRow = {
   title: string;
   agent: string;
   status: RunStatus;
+  error: string | null;
   /** ISO, pour trier. Le libellé se calcule à l'affichage. */
   updatedAt: string;
   duration: string;
@@ -50,6 +55,7 @@ export function toMissionRows(threads: ThreadListItemDto[]): MissionRow[] {
     title: thread.title,
     agent: thread.agentName,
     status: (thread.latestRun?.status ?? "pending") as RunStatus,
+    error: thread.latestRun?.error ?? null,
     updatedAt: thread.updatedAt,
     duration: runDuration(
       thread.latestRun?.startedAt ?? null,
@@ -57,4 +63,8 @@ export function toMissionRows(threads: ThreadListItemDto[]): MissionRow[] {
     ),
     tokens: thread.latestRun?.usage?.totalTokens ?? null,
   }));
+}
+
+export function missionStatusStyle(row: Pick<MissionRow, "status" | "error">) {
+  return runStatusStyle(row.status, row.error);
 }

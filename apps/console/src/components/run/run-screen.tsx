@@ -5,9 +5,17 @@ import { useRouter } from "@/lib/router";
 import { RunChatShell } from "./run-chat-shell";
 import { useLiveThread } from "./use-live-thread";
 import { useRunReplay } from "./use-run-replay";
-import { RUN_STATUS } from "@console/core/lib/run-status";
+import {
+  artifactDeliveryFailureMessage,
+  RUN_STATUS,
+  runStatusStyle,
+} from "@console/core/lib/run-status";
 import { formatInactivityLabel } from "@/lib/inactivity";
-import { buildRunExecutionDetails, displayRunHeaderModel } from "@/lib/run-execution-details";
+import {
+  buildRunDeliveryNotice,
+  buildRunExecutionDetails,
+  displayRunHeaderModel,
+} from "@/lib/run-execution-details";
 import { cn } from "@/lib/cn";
 import { ApprovalCard } from "./approval-card";
 import { ConnectorGapBanner } from "./connector-gap-banner";
@@ -29,7 +37,6 @@ export function RunScreen({
 }
 
 function FixtureRunScreen({
-  runId,
   surface = "mission",
 }: {
   runId: string;
@@ -147,6 +154,7 @@ function LiveThreadScreen({
   }
 
   const canRetry = Boolean(latestRun && RUN_STATUS[latestRun.status]?.terminal);
+  const deliveryNotice = buildRunDeliveryNotice(latestRun);
 
   return (
     <RunChatShell
@@ -164,6 +172,7 @@ function LiveThreadScreen({
         latestRun ? (
           <RunStatusTrailing
             status={latestRun.status}
+            error={latestRun.error}
             lastEventAt={
               isRunning && latestRun.status !== "awaiting_approval"
                 ? latestRun.lastEventAt
@@ -177,6 +186,17 @@ function LiveThreadScreen({
       alerts={
         <>
           <ConnectorGapBanner gaps={connectorGaps} />
+          {deliveryNotice ? (
+            <div
+              role="alert"
+              className="shrink-0 border-b border-destructive/25 bg-neg-100 px-4 py-3 text-sm text-neg-700"
+            >
+              <strong className="font-semibold">
+                {deliveryNotice.title}
+              </strong>{" "}
+              {deliveryNotice.message}
+            </div>
+          ) : null}
           {error ? (
             <div
               role="alert"
@@ -212,7 +232,10 @@ function LiveThreadScreen({
             sizeBytes: item.sizeBytes,
             downloadUrl: `/api/files/${encodeURIComponent(item.id)}`,
           })),
-        error: latestRun?.error ?? null,
+        error:
+          artifactDeliveryFailureMessage(latestRun?.error) ??
+          latestRun?.error ??
+          null,
       }}
       streamProps={{
         messages,
@@ -241,13 +264,15 @@ function RunStatusTrailing({
   actionLabel,
   onAction,
   lastEventAt,
+  error,
 }: {
   status: keyof typeof RUN_STATUS;
   actionLabel?: string;
   onAction?: () => void | Promise<void>;
   lastEventAt?: string | null;
+  error?: string | null;
 }) {
-  const style = RUN_STATUS[status] ?? RUN_STATUS.pending;
+  const style = runStatusStyle(status, error);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {

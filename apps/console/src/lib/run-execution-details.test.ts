@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   actualRunModel,
+  buildRunDeliveryNotice,
   buildRunExecutionDetails,
   displayRunHeaderModel,
   resolvedConsoleModel,
   threadContextModel,
   threadTotalTokens,
 } from "./run-execution-details";
+import { ARTIFACT_DELIVERY_ERROR_PREFIX } from "@console/core/lib/run-status";
 import type { RunDto, ThreadSnapshot } from "@console/core/modules/runs/types";
 
 const snapshot = {
@@ -46,6 +48,21 @@ describe("run-execution-details", () => {
     const details = buildRunExecutionDetails(snapshot, run);
     expect(details.activeModel).toBe("openai-api / gpt-5.6-luna");
     expect(details.activeLabel).toBe("LLM actif");
+  });
+
+  test("builds an explicit delivery notice without changing runtime completion", () => {
+    const notice = buildRunDeliveryNotice({
+      status: "completed",
+      error:
+        `${ARTIFACT_DELIVERY_ERROR_PREFIX}Mission run_1 : Hermes a terminé, ` +
+        "mais la livraison a échoué.",
+    });
+    expect(notice).toEqual({
+      title: "Exécution terminée, livraison des fichiers non aboutie.",
+      message:
+        "Mission run_1 : Hermes a terminé, mais la livraison a échoué.",
+    });
+    expect(buildRunDeliveryNotice({ status: "completed", error: null })).toBeNull();
   });
 });
 

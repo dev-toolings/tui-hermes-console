@@ -129,9 +129,8 @@ Parcours : `/agents/new` → `/runs/new` → `/runs/thr_*` → composer (± piè
 | [`docs/SPIKE-REPORT.md`](docs/SPIKE-REPORT.md) | Rapport Phase 0 : mesures runtime |
 | `spike/` | Sonde v0 + faux LLM + fixtures |
 
-> Le PRD décrit encore la Console comme une application Next.js unique : sa
-> section « Stack » et son arborescence sont antérieures au retrait de Next.
-> `docs/DESKTOP.md` fait foi sur l'architecture.
+> Le PRD et `docs/DESKTOP.md` décrivent l'architecture exécutée : SPA Vite/React,
+> serveur Hono/Bun et client Tauri.
 
 ## Le spike en bref
 

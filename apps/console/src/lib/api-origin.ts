@@ -54,13 +54,23 @@ export function apiUrl(path: string): string {
  * passer par `apiUrl()`.
  */
 export function installApiOrigin(): void {
-  if (!apiOrigin) return;
-
   const inner = globalThis.fetch;
-  const rewrite = (input: RequestInfo | URL, init?: RequestInit) =>
-    typeof input === "string" && input.startsWith(API_PREFIX)
-      ? inner(apiUrl(input), init)
-      : inner(input, init);
+  const csrfToken = () =>
+    document.cookie
+      .split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith("hc_csrf="))
+      ?.slice("hc_csrf=".length);
+  const rewrite = (input: RequestInfo | URL, init?: RequestInit) => {
+    if (typeof input !== "string" || !input.startsWith(API_PREFIX)) return inner(input, init);
+    const method = (init?.method ?? "GET").toUpperCase();
+    const headers = new Headers(init?.headers);
+    if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+      const token = csrfToken();
+      if (token) headers.set("x-csrf-token", decodeURIComponent(token));
+    }
+    return inner(apiUrl(input), { ...init, headers, credentials: "include" });
+  };
 
   // `fetch` porte des propriétés selon l'environnement (`preconnect` sous Bun) :
   // les recopier garde le remplaçant substituable au vrai `fetch`.

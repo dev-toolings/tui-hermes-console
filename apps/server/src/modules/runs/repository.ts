@@ -23,10 +23,21 @@ import type {
   ThreadMessageDto,
   ThreadSnapshot,
 } from "@console/core/modules/runs/types";
+import { ARTIFACT_DELIVERY_ERROR_PREFIX } from "@console/core/lib/run-status";
 import { resolveEffectiveInference } from "@/modules/runtime/resolve-effective-model";
 import { ensureRunWorkdirs, runInputDir } from "@/modules/artifacts/paths";
-import { listArtifactsForRun, scanOutputArtifacts } from "@/modules/artifacts/repository";
-import { pullRunOutputs } from "@/modules/artifacts/remote-sync";
+import { runArtifactDir, runWorkdirPath } from "@/modules/artifacts/paths";
+import { rm } from "node:fs/promises";
+import {
+  listArtifactsForRun,
+  scanOutputArtifacts,
+} from "@/modules/artifacts/repository";
+import {
+  pullRunOutputs,
+  RemoteSyncError,
+} from "@/modules/artifacts/remote-sync";
+import type { SiteRequestContext, SiteScope } from "@/modules/auth/service";
+import { auditScopedMiss } from "@/modules/auth/site-access";
 
 const ACTIVE_STATUSES: ProductRunStatus[] = [
   "pending",
@@ -34,7 +45,11 @@ const ACTIVE_STATUSES: ProductRunStatus[] = [
   "running",
   "awaiting_approval",
 ];
-const TERMINAL_STATUSES: ProductRunStatus[] = ["completed", "failed", "cancelled"];
+const TERMINAL_STATUSES: ProductRunStatus[] = [
+  "completed",
+  "failed",
+  "cancelled",
+];
 
 export class ProductRepositoryError extends Error {
   constructor(
@@ -52,7 +67,7 @@ export class ProductRepositoryError extends Error {
   }
 }
 
-export async function createThreadWithRun(input: {
+export async function createThreadWithRun(context: SiteRequestContext, input: {
   source: ThreadSource;
   agentId?: string | null;
   agentName: string;
@@ -61,6 +76,7 @@ export async function createThreadWithRun(input: {
   model: string;
   reasoningEffort?: string | null;
   message: string;
+  projectId?: string | null;
 }) {
   // Un agent ne s'attache qu'à une mission : `/chat` reste du chat libre, et on
   // n'y accède à un agent que par une mention `@`, qui crée sa propre mission.
@@ -80,6 +96,8 @@ export async function createThreadWithRun(input: {
   await db.transaction(async (tx) => {
     await tx.insert(threads).values({
       id: threadId,
+      siteId: context.siteId,
+      projectId: input.projectId ?? null,
       title: makeTitle(input.message),
       source: input.source,
       agentId: input.agentId ?? null,
@@ -94,6 +112,8 @@ export async function createThreadWithRun(input: {
     });
     await tx.insert(runs).values({
       id: runId,
+      siteId: context.siteId,
+      projectId: input.projectId ?? null,
       threadId,
       input: input.message,
       status: "pending",
@@ -110,12 +130,12 @@ export async function createThreadWithRun(input: {
   });
 
   const workdir = await ensureRunWorkdirs(runId);
-  await getDatabase().update(runs).set({ workdir }).where(eq(runs.id, runId));
+  await getDatabase().update(runs).set({ workdir }).where(and(eq(runs.siteId, context.siteId), eq(runs.id, runId)));
 
-  return { threadId, runId };
+  return { siteId: context.siteId, threadId, runId };
 }
 
-export async function createRunForThread(threadId: string, input: string) {
+export async function createRunForThread(context: SiteRequestContext, threadId: string, input: string) {
   const db = getDatabase();
   const runId = makeId("run");
   const now = new Date();
@@ -125,18 +145,24 @@ export async function createRunForThread(threadId: string, input: string) {
     // Sans ce verrou, deux POST simultanés lisent tous les deux « aucun run
     // actif » (READ COMMITTED) et démarrent deux missions sur le même fil.
     const [thread] = await tx
-      .select({ id: threads.id })
+      .select({ id: threads.id, projectId: threads.projectId })
       .from(threads)
-      .where(eq(threads.id, threadId))
+      .where(and(eq(threads.siteId, context.siteId), eq(threads.id, threadId)))
       .for("update");
     if (!thread) {
-      throw new ProductRepositoryError("THREAD_NOT_FOUND", "Conversation introuvable.");
+      await auditScopedMiss(context, { action: "thread.run.create", resourceType: "thread", resourceId: threadId });
+      throw new ProductRepositoryError(
+        "THREAD_NOT_FOUND",
+        "Conversation introuvable.",
+      );
     }
 
     const [active] = await tx
       .select({ id: runs.id })
       .from(runs)
-      .where(and(eq(runs.threadId, threadId), inArray(runs.status, ACTIVE_STATUSES)))
+      .where(
+        and(eq(runs.siteId, context.siteId), eq(runs.threadId, threadId), inArray(runs.status, ACTIVE_STATUSES)),
+      )
       .limit(1);
     if (active) {
       throw new ProductRepositoryError(
@@ -147,6 +173,8 @@ export async function createRunForThread(threadId: string, input: string) {
 
     await tx.insert(runs).values({
       id: runId,
+      siteId: context.siteId,
+      projectId: thread.projectId,
       threadId,
       input,
       status: "pending",
@@ -160,13 +188,35 @@ export async function createRunForThread(threadId: string, input: string) {
       content: [{ type: "text", text: input }],
       createdAt: now,
     });
-    await tx.update(threads).set({ updatedAt: now }).where(eq(threads.id, threadId));
+    await tx
+      .update(threads)
+      .set({ updatedAt: now })
+      .where(and(eq(threads.siteId, context.siteId), eq(threads.id, threadId)));
   });
 
   const workdir = await ensureRunWorkdirs(runId);
-  await getDatabase().update(runs).set({ workdir }).where(eq(runs.id, runId));
+  await getDatabase().update(runs).set({ workdir }).where(and(eq(runs.siteId, context.siteId), eq(runs.id, runId)));
 
-  return { threadId, runId };
+  return { siteId: context.siteId, threadId, runId };
+}
+
+/** Annule un run créé pour un multipart finalement invalide, avant tout départ
+ * runtime. Les chemins sont recalculés depuis l'id (jamais depuis la DB). */
+export async function discardUnstartedRun(scope: SiteScope, runId: string) {
+  const db = getDatabase();
+  const [run] = await db
+    .select({ status: runs.status })
+    .from(runs)
+    .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)))
+    .limit(1);
+  if (!run || run.status !== "pending") return;
+  await db
+    .delete(runs)
+    .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId), eq(runs.status, "pending")));
+  await Promise.all([
+    rm(runWorkdirPath(runId), { recursive: true, force: true }),
+    rm(runArtifactDir(runId), { recursive: true, force: true }),
+  ]);
 }
 
 /**
@@ -180,13 +230,19 @@ export async function createRunForThread(threadId: string, input: string) {
  * Le message utilisateur du run courant est exclu : il part déjà comme `input`.
  */
 async function getConversationHistory(
+  scope: SiteScope,
   threadId: string,
   currentRunId: string,
 ): Promise<Array<{ role: string; content: string }>> {
   const rows = await getDatabase()
-    .select({ role: messages.role, content: messages.content, runId: messages.runId })
+    .select({
+      role: messages.role,
+      content: messages.content,
+      runId: messages.runId,
+    })
     .from(messages)
-    .where(eq(messages.threadId, threadId))
+    .innerJoin(threads, eq(messages.threadId, threads.id))
+    .where(and(eq(threads.siteId, scope.siteId), eq(messages.threadId, threadId)))
     .orderBy(asc(messages.createdAt));
 
   const history: Array<{ role: string; content: string }> = [];
@@ -211,15 +267,19 @@ async function getConversationHistory(
  * Les jours sans mission sont émis à zéro : sans eux, une courbe relierait le
  * 12 au 28 comme s'il s'était passé quelque chose entre les deux.
  */
-export async function getRunActivity(days = 30): Promise<RunActivityPoint[]> {
+export async function getRunActivity(scope: SiteScope, days = 30): Promise<RunActivityPoint[]> {
   const since = new Date();
   since.setHours(0, 0, 0, 0);
   since.setDate(since.getDate() - (days - 1));
 
   const rows = await getDatabase()
-    .select({ status: runs.status, usage: runs.usage, createdAt: runs.createdAt })
+    .select({
+      status: runs.status,
+      usage: runs.usage,
+      createdAt: runs.createdAt,
+    })
     .from(runs)
-    .where(gt(runs.createdAt, since))
+    .where(and(eq(runs.siteId, scope.siteId), gt(runs.createdAt, since)))
     .orderBy(asc(runs.createdAt));
 
   const buckets = new Map<string, RunActivityPoint>();
@@ -234,7 +294,8 @@ export async function getRunActivity(days = 30): Promise<RunActivityPoint[]> {
     const bucket = buckets.get(toDayKey(row.createdAt));
     if (!bucket) continue;
     if (row.status === "completed") bucket.completed += 1;
-    if (row.status === "failed" || row.status === "cancelled") bucket.failed += 1;
+    if (row.status === "failed" || row.status === "cancelled")
+      bucket.failed += 1;
     bucket.tokens += row.usage?.totalTokens ?? 0;
   }
 
@@ -248,11 +309,13 @@ function toDayKey(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-export async function getRunContext(runId: string) {
+export async function getRunContext(scope: SiteScope, runId: string) {
   const db = getDatabase();
   const [row] = await db
     .select({
       runId: runs.id,
+      siteId: runs.siteId,
+      projectId: runs.projectId,
       threadId: runs.threadId,
       input: runs.input,
       status: runs.status,
@@ -265,12 +328,13 @@ export async function getRunContext(runId: string) {
     })
     .from(runs)
     .innerJoin(threads, eq(runs.threadId, threads.id))
-    .where(eq(runs.id, runId))
+    .where(and(eq(runs.siteId, scope.siteId), eq(threads.siteId, scope.siteId), eq(runs.id, runId)))
     .limit(1);
 
-  if (!row) throw new ProductRepositoryError("RUN_NOT_FOUND", "Mission introuvable.");
+  if (!row)
+    throw new ProductRepositoryError("RUN_NOT_FOUND", "Mission introuvable.");
 
-  const inference = await resolveEffectiveInference({
+  const inference = await resolveEffectiveInference(scope, {
     threadProvider: row.threadProvider,
     threadModel: row.threadModel,
     threadReasoningEffort: row.threadReasoningEffort,
@@ -278,15 +342,23 @@ export async function getRunContext(runId: string) {
   });
 
   const inputDir = runInputDir(runId);
-  const inputArtifacts = (await listArtifactsForRun(runId, "input")).map((item) => ({
-    filename: item.filename,
-    absolutePath: path.join(inputDir, item.filename),
-  }));
+  const inputArtifacts = (await listArtifactsForRun(scope, runId, "input")).map(
+    (item) => ({
+      filename: item.filename,
+      absolutePath: path.join(inputDir, item.filename),
+    }),
+  );
 
-  const conversationHistory = await getConversationHistory(row.threadId, row.runId);
+  const conversationHistory = await getConversationHistory(
+    scope,
+    row.threadId,
+    row.runId,
+  );
 
   return {
     runId: row.runId,
+    siteId: row.siteId,
+    projectId: row.projectId,
     threadId: row.threadId,
     input: row.input,
     status: row.status,
@@ -300,26 +372,26 @@ export async function getRunContext(runId: string) {
   };
 }
 
-export async function markRunStarted(runId: string) {
+export async function markRunStarted(scope: SiteScope, runId: string) {
   await getDatabase()
     .update(runs)
     .set({ status: "running", startedAt: new Date(), error: null })
-    .where(eq(runs.id, runId));
+    .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)));
 }
 
-export async function markRunStarting(runId: string) {
+export async function markRunStarting(scope: SiteScope, runId: string) {
   await getDatabase()
     .update(runs)
     .set({ status: "starting", error: null })
-    .where(eq(runs.id, runId));
+    .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)));
 }
 
-export async function markRunAwaitingApproval(runId: string) {
+export async function markRunAwaitingApproval(scope: SiteScope, runId: string) {
   const db = getDatabase();
   const [run] = await db
     .select({ status: runs.status })
     .from(runs)
-    .where(eq(runs.id, runId))
+    .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)))
     .limit(1);
   if (!run) return;
   if (TERMINAL_STATUSES.includes(run.status as ProductRunStatus)) return;
@@ -327,26 +399,31 @@ export async function markRunAwaitingApproval(runId: string) {
   await db
     .update(runs)
     .set({ status: "awaiting_approval", error: null, lastEventAt: new Date() })
-    .where(eq(runs.id, runId));
+    .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)));
 }
 
-export async function setHermesResponseId(runId: string, responseId: string) {
-  await getDatabase().update(runs).set({ hermesResponseId: responseId }).where(eq(runs.id, runId));
+export async function setHermesResponseId(scope: SiteScope, runId: string, responseId: string) {
+  await getDatabase()
+    .update(runs)
+    .set({ hermesResponseId: responseId })
+    .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)));
 }
 
 /**
  * Prochaine `sequence` libre pour une mission. A appeler avant de construire un
  * `HermesEventNormalizer` sur un run qui a deja des evenements en base.
  */
-export async function nextRunSequence(runId: string): Promise<number> {
+export async function nextRunSequence(scope: SiteScope, runId: string): Promise<number> {
   const [row] = await getDatabase()
     .select({ max: max(runEvents.sequence) })
     .from(runEvents)
-    .where(eq(runEvents.runId, runId));
+    .innerJoin(runs, eq(runEvents.runId, runs.id))
+    .where(and(eq(runs.siteId, scope.siteId), eq(runEvents.runId, runId)));
   return (row?.max ?? -1) + 1;
 }
 
 export async function appendRunEvents(
+  scope: SiteScope,
   threadId: string,
   runId: string,
   incoming: ProductEventInput[],
@@ -357,6 +434,12 @@ export async function appendRunEvents(
   const lastAt = incoming.at(-1)?.occurredAt ?? new Date();
 
   await db.transaction(async (tx) => {
+    const [ownedRun] = await tx
+      .select({ id: runs.id })
+      .from(runs)
+      .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId), eq(runs.threadId, threadId)))
+      .limit(1);
+    if (!ownedRun) throw new ProductRepositoryError("RUN_NOT_FOUND", "Mission introuvable.");
     for (const event of incoming) {
       const [row] = await tx
         .insert(runEvents)
@@ -373,8 +456,11 @@ export async function appendRunEvents(
     await tx
       .update(runs)
       .set({ lastEventAt: lastAt })
-      .where(eq(runs.id, runId));
-    await tx.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId));
+      .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)));
+    await tx
+      .update(threads)
+      .set({ updatedAt: new Date() })
+      .where(and(eq(threads.siteId, scope.siteId), eq(threads.id, threadId)));
   });
 
   return stored;
@@ -397,6 +483,7 @@ export async function appendRunEvents(
  * Renvoie les événements mis à jour, pour republication vers l'UI live.
  */
 export async function applyToolOutputs(
+  scope: SiteScope,
   runId: string,
   outputs: Array<{ toolName: string | null; content: string }>,
 ): Promise<StoredProductEvent[]> {
@@ -412,11 +499,13 @@ export async function applyToolOutputs(
       occurredAt: runEvents.occurredAt,
     })
     .from(runEvents)
-    .where(eq(runEvents.runId, runId))
+    .innerJoin(runs, eq(runEvents.runId, runs.id))
+    .where(and(eq(runs.siteId, scope.siteId), eq(runEvents.runId, runId)))
     .orderBy(asc(runEvents.sequence));
 
   const results = eventRows.filter(
-    (row) => row.type === "tool.result" && row.payload.hasResultPayload !== true,
+    (row) =>
+      row.type === "tool.result" && row.payload.hasResultPayload !== true,
   );
   if (results.length === 0) return [];
 
@@ -438,7 +527,10 @@ export async function applyToolOutputs(
     if (content === undefined) continue;
 
     const payload = { ...row.payload, hasResultPayload: true, result: content };
-    await db.update(runEvents).set({ payload }).where(eq(runEvents.id, row.cursor));
+    await db
+      .update(runEvents)
+      .set({ payload })
+      .where(eq(runEvents.id, row.cursor));
     updated.push({
       runId,
       cursor: row.cursor,
@@ -456,12 +548,14 @@ export async function applyToolOutputs(
   // sorties que le flux live vient d'afficher.
   const patched = eventRows.map((row) => {
     const match = updated.find((item) => item.cursor === row.cursor);
-    return match ? { type: row.type, payload: match.payload } : { type: row.type, payload: row.payload };
+    return match
+      ? { type: row.type, payload: match.payload }
+      : { type: row.type, payload: row.payload };
   });
   const [run] = await db
     .select({ output: runs.output })
     .from(runs)
-    .where(eq(runs.id, runId))
+    .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)))
     .limit(1);
 
   await db
@@ -473,6 +567,7 @@ export async function applyToolOutputs(
 }
 
 export async function completeRun(
+  scope: SiteScope,
   runId: string,
   output: string,
   usage: Usage | null,
@@ -484,9 +579,10 @@ export async function completeRun(
     const [run] = await tx
       .select({ threadId: runs.threadId, status: runs.status })
       .from(runs)
-      .where(eq(runs.id, runId))
+      .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)))
       .limit(1);
-    if (!run) throw new ProductRepositoryError("RUN_NOT_FOUND", "Mission introuvable.");
+    if (!run)
+      throw new ProductRepositoryError("RUN_NOT_FOUND", "Mission introuvable.");
     if (TERMINAL_STATUSES.includes(run.status as ProductRunStatus)) return;
 
     const eventRows = await tx
@@ -501,7 +597,7 @@ export async function completeRun(
     await tx
       .update(runs)
       .set({ status: "completed", output, usage, endedAt: now })
-      .where(eq(runs.id, runId));
+      .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)));
 
     const [existingAssistant] = await tx
       .select({ id: messages.id })
@@ -520,19 +616,72 @@ export async function completeRun(
       });
     }
 
-    await tx.update(threads).set({ updatedAt: now }).where(eq(threads.id, run.threadId));
+    await tx
+      .update(threads)
+      .set({ updatedAt: now })
+      .where(and(eq(threads.siteId, scope.siteId), eq(threads.id, run.threadId)));
   });
 
-  // Hors transaction : I/O filesystem (rapatriement puis scan out/).
+  // Le runtime a bien terminé. La livraison est une seconde phase : son échec
+  // ne réécrit pas la vérité runtime en `failed`, mais doit rester visible au
+  // lieu d'être absorbé derrière un statut `completed` sans nuance.
+  const delivery = await finalizeRunArtifactDelivery(scope, runId);
+  if (!delivery.ok) {
+    await db
+      .update(runs)
+      .set({ error: delivery.message })
+      .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)));
+    console.error("[hermes-console] artifact delivery failed", {
+      runId,
+      operation: delivery.operation,
+      error: delivery.cause,
+    });
+  }
+}
+
+type ArtifactDeliveryDependencies = {
+  pull(runId: string): Promise<void>;
+  scan(scope: SiteScope, runId: string): Promise<unknown>;
+};
+
+export type ArtifactDeliveryResult =
+  | { ok: true }
+  | {
+      ok: false;
+      operation: string;
+      message: string;
+      cause: unknown;
+    };
+
+export async function finalizeRunArtifactDelivery(
+  scope: SiteScope,
+  runId: string,
+  dependencies: ArtifactDeliveryDependencies = {
+    pull: pullRunOutputs,
+    scan: scanOutputArtifacts,
+  },
+): Promise<ArtifactDeliveryResult> {
   try {
-    await pullRunOutputs(runId);
-    await scanOutputArtifacts(runId);
+    await dependencies.pull(runId);
+    await dependencies.scan(scope, runId);
+    return { ok: true };
   } catch (error) {
-    console.error("[hermes-console] scan outputs failed", runId, error);
+    const operation =
+      error instanceof RemoteSyncError ? error.operation : "scan_outputs";
+    return {
+      ok: false,
+      operation,
+      message:
+        `${ARTIFACT_DELIVERY_ERROR_PREFIX}Mission ${runId} : Hermes a terminé, ` +
+        `mais la livraison des artefacts ` +
+        `a échoué (${operation}). Aucun succès de livraison n’est déclaré.`,
+      cause: error,
+    };
   }
 }
 
 export async function failRun(
+  scope: SiteScope,
   runId: string,
   error: string,
   status: "failed" | "cancelled" = "failed",
@@ -541,19 +690,25 @@ export async function failRun(
   const [run] = await db
     .select({ status: runs.status })
     .from(runs)
-    .where(eq(runs.id, runId))
+    .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)))
     .limit(1);
   if (!run) return;
   if (TERMINAL_STATUSES.includes(run.status as ProductRunStatus)) return;
 
   await db
     .update(runs)
-    .set({ status, error: status === "failed" ? error : null, endedAt: new Date() })
-    .where(eq(runs.id, runId));
+    .set({
+      status,
+      error: status === "failed" ? error : null,
+      endedAt: new Date(),
+    })
+    .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)));
 }
 
 export type ActiveRunRow = {
   id: string;
+  siteId: string;
+  projectId: string | null;
   threadId: string;
   status: ProductRunStatus;
   hermesResponseId: string | null;
@@ -562,23 +717,30 @@ export type ActiveRunRow = {
 
 export type RunCancelTarget = {
   id: string;
+  siteId: string;
+  projectId: string | null;
   threadId: string;
   status: ProductRunStatus;
   hermesResponseId: string | null;
   input: string;
 };
 
-export async function getRunCancelTarget(runId: string): Promise<RunCancelTarget | null> {
+export async function getRunCancelTarget(
+  scope: SiteScope,
+  runId: string,
+): Promise<RunCancelTarget | null> {
   const [row] = await getDatabase()
     .select({
       id: runs.id,
+      siteId: runs.siteId,
+      projectId: runs.projectId,
       threadId: runs.threadId,
       status: runs.status,
       hermesResponseId: runs.hermesResponseId,
       input: runs.input,
     })
     .from(runs)
-    .where(eq(runs.id, runId))
+    .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)))
     .limit(1);
 
   if (!row) return null;
@@ -596,6 +758,8 @@ export async function listNonTerminalRuns(): Promise<ActiveRunRow[]> {
   const rows = await getDatabase()
     .select({
       id: runs.id,
+      siteId: runs.siteId,
+      projectId: runs.projectId,
       threadId: runs.threadId,
       status: runs.status,
       hermesResponseId: runs.hermesResponseId,
@@ -610,14 +774,39 @@ export async function listNonTerminalRuns(): Promise<ActiveRunRow[]> {
   }));
 }
 
-export async function getThreadSnapshot(threadId: string): Promise<ThreadSnapshot | null> {
+export async function getThreadSnapshot(
+  context: SiteRequestContext,
+  threadId: string,
+): Promise<ThreadSnapshot | null> {
   const db = getDatabase();
-  const [thread] = await db.select().from(threads).where(eq(threads.id, threadId)).limit(1);
-  if (!thread) return null;
+  const [thread] = await db
+    .select()
+    .from(threads)
+    .where(and(eq(threads.siteId, context.siteId), eq(threads.id, threadId)))
+    .limit(1);
+  if (!thread) {
+    await auditScopedMiss(context, { action: "thread.read", resourceType: "thread", resourceId: threadId });
+    return null;
+  }
 
   const [messageRows, runRows, eventRows, artifactRows] = await Promise.all([
-    db.select().from(messages).where(eq(messages.threadId, threadId)).orderBy(asc(messages.createdAt)),
-    db.select().from(runs).where(eq(runs.threadId, threadId)).orderBy(asc(runs.createdAt)),
+    db
+      .select({
+        id: messages.id,
+        role: messages.role,
+        content: messages.content,
+        runId: messages.runId,
+        createdAt: messages.createdAt,
+      })
+      .from(messages)
+      .innerJoin(threads, eq(messages.threadId, threads.id))
+      .where(and(eq(threads.siteId, context.siteId), eq(messages.threadId, threadId)))
+      .orderBy(asc(messages.createdAt)),
+    db
+      .select()
+      .from(runs)
+      .where(and(eq(runs.siteId, context.siteId), eq(runs.threadId, threadId)))
+      .orderBy(asc(runs.createdAt)),
     db
       .select({
         cursor: runEvents.id,
@@ -629,7 +818,7 @@ export async function getThreadSnapshot(threadId: string): Promise<ThreadSnapsho
       })
       .from(runEvents)
       .innerJoin(runs, eq(runEvents.runId, runs.id))
-      .where(eq(runs.threadId, threadId))
+      .where(and(eq(runs.siteId, context.siteId), eq(runs.threadId, threadId)))
       .orderBy(asc(runEvents.id)),
     db
       .select({
@@ -644,11 +833,11 @@ export async function getThreadSnapshot(threadId: string): Promise<ThreadSnapsho
       })
       .from(artifacts)
       .innerJoin(runs, eq(artifacts.runId, runs.id))
-      .where(eq(runs.threadId, threadId))
+      .where(and(eq(runs.siteId, context.siteId), eq(runs.threadId, threadId)))
       .orderBy(desc(artifacts.createdAt)),
   ]);
 
-  const inference = await resolveEffectiveInference({
+  const inference = await resolveEffectiveInference(context, {
     threadProvider: thread.provider,
     threadModel: thread.model,
     agentId: thread.agentId,
@@ -666,37 +855,34 @@ export async function getThreadSnapshot(threadId: string): Promise<ThreadSnapsho
     effectiveModel: inference.model,
     createdAt: thread.createdAt.toISOString(),
     updatedAt: thread.updatedAt.toISOString(),
-    messages: messageRows.map(
-      (message): ThreadMessageDto => ({
-        id: message.id,
-        role: message.role === "assistant" ? "assistant" : "user",
-        content: message.content,
-        runId: message.runId,
-        createdAt: message.createdAt.toISOString(),
-      }),
-    ),
+    messages: messageRows.map((message): ThreadMessageDto => ({
+      id: message.id,
+      role: message.role === "assistant" ? "assistant" : "user",
+      content: message.content,
+      runId: message.runId,
+      createdAt: message.createdAt.toISOString(),
+    })),
     runs: runRows.map(toRunDto),
     events: eventRows.map((event) => ({
       ...event,
       type: event.type as StoredProductEvent["type"],
     })),
-    artifacts: artifactRows.map(
-      (row): ArtifactDto => ({
-        id: row.id,
-        runId: row.runId,
-        direction: row.direction,
-        filename: row.filename,
-        mimeType: row.mimeType,
-        sizeBytes: row.sizeBytes,
-        checksumSha256: row.checksumSha256,
-        createdAt: row.createdAt.toISOString(),
-      }),
-    ),
+    artifacts: artifactRows.map((row): ArtifactDto => ({
+      id: row.id,
+      runId: row.runId,
+      direction: row.direction,
+      filename: row.filename,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      checksumSha256: row.checksumSha256,
+      createdAt: row.createdAt.toISOString(),
+    })),
     cursor: eventRows.at(-1)?.cursor ?? 0,
   };
 }
 
 export async function listThreadEventsAfter(
+  scope: SiteScope,
   threadId: string,
   cursor: number,
 ): Promise<StoredProductEvent[]> {
@@ -711,7 +897,7 @@ export async function listThreadEventsAfter(
     })
     .from(runEvents)
     .innerJoin(runs, eq(runEvents.runId, runs.id))
-    .where(and(eq(runs.threadId, threadId), gt(runEvents.id, cursor)))
+    .where(and(eq(runs.siteId, scope.siteId), eq(runs.threadId, threadId), gt(runEvents.id, cursor)))
     .orderBy(asc(runEvents.id));
 
   return rows.map((event) => ({
@@ -720,30 +906,35 @@ export async function listThreadEventsAfter(
   }));
 }
 
-export async function getLatestRun(threadId: string): Promise<RunDto | null> {
+export async function getLatestRun(scope: SiteScope, threadId: string): Promise<RunDto | null> {
   const [run] = await getDatabase()
     .select()
     .from(runs)
-    .where(eq(runs.threadId, threadId))
+    .where(and(eq(runs.siteId, scope.siteId), eq(runs.threadId, threadId)))
     .orderBy(desc(runs.createdAt))
     .limit(1);
   return run ? toRunDto(run) : null;
 }
 
-export async function listThreads(options?: {
+export async function listThreads(scope: SiteScope, options?: {
   source?: ThreadSource;
 }): Promise<ThreadListItemDto[]> {
   const db = getDatabase();
   const threadQuery = options?.source
-    ? db.select().from(threads).where(eq(threads.source, options.source)).orderBy(desc(threads.updatedAt))
-    : db.select().from(threads).orderBy(desc(threads.updatedAt));
+    ? db
+        .select()
+        .from(threads)
+        .where(and(eq(threads.siteId, scope.siteId), eq(threads.source, options.source)))
+        .orderBy(desc(threads.updatedAt))
+    : db.select().from(threads).where(eq(threads.siteId, scope.siteId)).orderBy(desc(threads.updatedAt));
   const [threadRows, runRows] = await Promise.all([
     threadQuery,
-    db.select().from(runs).orderBy(desc(runs.createdAt)),
+    db.select().from(runs).where(eq(runs.siteId, scope.siteId)).orderBy(desc(runs.createdAt)),
   ]);
   const latestByThread = new Map<string, RunDto>();
   for (const run of runRows) {
-    if (!latestByThread.has(run.threadId)) latestByThread.set(run.threadId, toRunDto(run));
+    if (!latestByThread.has(run.threadId))
+      latestByThread.set(run.threadId, toRunDto(run));
   }
   return threadRows.map((thread) => ({
     id: thread.id,
@@ -793,7 +984,8 @@ export function buildAssistantContent(
 
   for (const event of events) {
     if (event.type === "approval.responded") {
-      const index = lastToolCallId == null ? null : toolParts.get(lastToolCallId);
+      const index =
+        lastToolCallId == null ? null : toolParts.get(lastToolCallId);
       const part = index == null ? null : content[index];
       const choice = event.payload.choice;
       if (part?.type === "tool-call" && typeof choice === "string") {
@@ -838,7 +1030,9 @@ export function buildAssistantContent(
       if (part?.type === "tool-call") {
         part.result = {
           durationMs:
-            typeof event.payload.durationMs === "number" ? event.payload.durationMs : null,
+            typeof event.payload.durationMs === "number"
+              ? event.payload.durationMs
+              : null,
           error: event.payload.error === true,
           hasResultPayload: event.payload.hasResultPayload === true,
           output: event.payload.result ?? null,

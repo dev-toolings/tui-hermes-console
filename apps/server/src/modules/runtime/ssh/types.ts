@@ -13,9 +13,19 @@ export type SshTarget = {
 
 export type SftpOps = {
   mkdirp(remotePath: string): Promise<void>;
-  list(remotePath: string): Promise<string[]>;
+  /** Retourne au plus `maxEntries + 1` noms afin que l'appelant détecte le
+   * dépassement sans matérialiser un répertoire distant arbitrairement grand. */
+  list(remotePath: string, maxEntries: number): Promise<string[]>;
+  stat(remotePath: string): Promise<{
+    size: number;
+    type: "file" | "directory" | "symlink" | "other";
+  }>;
   upload(localPath: string, remotePath: string): Promise<void>;
-  download(remotePath: string, localPath: string): Promise<void>;
+  download(
+    remotePath: string,
+    localPath: string,
+    maxBytes: number,
+  ): Promise<void>;
 };
 
 /** Une connexion SSH partagée : le port-forward HTTP et le SFTP des artefacts

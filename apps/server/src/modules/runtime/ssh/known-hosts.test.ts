@@ -1,10 +1,25 @@
 import { describe, expect, test } from "bun:test";
 import { createHmac, randomBytes } from "node:crypto";
 import {
+  configuredKnownHostsPath,
   hostLookupKey,
   parseKnownHosts,
   verifyHostKey,
 } from "@/modules/runtime/ssh/known-hosts";
+
+describe("configuredKnownHostsPath", () => {
+  test("uses the provisioned path without falling back to global trust", () => {
+    expect(
+      configuredKnownHostsPath(
+        { HERMES_SSH_KNOWN_HOSTS_FILE: "/run/console/known_hosts" },
+        "/home/test",
+      ),
+    ).toBe("/run/console/known_hosts");
+    expect(configuredKnownHostsPath({}, "/home/test")).toBe(
+      "/home/test/.ssh/known_hosts",
+    );
+  });
+});
 
 const KEY_A = "AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const KEY_B = "AAAAC3NzaC1lZDI1NTE5AAAAIBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
@@ -91,6 +106,17 @@ describe("verifyHostKey", () => {
     const entries = parseKnownHosts(`*.example ssh-ed25519 ${KEY_A}`);
     expect(verifyHostKey(entries, "srv.example", KEY_A)).toEqual({ ok: true });
     expect(verifyHostKey(entries, "srv.autre", KEY_A)).toEqual({
+      ok: false,
+      reason: "unknown_host",
+    });
+  });
+
+  test("un motif négatif invalide l'entrée même si un joker positif correspond", () => {
+    const entries = parseKnownHosts(
+      `!blocked.example,*.example ssh-ed25519 ${KEY_A}`,
+    );
+    expect(verifyHostKey(entries, "allowed.example", KEY_A)).toEqual({ ok: true });
+    expect(verifyHostKey(entries, "blocked.example", KEY_A)).toEqual({
       ok: false,
       reason: "unknown_host",
     });

@@ -480,7 +480,7 @@ export function useLiveThread(threadId: string) {
           applySnapshot(current);
         }
         if (reason instanceof Error) throw reason;
-        throw new Error(toMessage(reason));
+        throw new Error(toMessage(reason), { cause: reason });
       } finally {
         // Y compris si le stream a cassé : le filet reprend la main.
         streamingRef.current = false;

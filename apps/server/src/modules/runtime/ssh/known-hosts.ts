@@ -92,7 +92,13 @@ export function entriesForHost(entries: KnownHostEntry[], lookup: string): Known
   return entries.filter(
     (entry) =>
       hashedMatches(entry, lookup) ||
-      entry.patterns.some((pattern) => patternMatches(pattern, lookup)),
+      (entry.patterns.some(
+        (pattern) => !pattern.startsWith("!") && patternMatches(pattern, lookup),
+      ) &&
+        !entry.patterns.some(
+          (pattern) =>
+            pattern.startsWith("!") && patternMatches(pattern.slice(1), lookup),
+        )),
   );
 }
 
@@ -119,6 +125,14 @@ export function verifyHostKey(
 
 export function defaultKnownHostsPaths(home = homedir()): string[] {
   return [path.join(home, ".ssh", "known_hosts"), "/etc/ssh/ssh_known_hosts"];
+}
+
+export function configuredKnownHostsPath(
+  env: Record<string, string | undefined> = process.env,
+  home = homedir(),
+) {
+  const configured = env.HERMES_SSH_KNOWN_HOSTS_FILE?.trim();
+  return configured || path.join(home, ".ssh", "known_hosts");
 }
 
 export function loadKnownHosts(paths = defaultKnownHostsPaths()): KnownHostEntry[] {

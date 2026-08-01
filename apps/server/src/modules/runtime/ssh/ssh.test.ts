@@ -1,7 +1,16 @@
+import { randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { describe, expect, test } from "bun:test";
 import { mapForwardError, mapSshError, mapSystemSshStderr } from "./errors";
 import { isConnectableAlias, parseSshConfig } from "./ssh-config";
-import { baseSshArgs, controlPath, forwardArgs } from "./system-ssh";
+import {
+  baseSshArgs,
+  controlPath,
+  forwardArgs,
+  parseSystemSftpStat,
+  parseSystemSftpList,
+  systemSftpListCommand,
+} from "./system-ssh";
 import { targetFingerprint } from "./index";
 import type { SshTarget } from "./types";
 
@@ -38,6 +47,15 @@ describe("system ssh arguments", () => {
     expect(args).toContain("BatchMode=yes");
   });
 
+  test("cannot inherit an accept-new or disabled host-key policy", () => {
+    expect(args).toContain("StrictHostKeyChecking=yes");
+    expect(args).toContain("UpdateHostKeys=no");
+    expect(args).toContain("GlobalKnownHostsFile=/dev/null");
+    expect(
+      args.some((arg) => arg.startsWith("UserKnownHostsFile=")),
+    ).toBe(true);
+  });
+
   test("fails fast instead of silently serving a dead tunnel", () => {
     expect(args).toContain("ExitOnForwardFailure=yes");
   });
@@ -62,6 +80,59 @@ describe("system ssh arguments", () => {
 
   test("port is passed with -p", () => {
     expect(baseSshArgs({ ...target, port: 2222 })).toContain("2222");
+  });
+});
+
+describe("system SFTP stat", () => {
+  test("parses regular files without relying on localized labels", () => {
+    expect(parseSystemSftpStat("81a4:42\n")).toEqual({
+      size: 42,
+      type: "file",
+    });
+  });
+
+  test("distinguishes directories and symlinks", () => {
+    expect(parseSystemSftpStat("41ed:4096").type).toBe("directory");
+    expect(parseSystemSftpStat("a1ff:12").type).toBe("symlink");
+  });
+});
+
+describe("system SFTP bounded list", () => {
+  test("requests only maxCount plus one NUL-delimited entries", () => {
+    const command = systemSftpListCommand("/srv/out", 20);
+    expect(command).toContain("find -- '/srv/out'");
+    expect(command).toContain("-maxdepth 1");
+    expect(command).toContain("-printf '%f\\0'");
+    expect(command).toContain("/__hermes_find_status__");
+    expect(command).toContain("head -z -n 22");
+  });
+
+  test("preserves hostile newlines for explicit validation", () => {
+    expect(
+      parseSystemSftpList(
+        "safe.txt\0bad\nname\0/__hermes_find_status__:0\0",
+        20,
+      ),
+    ).toEqual([
+      "safe.txt",
+      "bad\nname",
+    ]);
+  });
+
+  test("does not turn a missing directory into an empty successful list", () => {
+    const missing = `/tmp/hermes-missing-${randomUUID()}`;
+    const result = spawnSync(
+      "sh",
+      ["-c", systemSftpListCommand(missing, 20)],
+      { encoding: "utf8" },
+    );
+    // Reproduction du piège observé : la pipeline shell elle-même termine à 0
+    // parce que head réussit, mais le marqueur conserve l'échec de find.
+    expect(result.status).toBe(0);
+    expect(result.stderr.length).toBeGreaterThan(0);
+    expect(() => parseSystemSftpList(result.stdout, 20)).toThrow(
+      "énumération distante échouée",
+    );
   });
 });
 

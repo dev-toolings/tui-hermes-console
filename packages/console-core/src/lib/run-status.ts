@@ -34,7 +34,7 @@ export const RUN_STATUS_FROM_HERMES: Record<HermesRunStatus, RunStatus> = {
   cancelled: "cancelled",
 };
 
-type StatusStyle = {
+export type StatusStyle = {
   label: string;
   /** Glyphe textuel — le statut ne repose jamais sur la seule couleur. */
   glyph: string;
@@ -47,6 +47,9 @@ type StatusStyle = {
   /** Anime le point (neutralise par prefers-reduced-motion). */
   live: boolean;
 };
+
+export const ARTIFACT_DELIVERY_ERROR_PREFIX =
+  "[ARTIFACT_DELIVERY_FAILED] ";
 
 export const RUN_STATUS: Record<RunStatus, StatusStyle> = {
   pending: {
@@ -109,6 +112,36 @@ export const RUN_STATUS: Record<RunStatus, StatusStyle> = {
 };
 
 export const isTerminal = (s: RunStatus) => RUN_STATUS[s].terminal;
+
+const DELIVERY_FAILED_STATUS: StatusStyle = {
+  label: "Exécution terminée · livraison échouée",
+  glyph: "!",
+  dot: "bg-destructive",
+  badge: "bg-neg-100 text-neg-700",
+  terminal: true,
+  live: false,
+};
+
+export function isArtifactDeliveryFailure(error: string | null | undefined) {
+  return error?.startsWith(ARTIFACT_DELIVERY_ERROR_PREFIX) ?? false;
+}
+
+export function artifactDeliveryFailureMessage(
+  error: string | null | undefined,
+) {
+  if (!isArtifactDeliveryFailure(error)) return null;
+  return error!.slice(ARTIFACT_DELIVERY_ERROR_PREFIX.length);
+}
+
+export function runStatusStyle(
+  status: RunStatus,
+  error?: string | null,
+): StatusStyle {
+  if (status === "completed" && isArtifactDeliveryFailure(error)) {
+    return DELIVERY_FAILED_STATUS;
+  }
+  return RUN_STATUS[status];
+}
 
 /** Duree lisible : "2 min 14 s", "930 ms". Toujours rendue en tabular-nums. */
 export function formatDuration(ms: number): string {

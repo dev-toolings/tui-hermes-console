@@ -23,8 +23,8 @@ export function SettingsSecurityScreen({ data }: { data: RuntimeData }) {
           <SecurityRow
             icon={UserIcon}
             title="Compte administrateur"
-            description="Authentification mono-utilisateur — écran /setup et sessions HttpOnly."
-            badge={<Badge tone="warning">Non implémenté</Badge>}
+            description="Authentification mono-utilisateur, sessions HttpOnly et protection CSRF."
+            badge={<Badge tone="success">Actif</Badge>}
           />
           <SecurityRow
             icon={KeyRoundIcon}

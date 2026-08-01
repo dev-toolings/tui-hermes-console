@@ -1,10 +1,11 @@
 import { apiErrorResponse } from "@/modules/api/errors";
 import { isConnectorType, testConnector } from "@/modules/connectors/repository";
 import type { ConnectorType } from "@/db/schema";
+import type { AuthenticatedRouteContext } from "@/modules/api/route-context";
 
 export async function POST(
   _request: Request,
-  context: { params: Promise<{ type: string }> },
+  context: AuthenticatedRouteContext<{ type: string }>,
 ) {
   try {
     const { type } = await context.params;
@@ -14,7 +15,7 @@ export async function POST(
         { status: 400 },
       );
     }
-    const connector = await testConnector(type as ConnectorType);
+    const connector = await testConnector(context.siteContext, type as ConnectorType);
     return Response.json({ connector, ok: true });
   } catch (error) {
     return apiErrorResponse(error);

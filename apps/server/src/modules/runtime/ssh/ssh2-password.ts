@@ -1,9 +1,15 @@
 import { createReadStream, createWriteStream } from "node:fs";
 import net from "node:net";
 import { pipeline } from "node:stream/promises";
-import { Client, type SFTPWrapper } from "ssh2";
+import { Client, type SFTPWrapper, type Stats } from "ssh2";
+import { createByteLimit } from "./byte-limit";
 import { mapForwardError, mapSshError, sshHostKeyRejected } from "./errors";
-import { hostLookupKey, loadKnownHosts, verifyHostKey } from "./known-hosts";
+import {
+  configuredKnownHostsPath,
+  hostLookupKey,
+  loadKnownHosts,
+  verifyHostKey,
+} from "./known-hosts";
 import type { SftpOps, SshChannel, SshTarget } from "./types";
 
 const CONNECT_TIMEOUT_MS = 12_000;
@@ -60,7 +66,7 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
           // inconnu, comme le fait `ssh -o BatchMode=yes` sur l'autre chemin.
           hostVerifier: (key: Buffer, callback: (accepted: boolean) => void) => {
             const verdict = verifyHostKey(
-              loadKnownHosts(),
+              loadKnownHosts([configuredKnownHostsPath()]),
               hostLookupKey(target.host, target.port),
               key.toString("base64"),
             );
@@ -147,26 +153,38 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
 
     return {
       async mkdirp(remotePath: string) {
-        // SFTP n'a pas de mkdir récursif : on crée chaque segment, en ignorant "existe déjà".
+        // SFTP n'a pas de mkdir récursif : chaque segment est créé et un échec
+        // n'est toléré que si un stat prouve qu'un répertoire existe déjà.
         const segments = remotePath.split("/").filter(Boolean);
         let current = remotePath.startsWith("/") ? "" : ".";
         for (const segment of segments) {
           current = `${current}/${segment}`;
-          await new Promise<void>((resolve) => handle.mkdir(current, () => resolve()));
+          await ensureSftpDirectory(handle, current);
         }
       },
-      list(remotePath: string) {
-        return new Promise<string[]>((resolve) => {
-          handle.readdir(remotePath, (error, entries) =>
-            resolve(error ? [] : entries.map((entry) => entry.filename)),
-          );
+      list(remotePath: string, maxEntries: number) {
+        return readSftpDirectoryBounded(handle, remotePath, maxEntries);
+      },
+      stat(remotePath: string) {
+        return new Promise((resolve, reject) => {
+          handle.lstat(remotePath, (error, stats) => {
+            if (error) {
+              reject(mapSshError(error));
+              return;
+            }
+            resolve(toSftpStat(stats));
+          });
         });
       },
       async upload(localPath: string, remotePath: string) {
         await pipeline(createReadStream(localPath), handle.createWriteStream(remotePath));
       },
-      async download(remotePath: string, localPath: string) {
-        await pipeline(handle.createReadStream(remotePath), createWriteStream(localPath));
+      async download(remotePath: string, localPath: string, maxBytes: number) {
+        await pipeline(
+          handle.createReadStream(remotePath),
+          createByteLimit(maxBytes),
+          createWriteStream(localPath, { flags: "wx", mode: 0o600 }),
+        );
       },
     };
   }
@@ -182,4 +200,91 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
   }
 
   return { forward, sftp, close };
+}
+
+type DirectorySftp = Pick<SFTPWrapper, "mkdir" | "stat">;
+
+type ListingSftp = Pick<SFTPWrapper, "opendir" | "readdir" | "close">;
+
+export function readSftpDirectoryBounded(
+  handle: ListingSftp,
+  remotePath: string,
+  maxEntries: number,
+): Promise<string[]> {
+  if (!Number.isSafeInteger(maxEntries) || maxEntries < 0) {
+    return Promise.reject(new Error("limite de liste SFTP invalide"));
+  }
+  const readLimit = maxEntries + 1;
+  return new Promise((resolve, reject) => {
+    handle.opendir(remotePath, (openError, directory) => {
+      if (openError) {
+        reject(mapSshError(openError));
+        return;
+      }
+      const names: string[] = [];
+      let settled = false;
+      const finish = (error?: unknown) => {
+        if (settled) return;
+        settled = true;
+        handle.close(directory, (closeError) => {
+          if (error) reject(mapSshError(error));
+          else if (closeError) reject(mapSshError(closeError));
+          else resolve(names);
+        });
+      };
+      const readNext = () => {
+        handle.readdir(directory, (readError, entries) => {
+          if (readError) {
+            finish(readError);
+            return;
+          }
+          if (!entries) {
+            finish();
+            return;
+          }
+          for (const entry of entries) {
+            names.push(entry.filename);
+            if (names.length >= readLimit) {
+              finish();
+              return;
+            }
+          }
+          readNext();
+        });
+      };
+      readNext();
+    });
+  });
+}
+
+export function ensureSftpDirectory(
+  handle: DirectorySftp,
+  remotePath: string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    handle.mkdir(remotePath, (mkdirError) => {
+      if (!mkdirError) {
+        resolve();
+        return;
+      }
+      handle.stat(remotePath, (statError, stats) => {
+        if (!statError && stats.isDirectory()) {
+          resolve();
+          return;
+        }
+        reject(mapSshError(mkdirError));
+      });
+    });
+  });
+}
+
+function toSftpStat(stats: Stats) {
+  const type = stats.isFile()
+    ? ("file" as const)
+    : stats.isDirectory()
+      ? ("directory" as const)
+      : stats.isSymbolicLink()
+        ? ("symlink" as const)
+        : ("other" as const);
+  return { size: stats.size, type };
 }

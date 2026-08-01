@@ -1,0 +1,2 @@
+# Clés d'hôte SSH publiques vérifiées hors bande uniquement.
+# Ce fichier vide force un refus fail-closed tant qu'aucune empreinte n'est provisionnée.

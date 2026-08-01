@@ -1,5 +1,9 @@
 import type { RunDto, ThreadSnapshot } from "@console/core/modules/runs/types";
-import { RUN_STATUS, type RunStatus } from "@console/core/lib/run-status";
+import {
+  artifactDeliveryFailureMessage,
+  RUN_STATUS,
+  type RunStatus,
+} from "@console/core/lib/run-status";
 import type { RunExecutionDetails } from "@/components/run/result-panel";
 
 function formatModel(provider: string | null | undefined, model: string) {
@@ -40,6 +44,18 @@ export function buildRunExecutionDetails(
 
 export function displayRunHeaderModel(snapshot: ThreadSnapshot, run: RunDto) {
   return actualRunModel(snapshot, run) ?? resolvedConsoleModel(snapshot);
+}
+
+export function buildRunDeliveryNotice(
+  run: Pick<RunDto, "status" | "error"> | null,
+) {
+  if (!run || run.status !== "completed") return null;
+  const message = artifactDeliveryFailureMessage(run.error);
+  if (!message) return null;
+  return {
+    title: "Exécution terminée, livraison des fichiers non aboutie.",
+    message,
+  };
 }
 
 /**

@@ -4,8 +4,22 @@ import { ConnectorRepositoryError } from "@/modules/connectors/repository";
 import { ImapTestError } from "@/modules/connectors/imap-test";
 import { HermesRuntimeError } from "@/modules/runtime/hermes-adapter";
 import { ProductRepositoryError } from "@/modules/runs/repository";
+import { AuthError } from "@/modules/auth/service";
+import { SetupError } from "@/modules/setup/service";
 
 export function apiErrorResponse(error: unknown) {
+  if (error instanceof AuthError) {
+    return Response.json(
+      { error: { code: error.code, message: error.message } },
+      { status: error.status },
+    );
+  }
+  if (error instanceof SetupError) {
+    return Response.json(
+      { error: { code: error.code, message: error.message } },
+      { status: error.status },
+    );
+  }
   if (error instanceof ZodError) {
     return Response.json(
       {

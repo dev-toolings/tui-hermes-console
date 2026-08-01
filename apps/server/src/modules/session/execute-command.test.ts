@@ -27,6 +27,12 @@ import { executeSessionCommand } from "./execute-command";
 describe("executeSessionCommand agent isolation", () => {
   test("rejects /agent show on chat threads", async () => {
     const result = await executeSessionCommand({
+      context: {
+        siteId: "paris",
+        userId: "usr",
+        role: "operator",
+        correlationId: "req",
+      },
       threadId: "thr_chat",
       raw: "/agent show",
     });

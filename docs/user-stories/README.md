@@ -1,0 +1,78 @@
+# User stories normatives — Hermes Console
+
+**Version :** 1.0
+
+**Date :** 31-07-2026
+
+**Source :** [`../PRD.md`](../PRD.md) v1.2
+
+**Périmètre :** Gates 0 à 3
+
+Ce dossier transforme le PRD en contrats produit vérifiables. Il ne déclare aucune capacité comme
+livrée : une story n'est respectée que lorsque son état est `ACCEPTÉE` et que ses preuves sont
+consultables. En cas de contradiction, le PRD fixe la direction produit et ce dossier fixe le
+contrat d'acceptation de la livraison.
+
+~~~text
+╔══════════════════╗
+║ PRD v1.2         ║
+║ vérité produit   ║
+╚════════╤═════════╝
+         │ exigences · Gates 0–3
+         ▼
+╔══════════════════╗
+║ User stories     ║
+║ scénarios G/W/T  ║
+╚════════╤═════════╝
+         │ preuves exigées · résultats de tests
+         ▼
+┌──────────────────┐
+│ Rapport daté     │
+│ décision de gate │
+└──────────────────┘
+~~~
+
+Légende : G/W/T signifie Given/When/Then ; chaque flèche porte le livrable transmis à l'étape
+suivante. Composants : PRD, contrats d'acceptation, rapport de preuve.
+
+## Ordre de lecture
+
+1. [`CONVENTIONS.md`](CONVENTIONS.md) — vocabulaire normatif, états et qualité des preuves ;
+2. [`TRACEABILITY.md`](TRACEABILITY.md) — lien entre PRD, stories et décision de gate ;
+3. [`GATE-0-VALIDATION-COMMERCIALE.md`](GATE-0-VALIDATION-COMMERCIALE.md) ;
+4. [`GATE-1-CONTRAT-EXPLOITATION.md`](GATE-1-CONTRAT-EXPLOITATION.md) ;
+5. [`SSH-STORIES.md`](SSH-STORIES.md) — décomposition normative de l'epic SSH ;
+6. [`GATE-2-EQUIPE-CLIENT.md`](GATE-2-EQUIPE-CLIENT.md) ;
+7. [`GATE-3-FLEET.md`](GATE-3-FLEET.md) ;
+8. [`guides/SSH-VPS-VIERGE.md`](guides/SSH-VPS-VIERGE.md) — bootstrap et preuve SSH réelle ;
+9. [`evidence/README.md`](evidence/README.md) — format des rapports de preuve.
+
+## Règles de gouvernance
+
+- Les Gates sont séquentielles. Une Gate ne passe que si toutes ses stories obligatoires sont
+  `ACCEPTÉES` ou si une dérogation datée, bornée et approuvée est jointe au rapport.
+- La persistance des artefacts, le confinement OS, le refus fail-closed, la confiance de clé d'hôte,
+  l'absence de fallback d'authentification, le chemin admin/recovery et la révocation effective ne
+  sont pas dérogeables. Une Gate qui manque l'un de ces contrôles reste `BLOQUÉE`.
+- Un test unitaire vert ne remplace pas un test E2E lorsqu'une story exige un système réel.
+- Une capture seule ne prouve ni l'autorisation ni la persistance. Les preuves combinent résultat,
+  identifiants corrélables, environnement et test négatif.
+- Aucun mot de passe, token, clé privée, cookie, prompt client, adresse privée ou contenu métier ne
+  doit entrer dans Git. Les rapports utilisent des valeurs expurgées et des empreintes.
+- Une IP de test éphémère peut apparaître uniquement dans un rapport de preuve daté et expurgé,
+  jamais dans une configuration, une story ou ce guide.
+- Le runtime Hermes reste externe au Compose actuel tant qu'une story ne démontre pas une autre
+  topologie. La Console gouverne ; Hermes exécute.
+- Toute gate ultérieure à la Gate 3 est hors périmètre de ce dossier.
+
+## Définition globale de « terminé »
+
+Une story est terminée lorsque :
+
+- tous ses scénarios obligatoires positifs et négatifs passent ;
+- ses dépendances sont `ACCEPTÉES` ;
+- les preuves attendues existent dans un rapport daté ;
+- les erreurs sont fail-closed pour l'autorisation et explicites pour l'opérateur ;
+- les secrets et données sensibles ont été expurgés ;
+- le reviewer indiqué dans la story a accepté le rapport ;
+- la matrice de traçabilité référence la preuve et son verdict.

@@ -78,6 +78,76 @@
       "when": 1785517200000,
       "tag": "0010_remove_runtime_mirror_agent",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785600000000,
+      "tag": "0011_console_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785679200000,
+      "tag": "0012_console_setup",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1785682800000,
+      "tag": "0013_repair_console_auth_transactions",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1785686400000,
+      "tag": "0014_repair_console_users_google",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1785690000000,
+      "tag": "0015_relax_legacy_console_password",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1785693600000,
+      "tag": "0016_ai_disclosure_consent",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785697200000,
+      "tag": "0017_site_project_foundations",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785700800000,
+      "tag": "0018_audit_ledger_foundations",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785704400000,
+      "tag": "0019_database_role_boundaries",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785708000000,
+      "tag": "0020_session_site_context",
+      "breakpoints": true
     }
   ]
 }

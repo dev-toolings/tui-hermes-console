@@ -1,7 +1,9 @@
-import { eq } from "drizzle-orm";
+import { createHmac } from "node:crypto";
+import { and, eq, sql } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
 import {
   runtimeConfig,
+  consoleSetup,
   type RuntimeHealthStatus,
   type RuntimeSshAuth,
   type RuntimeTransport,
@@ -49,6 +51,76 @@ export type RuntimeConnectionInput = {
   ssh?: SshConnectionInput;
   remoteWorkdir?: string;
 };
+
+export type RuntimeConfigurationVersion =
+  | `database:${number}`
+  | `environment:${string}`;
+
+export function databaseRuntimeConfigurationVersion(revision: number) {
+  return `database:${revision}` as const;
+}
+
+export function databaseRevisionFromRuntimeVersion(
+  version: RuntimeConfigurationVersion,
+) {
+  if (!version.startsWith("database:")) return null;
+  const revision = Number(version.slice("database:".length));
+  return Number.isSafeInteger(revision) && revision > 0 ? revision : null;
+}
+
+export function environmentRuntimeConfigurationVersion(
+  baseUrl: string,
+  token: string,
+  serverSecret = process.env.APP_ENCRYPTION_KEY,
+) {
+  if (!serverSecret) {
+    throw new HermesRuntimeError(
+      "APP_ENCRYPTION_KEY manquant — impossible de produire une preuve runtime non rejouable hors ligne.",
+      503,
+      "APP_ENCRYPTION_KEY_MISSING",
+    );
+  }
+  const fingerprint = createHmac("sha256", serverSecret)
+    .update("hermes-console:runtime-configuration:v1\0", "utf8")
+    .update(
+      JSON.stringify({
+        baseUrl: baseUrl.trim().replace(/\/+$/, ""),
+        token: token.trim(),
+      }),
+    )
+    .digest("hex");
+  return `environment:${fingerprint}` as const;
+}
+
+export async function getRuntimeConfigurationVersion(): Promise<RuntimeConfigurationVersion | null> {
+  const row = await getRuntimeRow();
+  if (row) return databaseRuntimeConfigurationVersion(row.configRevision);
+  const baseUrl = process.env.HERMES_BASE_URL?.trim().replace(/\/+$/, "");
+  const token = process.env.HERMES_RUNTIME_TOKEN?.trim();
+  if (!baseUrl || !token) return null;
+  return environmentRuntimeConfigurationVersion(baseUrl, token);
+}
+
+export async function isRuntimeConfigurationVersionCurrent(
+  version: RuntimeConfigurationVersion,
+) {
+  return (await getRuntimeConfigurationVersion()) === version;
+}
+
+export function attachInternalRuntimeConfigurationVersion<T extends object>(
+  result: T,
+  version: RuntimeConfigurationVersion | null,
+): T & { configurationVersion: RuntimeConfigurationVersion | null } {
+  Object.defineProperty(result, "configurationVersion", {
+    value: version,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  return result as T & {
+    configurationVersion: RuntimeConfigurationVersion | null;
+  };
+}
 
 export async function getRuntimePublic(): Promise<RuntimePublicDto> {
   const row = await getRuntimeRow();
@@ -215,19 +287,41 @@ export async function saveRuntimeConfig(input: RuntimeConnectionInput): Promise<
     sshAuth,
     encryptedSshPassword,
     remoteWorkdir,
+    lastHealthStatus: "unknown" as const,
+    lastCheckedAt: null,
+    detectedVersion: null,
+    capabilities: null,
     updatedAt: now,
   };
 
-  if (existing) {
-    await db.update(runtimeConfig).set(values).where(eq(runtimeConfig.id, RUNTIME_ID));
-  } else {
-    await db.insert(runtimeConfig).values({
-      id: RUNTIME_ID,
-      ...values,
-      lastHealthStatus: "unknown",
-      createdAt: now,
-    });
-  }
+  await db.transaction(async (tx) => {
+    if (existing) {
+      await tx
+        .update(runtimeConfig)
+        .set({
+          ...values,
+          configRevision: sql`${runtimeConfig.configRevision} + 1`,
+        })
+        .where(eq(runtimeConfig.id, RUNTIME_ID));
+    } else {
+      await tx.insert(runtimeConfig).values({
+        id: RUNTIME_ID,
+        ...values,
+        configRevision: 1,
+        createdAt: now,
+      });
+    }
+    await tx
+      .update(consoleSetup)
+      .set({
+        step: "agent",
+        completedAt: null,
+        runtimeVerifiedAt: null,
+        runtimeConfigVersion: null,
+        updatedAt: now,
+      })
+      .where(eq(consoleSetup.step, "completed"));
+  });
 
   // La cible a pu changer : le prochain appel rouvrira un canal à jour.
   closeChannel();
@@ -241,7 +335,11 @@ export async function probeAndPersistRuntime(
   health: unknown;
   capabilities: HermesCapabilities;
   runtime: RuntimePublicDto;
+  configurationVersion: RuntimeConfigurationVersion | null;
 }> {
+  const configurationVersion = options
+    ? null
+    : await getRuntimeConfigurationVersion();
   const resolved = await resolveProbeTarget(options);
 
   try {
@@ -254,17 +352,37 @@ export async function probeAndPersistRuntime(
         ? (result.health as { version: string }).version
         : null;
 
-    await persistProbeResult({
-      status: "healthy",
-      version,
-      capabilities: result.capabilities as Record<string, unknown>,
-    });
+    if (configurationVersion) {
+      await persistProbeResult(
+        {
+          status: "healthy",
+          version,
+          capabilities: result.capabilities as Record<string, unknown>,
+        },
+        configurationVersion,
+      );
+      if (!(await isRuntimeConfigurationVersionCurrent(configurationVersion))) {
+        throw new HermesRuntimeError(
+          "La configuration Hermes a changé pendant le test. Relancez le probe.",
+          409,
+          "RUNTIME_CONFIGURATION_CHANGED",
+        );
+      }
+    }
 
-    return { ok: true, ...result, runtime: await getRuntimePublic() };
+    return attachInternalRuntimeConfigurationVersion({
+      ok: true,
+      ...result,
+      runtime: await getRuntimePublic(),
+    }, configurationVersion);
   } catch (error) {
     const status: RuntimeHealthStatus =
       error instanceof HermesRuntimeError && error.status === 401 ? "unauthorized" : "unreachable";
-    await persistProbeResult({ status });
+    if (configurationVersion) {
+      await persistProbeResult({ status }, configurationVersion).catch(
+        () => undefined,
+      );
+    }
     throw error;
   }
 }
@@ -412,20 +530,35 @@ async function persistProbeResult(input: {
   status: RuntimeHealthStatus;
   version?: string | null;
   capabilities?: Record<string, unknown> | null;
-}) {
+}, expectedVersion: RuntimeConfigurationVersion) {
   const existing = await getRuntimeRow();
   if (!existing) return;
 
-  await getDatabase()
+  const expectedRevision = databaseRevisionFromRuntimeVersion(expectedVersion);
+  if (expectedRevision === null) return;
+
+  const [updated] = await getDatabase()
     .update(runtimeConfig)
     .set({
       lastHealthStatus: input.status,
       lastCheckedAt: new Date(),
       detectedVersion: input.version ?? existing.detectedVersion,
       capabilities: input.capabilities ?? existing.capabilities,
-      updatedAt: new Date(),
     })
-    .where(eq(runtimeConfig.id, RUNTIME_ID));
+    .where(
+      and(
+        eq(runtimeConfig.id, RUNTIME_ID),
+        eq(runtimeConfig.configRevision, expectedRevision),
+      ),
+    )
+    .returning({ id: runtimeConfig.id });
+  if (!updated) {
+    throw new HermesRuntimeError(
+      "La configuration Hermes a changé pendant le test. Relancez le probe.",
+      409,
+      "RUNTIME_CONFIGURATION_CHANGED",
+    );
+  }
 }
 
 async function getRuntimeRow() {

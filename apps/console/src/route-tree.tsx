@@ -20,6 +20,7 @@ import { ConsoleShell } from "@/components/shell/console-shell";
 import { SettingsNav } from "@/components/settings/settings-nav";
 import { ChatSurfaceSkeleton } from "@/components/chat/chat-surface-skeleton";
 import { usePathname } from "@/lib/router";
+import { siteAccessBlock, type AuthSiteContext } from "@/lib/auth-site-context";
 /**
  * Écrans de conversation, chargés à la demande.
  *
@@ -86,6 +87,22 @@ import {
   loadSupport,
 } from "@/loaders";
 
+export type ConsoleAccessStatus = {
+  authenticated: boolean;
+  setupRequired: boolean;
+  consentRequired: boolean;
+  siteContext: AuthSiteContext | null;
+};
+
+export function requiresSetupRedirect(auth: ConsoleAccessStatus) {
+  return (
+    !auth.authenticated ||
+    siteAccessBlock(auth.siteContext) !== null ||
+    auth.setupRequired ||
+    auth.consentRequired
+  );
+}
+
 const rootRoute = createRootRoute({
   component: () => (
     <AppProviders>
@@ -106,6 +123,13 @@ const setupRoute = createRoute({
 const consoleLayout = createRoute({
   getParentRoute: () => rootRoute,
   id: "console",
+  beforeLoad: async () => {
+    const response = await fetch("/api/auth", { cache: "no-store" });
+    const auth = (await response.json()) as ConsoleAccessStatus;
+    if (requiresSetupRedirect(auth)) {
+      throw redirect({ to: "/setup", replace: true });
+    }
+  },
   // Frontière unique pour tous les écrans différés : le rail et l'en-tête
   // restent affichés pendant que le chunk d'un écran arrive, au lieu de
   // blanchir la fenêtre entière.

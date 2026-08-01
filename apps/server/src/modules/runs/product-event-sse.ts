@@ -23,6 +23,7 @@ export function encodeRunMetaSse(payload: { threadId: string; runId: string }) {
 }
 
 type StreamOptions = {
+  siteId: string;
   threadId: string;
   runId?: string;
   cursor?: number;
@@ -31,6 +32,7 @@ type StreamOptions = {
 };
 
 export function createProductEventStream({
+  siteId,
   threadId,
   runId,
   cursor: initialCursor = 0,
@@ -68,11 +70,11 @@ export function createProductEventStream({
       }
 
       const unsubscribe = subscribeToThread(threadId, send);
-      for (const event of await listThreadEventsAfter(threadId, cursor)) send(event);
+      for (const event of await listThreadEventsAfter({ siteId }, threadId, cursor)) send(event);
 
       const reconcile = setInterval(async () => {
         try {
-          for (const event of await listThreadEventsAfter(threadId, cursor)) send(event);
+          for (const event of await listThreadEventsAfter({ siteId }, threadId, cursor)) send(event);
         } catch {
           close();
         }

@@ -6,6 +6,7 @@ import {
   saveConnector,
 } from "@/modules/connectors/repository";
 import type { ConnectorType } from "@/db/schema";
+import type { AuthenticatedRouteContext } from "@/modules/api/route-context";
 
 const putConnectorSchema = z.object({
   label: z.string().trim().min(1).max(120).optional(),
@@ -13,11 +14,11 @@ const putConnectorSchema = z.object({
   imapHost: z.string().trim().max(255).optional(),
   imapPort: z.number().int().min(1).max(65_535).optional(),
   password: z.string().trim().min(1).max(2_000).optional(),
-});
+}).strict();
 
 export async function PUT(
   request: Request,
-  context: { params: Promise<{ type: string }> },
+  context: AuthenticatedRouteContext<{ type: string }>,
 ) {
   try {
     const { type } = await context.params;
@@ -28,7 +29,7 @@ export async function PUT(
       );
     }
     const input = putConnectorSchema.parse(await request.json());
-    const connector = await saveConnector({
+    const connector = await saveConnector(context.siteContext, {
       type: type as ConnectorType,
       ...input,
     });
@@ -40,7 +41,7 @@ export async function PUT(
 
 export async function DELETE(
   _request: Request,
-  context: { params: Promise<{ type: string }> },
+  context: AuthenticatedRouteContext<{ type: string }>,
 ) {
   try {
     const { type } = await context.params;
@@ -50,7 +51,7 @@ export async function DELETE(
         { status: 400 },
       );
     }
-    await deleteConnector(type as ConnectorType);
+    await deleteConnector(context.siteContext, type as ConnectorType);
     return new Response(null, { status: 204 });
   } catch (error) {
     return apiErrorResponse(error);

@@ -1,14 +1,20 @@
 import { apiErrorResponse } from "@/modules/api/errors";
 import { createProductEventStream } from "@/modules/runs/product-event-sse";
 import { getThreadSnapshot } from "@/modules/runs/repository";
+import type { AuthenticatedRouteContext } from "@/modules/api/route-context";
+import { z } from "zod";
 
 export async function GET(
   request: Request,
-  context: { params: Promise<{ threadId: string }> },
+  context: AuthenticatedRouteContext<{ threadId: string }>,
+  dependencies: { stream: typeof createProductEventStream } = {
+    stream: createProductEventStream,
+  },
 ) {
   try {
-    const { threadId } = await context.params;
-    const snapshot = await getThreadSnapshot(threadId);
+    const { threadId: rawThreadId } = await context.params;
+    const threadId = z.string().trim().min(1).max(200).parse(rawThreadId);
+    const snapshot = await getThreadSnapshot(context.siteContext, threadId);
     if (!snapshot) {
       return Response.json(
         { error: { code: "THREAD_NOT_FOUND", message: "Conversation introuvable." } },
@@ -24,7 +30,8 @@ export async function GET(
     const cursor =
       Number.isSafeInteger(requestedCursor) && requestedCursor >= 0 ? requestedCursor : 0;
 
-    return createProductEventStream({
+    return dependencies.stream({
+      siteId: context.siteContext.siteId,
       threadId,
       cursor,
       signal: request.signal,

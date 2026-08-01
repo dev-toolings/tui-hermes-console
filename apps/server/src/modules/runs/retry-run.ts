@@ -1,5 +1,7 @@
 import { createRunForThread, getRunCancelTarget, isTerminalRunStatus, ProductRepositoryError } from "./repository";
 import { startRun } from "./runner";
+import type { SiteRequestContext } from "@/modules/auth/service";
+import { auditScopedMiss } from "@/modules/auth/site-access";
 
 export type RetryRunResult = {
   threadId: string;
@@ -11,9 +13,10 @@ export type RetryRunResult = {
  * Relance une mission terminée avec le même prompt (PRD §7 / §9.6).
  * Crée une nouvelle mission dans le thread — n’écrase pas l’historique.
  */
-export async function retryRun(runId: string): Promise<RetryRunResult> {
-  const source = await getRunCancelTarget(runId);
+export async function retryRun(context: SiteRequestContext, runId: string): Promise<RetryRunResult> {
+  const source = await getRunCancelTarget(context, runId);
   if (!source) {
+    await auditScopedMiss(context, { action: "run.retry", resourceType: "run", resourceId: runId });
     throw new ProductRepositoryError("RUN_NOT_FOUND", "Mission introuvable.");
   }
   if (!isTerminalRunStatus(source.status)) {
@@ -23,8 +26,8 @@ export async function retryRun(runId: string): Promise<RetryRunResult> {
     );
   }
 
-  const created = await createRunForThread(source.threadId, source.input);
-  startRun(created.runId);
+  const created = await createRunForThread(context, source.threadId, source.input);
+  startRun(context, created.runId);
 
   return {
     threadId: created.threadId,

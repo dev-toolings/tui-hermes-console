@@ -28,9 +28,12 @@ export function ConnectorsSettings() {
   }, []);
 
   useEffect(() => {
-    void refresh()
-      .catch((reason) => setError(reason instanceof Error ? reason.message : "Erreur."))
-      .finally(() => setLoading(false));
+    const timeout = window.setTimeout(() => {
+      void refresh()
+        .catch((reason) => setError(reason instanceof Error ? reason.message : "Erreur."))
+        .finally(() => setLoading(false));
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [refresh]);
 
   return (
@@ -47,7 +50,7 @@ export function ConnectorsSettings() {
       <div className="grid gap-4">
         {ORDER.map((type) => (
           <ConnectorCard
-            key={type}
+            key={`${type}:${connectors.find((item) => item.type === type)?.updatedAt ?? "new"}`}
             type={type}
             connector={connectors.find((item) => item.type === type) ?? null}
             loading={loading}
@@ -77,12 +80,6 @@ function ConnectorCard({
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!connector) return;
-    setEmail(connector.email);
-    setImapHost(connector.imapHost);
-  }, [connector]);
 
   const statusBadge = !connector?.passwordConfigured ? (
     <Badge tone="warning">Non configuré</Badge>

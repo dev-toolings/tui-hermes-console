@@ -1,19 +1,20 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
-import { agents, messages, runEvents, runtimeConfig, threads } from "@/db/schema";
+import { agents, messages, runEvents, runs, runtimeConfig, threads } from "@/db/schema";
+import type { SiteScope } from "@/modules/auth/service";
 
 export type { StorageStats } from "@console/core/types/api";
 import type { StorageStats } from "@console/core/types/api";
 
-export async function getStorageStats(): Promise<StorageStats> {
+export async function getStorageStats(scope: SiteScope): Promise<StorageStats> {
   try {
     const db = getDatabase();
     const [[agentCount], [threadCount], [messageCount], [eventCount], [runtimeRow]] =
       await Promise.all([
-        db.select({ count: sql<number>`count(*)::int` }).from(agents),
-        db.select({ count: sql<number>`count(*)::int` }).from(threads),
-        db.select({ count: sql<number>`count(*)::int` }).from(messages),
-        db.select({ count: sql<number>`count(*)::int` }).from(runEvents),
+        db.select({ count: sql<number>`count(*)::int` }).from(agents).where(eq(agents.siteId, scope.siteId)),
+        db.select({ count: sql<number>`count(*)::int` }).from(threads).where(eq(threads.siteId, scope.siteId)),
+        db.select({ count: sql<number>`count(*)::int` }).from(messages).innerJoin(threads, eq(messages.threadId, threads.id)).where(eq(threads.siteId, scope.siteId)),
+        db.select({ count: sql<number>`count(*)::int` }).from(runEvents).innerJoin(runs, eq(runEvents.runId, runs.id)).where(eq(runs.siteId, scope.siteId)),
         db.select({ id: runtimeConfig.id }).from(runtimeConfig).limit(1),
       ]);
 
