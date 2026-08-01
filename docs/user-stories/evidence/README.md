@@ -22,8 +22,8 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
   slice G1-006A local ; backup/restauration, purge et acceptation Gate encore ouverts.
 - [01-08-2026 — export métier vérifié](2026-08-01-gate-1-lifecycle-export.md) : slice G1-006B
   local ; backup/restauration, purge et acceptation Gate encore ouverts.
-- [01-08-2026 — vérificateur de bundle](2026-08-01-gate-1-lifecycle-verifier.md) : préparation
-  locale G1-006C ; aucune preuve de backup/restauration réelle.
+- [01-08-2026 — vérificateur relationnel de bundle](2026-08-01-gate-1-lifecycle-verifier.md) : slice
+  G1-006C implémenté localement ; aucune preuve de backup/restauration réelle.
 - [01-08-2026 — durabilité Compose des artefacts](2026-08-01-gate-1-artifact-durability-local.md) :
   remplacement réel du conteneur Console, volume `files-data` conservé et refus d’intégrité ;
   même hôte uniquement, P-OPS production et reprise après sinistre encore ouvertes.
