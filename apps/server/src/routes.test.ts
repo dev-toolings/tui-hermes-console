@@ -51,4 +51,20 @@ describe("route authorization inventory", () => {
       actions: { POST: "audit.export" },
     });
   });
+
+  test("registers site-scoped lifecycle policy and preview routes", () => {
+    expect(ROUTES.find(({ path }) => path === "/api/settings/data-lifecycle")?.access).toEqual({
+      boundary: "site",
+      actions: {
+        GET: "data.lifecycle.read",
+        PUT: "data.lifecycle.manage",
+      },
+    });
+    expect(
+      ROUTES.find(({ path }) => path === "/api/settings/data-lifecycle/previews")?.access,
+    ).toEqual({ boundary: "site", actions: { POST: "data.lifecycle.preview" } });
+    expect(
+      ROUTES.find(({ path }) => path === "/api/settings/data-lifecycle/previews/:previewId")?.access,
+    ).toEqual({ boundary: "site", actions: { GET: "data.lifecycle.preview" } });
+  });
 });

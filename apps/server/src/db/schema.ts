@@ -1,5 +1,6 @@
 import {
   bigint,
+  boolean,
   check,
   foreignKey,
   index,
@@ -416,6 +417,92 @@ export const auditLedgerEntries = pgTable(
       "audit_ledger_denied_state_check",
       sql`${table.decision} <> 'denied' OR ${table.beforeState} = ${table.afterState}`,
     ),
+  ],
+);
+
+export const siteDataLifecyclePolicies = pgTable(
+  "site_data_lifecycle_policies",
+  {
+    siteId: text("site_id")
+      .primaryKey()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    version: integer("version").notNull().default(1),
+    retentionDays: integer("retention_days").notNull(),
+    legalHoldEnabled: boolean("legal_hold_enabled").notNull().default(false),
+    legalHoldReason: text("legal_hold_reason"),
+    updatedByUserId: text("updated_by_user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("site_data_lifecycle_retention_days_check", sql`${table.retentionDays} BETWEEN 1 AND 3650`),
+    check("site_data_lifecycle_version_check", sql`${table.version} > 0`),
+    check("site_data_lifecycle_hold_check", sql`(${table.legalHoldEnabled} IN (true, false))`),
+    check(
+      "site_data_lifecycle_hold_reason_check",
+      sql`${table.legalHoldEnabled} = false OR btrim(${table.legalHoldReason}) <> ''`,
+    ),
+    foreignKey({
+      columns: [table.updatedByUserId, table.siteId],
+      foreignColumns: [siteMemberships.userId, siteMemberships.siteId],
+      name: "site_data_lifecycle_policy_author_fk",
+    }),
+  ],
+);
+
+export const dataLifecyclePreviews = pgTable(
+  "data_lifecycle_previews",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    policyVersion: integer("policy_version").notNull(),
+    retentionDays: integer("retention_days").notNull(),
+    cutoffAt: timestamp("cutoff_at", { withTimezone: true }).notNull(),
+    manifestSha256: text("manifest_sha256").notNull(),
+    createdByUserId: text("created_by_user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("data_lifecycle_previews_site_id_idx").on(table.siteId, table.id),
+    index("data_lifecycle_previews_site_created_idx").on(table.siteId, table.createdAt),
+    check("data_lifecycle_previews_manifest_hash_check", sql`${table.manifestSha256} ~ '^[0-9a-f]{64}$'`),
+    foreignKey({
+      columns: [table.createdByUserId, table.siteId],
+      foreignColumns: [siteMemberships.userId, siteMemberships.siteId],
+      name: "data_lifecycle_preview_author_fk",
+    }),
+  ],
+);
+
+export const dataLifecyclePreviewItems = pgTable(
+  "data_lifecycle_preview_items",
+  {
+    previewId: text("preview_id")
+      .notNull()
+      .references(() => dataLifecyclePreviews.id, { onDelete: "cascade" }),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    resourceType: text("resource_type").notNull().default("thread"),
+    resourceId: text("resource_id").notNull(),
+    activityAt: timestamp("activity_at", { withTimezone: true }).notNull(),
+    runCount: integer("run_count").notNull(),
+    messageCount: integer("message_count").notNull(),
+    artifactCount: integer("artifact_count").notNull(),
+    artifactBytes: bigint("artifact_bytes", { mode: "number" }).notNull(),
+    runIds: jsonb("run_ids").$type<string[]>().notNull(),
+    artifactHashes: jsonb("artifact_hashes").$type<string[]>().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.previewId, table.resourceType, table.resourceId] }),
+    index("data_lifecycle_preview_items_site_idx").on(table.siteId, table.resourceId),
+    foreignKey({
+      columns: [table.siteId, table.previewId],
+      foreignColumns: [dataLifecyclePreviews.siteId, dataLifecyclePreviews.id],
+      name: "data_lifecycle_preview_items_preview_site_fk",
+    }),
   ],
 );
 

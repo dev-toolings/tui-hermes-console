@@ -7,6 +7,7 @@ import { ProductRepositoryError } from "@/modules/runs/repository";
 import { AuthError } from "@/modules/auth/service";
 import { SetupError } from "@/modules/setup/service";
 import { OwnershipRepositoryError } from "@/modules/ownership/repository";
+import { DataLifecycleError } from "@/modules/retention/service";
 
 export function apiErrorResponse(error: unknown) {
   if (error instanceof AuthError) {
@@ -25,6 +26,12 @@ export function apiErrorResponse(error: unknown) {
     return Response.json(
       { error: { code: error.code, message: error.message } },
       { status: 404 },
+    );
+  }
+  if (error instanceof DataLifecycleError) {
+    return Response.json(
+      { error: { code: error.code, message: error.message } },
+      { status: error.status },
     );
   }
   if (error instanceof ZodError) {

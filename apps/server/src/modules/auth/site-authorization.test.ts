@@ -31,8 +31,8 @@ const readActions: SiteAction[] = [
 
 describe("site role permission matrix", () => {
   test("assigns every current action to the five roles without broadening specialized roles", () => {
-    expect(SITE_ROLE_MATRIX_VERSION).toBe("2026-08-01.us-g2-003.v1");
-    expect(SITE_ACTIONS).toHaveLength(26);
+    expect(SITE_ROLE_MATRIX_VERSION).toBe("2026-08-01.us-g1-006a.v1");
+    expect(SITE_ACTIONS).toHaveLength(29);
 
     for (const action of SITE_ACTIONS) {
       expect(canPerformSiteAction("admin", action)).toBe(true);
@@ -76,6 +76,12 @@ describe("site role permission matrix", () => {
     expect(canPerformSiteAction("auditor", "thread.command")).toBe(true);
     expect(canPerformSiteAction("auditor", "audit.read")).toBe(true);
     expect(canPerformSiteAction("auditor", "audit.export")).toBe(true);
+    expect(canPerformSiteAction("admin", "data.lifecycle.read")).toBe(true);
+    expect(canPerformSiteAction("admin", "data.lifecycle.manage")).toBe(true);
+    expect(canPerformSiteAction("admin", "data.lifecycle.preview")).toBe(true);
+    expect(canPerformSiteAction("auditor", "data.lifecycle.read")).toBe(true);
+    expect(canPerformSiteAction("auditor", "data.lifecycle.preview")).toBe(true);
+    expect(canPerformSiteAction("auditor", "data.lifecycle.manage")).toBe(false);
     expect(canPerformSiteAction("auditor", "artifact.create")).toBe(false);
     expect(canPerformSiteAction("auditor", "run.approve")).toBe(false);
     expect(canPerformSiteAction("operator", "audit.read")).toBe(false);
@@ -107,11 +113,11 @@ describe("site role permission matrix", () => {
       reasonCode: "ROLE_PERMISSION_DENIED",
       beforeState: {
         role: "requester",
-        matrixVersion: "2026-08-01.us-g2-003.v1",
+        matrixVersion: "2026-08-01.us-g1-006a.v1",
       },
       afterState: {
         role: "requester",
-        matrixVersion: "2026-08-01.us-g2-003.v1",
+        matrixVersion: "2026-08-01.us-g1-006a.v1",
       },
       correlationId: "req_requester",
     });

@@ -176,6 +176,13 @@
       "when": 1785722400000,
       "tag": "0024_session_mandate_selection",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1785726000000,
+      "tag": "0025_data_lifecycle_preview",
+      "breakpoints": true
     }
   ]
 }

@@ -35,6 +35,9 @@ import * as runtimeRestart from "@/api/runtime/restart/route";
 import * as sshHosts from "@/api/runtime/ssh-hosts/route";
 import * as runtimeTest from "@/api/runtime/test/route";
 import * as settingsStorage from "@/api/settings/storage/route";
+import * as settingsDataLifecycle from "@/api/settings/data-lifecycle/route";
+import * as settingsDataLifecyclePreviews from "@/api/settings/data-lifecycle/previews/route";
+import * as settingsDataLifecyclePreview from "@/api/settings/data-lifecycle/previews/[previewId]/route";
 import * as setup from "@/api/setup/route";
 import * as threads from "@/api/threads/route";
 import * as threadDetail from "@/api/threads/[threadId]/route";
@@ -197,6 +200,24 @@ export const ROUTES: RouteDefinition[] = [
     path: "/api/settings/storage",
     module: settingsStorage,
     access: siteAccess({ GET: "storage.read" }),
+  },
+  {
+    path: "/api/settings/data-lifecycle",
+    module: settingsDataLifecycle,
+    access: siteAccess({
+      GET: "data.lifecycle.read",
+      PUT: "data.lifecycle.manage",
+    }),
+  },
+  {
+    path: "/api/settings/data-lifecycle/previews",
+    module: settingsDataLifecyclePreviews,
+    access: siteAccess({ POST: "data.lifecycle.preview" }),
+  },
+  {
+    path: "/api/settings/data-lifecycle/previews/:previewId",
+    module: settingsDataLifecyclePreview,
+    access: siteAccess({ GET: "data.lifecycle.preview" }),
   },
 
   { path: "/api/runtime", module: runtime, access: installationAccess },
