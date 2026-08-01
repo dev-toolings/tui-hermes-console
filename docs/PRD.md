@@ -246,7 +246,8 @@ Précisions :
 - organisation/tenant et ownership métier comme frontière complète d'autorisation ;
 - site/projet comme frontière technique : implémenté et vérifié localement, mais non accepté avant Gate 1 ;
 - propriétaire sur agent, session, mission, connecteur ou artefact ;
-- rôles admin, operator, requester, approver, auditor ;
+- rôles admin, operator, requester, approver, auditor : matrice serveur et garde d'installation
+  implémentées et vérifiées localement, mais non acceptées avant P-E2E/revue ;
 - OIDC générique, SAML ou SCIM ;
 - revue Gate et E2E navigateur du contexte site ;
 - policy engine fail-closed sur outils, chemins, connecteurs, modèles ou budget ;
@@ -339,7 +340,8 @@ L’adapter reste le seul point de couplage au protocole.
 
 ### 8.1 Modèle actuel
 
-- console_users : identité Google ; les memberships portent actuellement les rôles de site, sans matrice appliquée ;
+- console_users : identité Google ; les memberships portent les rôles de site, appliqués par la
+  matrice RBAC serveur versionnée ;
 - console_sessions : token opaque hashé, CSRF, expiration et site actif sélectionné ;
 - sites, projects, site_memberships : frontière technique site/projet ;
 - console_setup : état global de l’installation ;
@@ -355,9 +357,9 @@ L’adapter reste le seul point de couplage au protocole.
 ### 8.2 Conséquence B2B
 
 Les ressources métier portent désormais un site et éventuellement un projet. Un membre ne voit que
-son site actif, mais la matrice RBAC et l'ownership ne sont pas encore appliqués. Les réglages
-runtime, modèles, setup et credentials restent des singletons d'installation sans autorité
-`installation_admin` distincte.
+son site actif ; la matrice RBAC serveur refuse les actions non attribuées et les rôles site ne
+peuvent pas atteindre les singletons runtime, modèles, setup ou credentials. L'ownership métier,
+la P-E2E navigateur et l'autorité `installation_admin` restent à livrer.
 
 Le `run_events` actuel reste un ledger technique, distinct du ledger d'audit :
 

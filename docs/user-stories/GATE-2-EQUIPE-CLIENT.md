@@ -34,6 +34,9 @@
   élévation, alors le refus est stable, l'état reste inchangé et l'audit est attribué.
 - **Preuves :** `P-INT`, `P-E2E`, `P-SEC`, matrice permissions/actions versionnée et campagne croisée.
 - **État initial :** `PROPOSÉE`.
+- **État courant au 2026-08-01 :** `IMPLÉMENTÉE` backend, non `VÉRIFIÉE`/`ACCEPTÉE` tant que la
+  P-E2E navigateur, la revue produit/sécurité et la dépendance Gate 1 ne sont pas clôturées.
+- **Preuve datée :** [`2026-08-01-gate-2-rbac.md`](evidence/2026-08-01-gate-2-rbac.md).
 
 ## US-G2-003 — Posséder agents, missions, artefacts et connecteurs
 
