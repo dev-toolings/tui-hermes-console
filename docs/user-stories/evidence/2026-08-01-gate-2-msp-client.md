@@ -2,7 +2,7 @@
 
 - Date/heure UTC : 2026-08-01
 - Story : US-G2-004
-- Commit/build : branche `feat/us-g2-004-msp-client`, commit `3f2b45e`
+- Commit/build : branche `feat/us-g2-004-msp-client`, commit `7d122cc`
 - Environnement : local, PostgreSQL Docker éphémère `postgres:17.6-alpine` épinglé par digest
 - Opérateur : équipe Console
 - Reviewer : Vador — contre-audit à rattacher
