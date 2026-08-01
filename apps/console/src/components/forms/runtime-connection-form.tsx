@@ -65,7 +65,7 @@ export function RuntimeConnectionForm({
   const [sshAuth, setSshAuth] = useState<SshAuth>("agent");
   const [sshPassword, setSshPassword] = useState("");
   const [sshPasswordConfigured, setSshPasswordConfigured] = useState(false);
-  const [remoteWorkdir, setRemoteWorkdir] = useState("/tmp/hermes-console-work");
+  const [remoteWorkdir, setRemoteWorkdir] = useState("");
   const [configHosts, setConfigHosts] = useState<SshConfigHost[]>([]);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [loaded, setLoaded] = useState(false);
@@ -150,6 +150,13 @@ export function RuntimeConnectionForm({
       }
       if (sshAuth === "password" && !sshPassword && !sshPasswordConfigured) {
         setStatus({ kind: "error", message: "Saisissez le mot de passe SSH." });
+        return null;
+      }
+      if (!remoteWorkdir.trim()) {
+        setStatus({
+          kind: "error",
+          message: "Indiquez un workdir distant durable (par exemple /srv/hermes-console/workdir).",
+        });
         return null;
       }
       payload.ssh = { host: sshHost.trim(), port, user: sshUser.trim(), auth: sshAuth };
@@ -378,7 +385,7 @@ export function RuntimeConnectionForm({
               name="remoteWorkdir"
               value={remoteWorkdir}
               onChange={(event) => setRemoteWorkdir(event.target.value)}
-              placeholder="/tmp/hermes-console-work"
+              placeholder="/srv/hermes-console/workdir"
               disabled={disabled}
               className={input}
             />

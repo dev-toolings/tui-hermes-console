@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import path from "node:path";
 import { and, eq, sql } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
 import {
@@ -18,8 +19,52 @@ import { closeChannel, ensureTunnel, getChannel, type SshTarget } from "./ssh";
 
 const RUNTIME_ID = "default";
 
-/** Racine de travail par défaut côté machine distante. */
-export const DEFAULT_REMOTE_WORKDIR = "/tmp/hermes-console-work";
+/** Racines éphémères interdites pour un workdir SSH censé survivre au redémarrage. */
+const EPHEMERAL_REMOTE_WORKDIR_ROOTS = ["/tmp", "/var/tmp", "/run", "/dev/shm"] as const;
+
+/**
+ * Valide le workdir persistant fourni par l'opérateur pour le transport SSH.
+ * La Console ne peut pas prouver le montage distant, mais elle refuse les
+ * racines transitoires connues et n'invente jamais de chemin de repli.
+ */
+export function requireDurableRemoteWorkdir(value: string | null | undefined): string {
+  const candidate = value?.trim() ?? "";
+  if (!candidate) {
+    throw new HermesRuntimeError(
+      "Un workdir distant durable est requis en mode tunnel SSH.",
+      400,
+      "SSH_WORKDIR_REQUIRED",
+    );
+  }
+  if (candidate.includes("\0")) {
+    throw new HermesRuntimeError(
+      "Le workdir distant contient un caractère interdit.",
+      400,
+      "SSH_WORKDIR_INVALID",
+    );
+  }
+
+  const normalized = path.posix.normalize(candidate).replace(/\/+$/, "") || "/";
+  if (!normalized.startsWith("/") || normalized === "/") {
+    throw new HermesRuntimeError(
+      "Le workdir distant doit être un répertoire absolu dédié.",
+      400,
+      "SSH_WORKDIR_INVALID",
+    );
+  }
+  if (
+    EPHEMERAL_REMOTE_WORKDIR_ROOTS.some(
+      (root) => normalized === root || normalized.startsWith(`${root}/`),
+    )
+  ) {
+    throw new HermesRuntimeError(
+      "Le workdir distant ne peut pas se trouver dans une racine transitoire (/tmp, /var/tmp, /run ou /dev/shm).",
+      400,
+      "SSH_WORKDIR_NOT_DURABLE",
+    );
+  }
+  return normalized;
+}
 
 export type { RuntimePublicDto } from "@console/core/types/api";
 import type { RuntimePublicDto } from "@console/core/types/api";
@@ -198,6 +243,7 @@ export async function resolveHermesRuntimeConfig(): Promise<ResolvedRuntimeConfi
     const remoteBaseUrl = normalizeBaseUrl(row.baseUrl);
     const token = decryptSecret(row.encryptedToken);
     if (row.transport === "ssh") {
+      requireDurableRemoteWorkdir(row.remoteWorkdir);
       const endpoint = remoteEndpoint(remoteBaseUrl);
       const baseUrl = await ensureTunnel(sshTargetFromRow(row), endpoint.host, endpoint.port);
       return { baseUrl, remoteBaseUrl, token, transport: "ssh", source: "database" };
@@ -260,7 +306,7 @@ export async function saveRuntimeConfig(input: RuntimeConnectionInput): Promise<
     sshPort = ssh.port ?? 22;
     sshUser = ssh.user.trim();
     sshAuth = ssh.auth ?? "agent";
-    remoteWorkdir = input.remoteWorkdir?.trim() || remoteWorkdir || DEFAULT_REMOTE_WORKDIR;
+    remoteWorkdir = requireDurableRemoteWorkdir(input.remoteWorkdir ?? remoteWorkdir);
 
     if (ssh.password?.trim()) encryptedSshPassword = encryptSecret(ssh.password.trim());
     if (sshAuth === "password" && !encryptedSshPassword) {
@@ -433,6 +479,7 @@ async function resolveProbeTarget(
   const user = ssh.user.trim();
   const port = ssh.port ?? 22;
   const auth = ssh.auth ?? "agent";
+  requireDurableRemoteWorkdir(options.remoteWorkdir);
 
   let password: string | undefined;
   if (auth === "password") {
@@ -518,7 +565,7 @@ export async function getRemoteWorkspace(): Promise<{
   if (!row || row.transport !== "ssh") return null;
   return {
     channel: getChannel(sshTargetFromRow(row)),
-    root: row.remoteWorkdir?.trim() || DEFAULT_REMOTE_WORKDIR,
+    root: requireDurableRemoteWorkdir(row.remoteWorkdir),
   };
 }
 
