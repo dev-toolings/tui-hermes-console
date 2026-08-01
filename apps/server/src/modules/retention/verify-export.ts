@@ -41,7 +41,7 @@ const manifestSchema = z.object({
   artifactBytes: z.number().int().nonnegative(),
 }).strict();
 
-export const lifecycleExportBundleSchema = z.object({
+const exportSchema = z.object({
   version: z.literal(1),
   type: z.literal("hermes_console_business_export"),
   siteId: z.string().min(1),
@@ -58,8 +58,6 @@ export const lifecycleExportBundleSchema = z.object({
   manifest: manifestSchema,
   manifestSha256: z.string().regex(/^[0-9a-f]{64}$/),
 }).passthrough();
-
-export type LifecycleExportBundle = z.infer<typeof lifecycleExportBundleSchema>;
 
 export type VerifiedLifecycleExport = {
   sha256: string;
@@ -93,7 +91,7 @@ export function verifyLifecycleExport(
   } catch {
     throw new Error("LIFECYCLE_EXPORT_INVALID_JSON");
   }
-  const bundle = lifecycleExportBundleSchema.parse(parsed);
+  const bundle = exportSchema.parse(parsed);
   if (bundle.manifest.siteId !== bundle.siteId || bundle.manifest.previewId !== bundle.previewId) {
     throw new Error("LIFECYCLE_EXPORT_MANIFEST_SCOPE_MISMATCH");
   }
@@ -159,16 +157,6 @@ export function verifyLifecycleExport(
   };
 }
 
-/** Parses only after applying the same digest, scope, relation, and octet checks. */
-export function parseVerifiedLifecycleExport(
-  input: string | Uint8Array,
-  expectedSha256?: string,
-): LifecycleExportBundle {
-  verifyLifecycleExport(input, expectedSha256);
-  const bytes = typeof input === "string" ? new TextEncoder().encode(input) : input;
-  return lifecycleExportBundleSchema.parse(JSON.parse(new TextDecoder().decode(bytes)));
-}
-
 function assertUniqueIds(rows: readonly { id: string | number }[], label: string) {
   const ids = new Set<string>();
   for (const row of rows) {
@@ -178,7 +166,7 @@ function assertUniqueIds(rows: readonly { id: string | number }[], label: string
   }
 }
 
-function assertRelations(bundle: z.infer<typeof lifecycleExportBundleSchema>) {
+function assertRelations(bundle: z.infer<typeof exportSchema>) {
   const threadIds = new Set(bundle.threads.map((row) => String(row.id)));
   const runIds = new Set(bundle.runs.map((row) => String(row.id)));
   const messageIds = new Set(bundle.messages.map((row) => String(row.id)));
