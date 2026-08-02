@@ -11,18 +11,17 @@ import {
   SidebarMenuItem,
 } from "@boardui/ui";
 import { Link } from "@/lib/router";
-import { NavDocuments } from "./nav-documents";
+import { NavFooter } from "./nav-footer";
 import { NavMain } from "./nav-main";
 import { NavSecondary } from "./nav-secondary";
 import { NavUser } from "./nav-user";
 import { RuntimeStatusCard } from "./runtime-status-card";
+import { DEFAULT_CONSOLE_PATH } from "./nav-config";
 
 export function AppSidebar({
-  onOpenPalette,
   capabilities,
   ...props
 }: ComponentProps<typeof Sidebar> & {
-  onOpenPalette: () => void;
   capabilities: ReadonlySet<string>;
 }) {
   return (
@@ -31,7 +30,7 @@ export function AppSidebar({
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5!">
-              <Link href="/">
+              <Link href={DEFAULT_CONSOLE_PATH}>
                 <img
                   src="/brand/hermes-console-favicon.png"
                   alt=""
@@ -47,12 +46,12 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        <NavMain onOpenPalette={onOpenPalette} capabilities={capabilities} />
-        <NavDocuments capabilities={capabilities} />
-        <NavSecondary capabilities={capabilities} className="mt-auto" />
+        <NavMain capabilities={capabilities} />
+        <NavSecondary capabilities={capabilities} />
       </SidebarContent>
 
       <SidebarFooter>
+        <NavFooter capabilities={capabilities} />
         <RuntimeStatusCard />
         <NavUser />
       </SidebarFooter>

@@ -1203,6 +1203,7 @@ export async function listThreads(scope: SiteRequestContext, options?: {
   return threadRows.map((thread) => ({
     id: thread.id,
     title: thread.title,
+    source: thread.source,
     agentName: thread.agentName,
     provider: thread.provider,
     model: thread.model,

@@ -1,8 +1,6 @@
 "use client";
 
-import { PlusCircleIcon, SearchIcon } from "lucide-react";
 import {
-  Button,
   SidebarGroup,
   SidebarGroupContent,
   SidebarMenu,
@@ -10,55 +8,25 @@ import {
   SidebarMenuItem,
 } from "@boardui/ui";
 import { Link, usePathname } from "@/lib/router";
-import { PRIMARY_NAV, activeNavHref, navForCapabilities } from "./nav-config";
+import { WORK_NAV, activeNavHref, navForCapabilities } from "./nav-config";
 
 /**
- * Bloc principal du rail, dans la disposition `nav-main` de dashboard-01 :
- * une action de création mise en avant, un déclencheur secondaire, puis la
- * navigation. Le « Quick Create » du bloc devient « Nouvelle mission », et le
- * bouton courrier devient l'entrée de la palette ⌘K.
+ * Les objets de travail sont les premiers repères du rail. Les actions de
+ * création restent dans Chat et Missions ; la recherche globale reste dans
+ * l'en-tête et avec ⌘K, sans contrôle dupliqué ici.
  */
 export function NavMain({
-  onOpenPalette,
   capabilities,
 }: {
-  onOpenPalette: () => void;
   capabilities: ReadonlySet<string>;
 }) {
   const pathname = usePathname();
-  const navigation = navForCapabilities(PRIMARY_NAV, capabilities);
+  const navigation = navForCapabilities(WORK_NAV, capabilities);
   const activeHref = activeNavHref(navigation, pathname);
 
   return (
     <SidebarGroup>
-      <SidebarGroupContent className="flex flex-col gap-2">
-        <SidebarMenu>
-          {capabilities.has("thread.create") ? (
-          <SidebarMenuItem className="flex items-center gap-2">
-            <SidebarMenuButton
-              asChild
-              tooltip="Nouvelle mission"
-              className="min-w-8 bg-[image:var(--gradient-primary)] text-primary-foreground shadow-[var(--shadow-xs)] duration-200 ease-linear hover:bg-[image:var(--gradient-primary-hover)] hover:text-primary-foreground active:bg-[image:var(--gradient-primary-active)] active:text-primary-foreground"
-            >
-              <Link href="/runs/new">
-                <PlusCircleIcon />
-                <span>Nouvelle mission</span>
-              </Link>
-            </SidebarMenuButton>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              iconOnly
-              onClick={onOpenPalette}
-              className="size-8 group-data-[collapsible=icon]:opacity-0"
-            >
-              <SearchIcon className="size-4" />
-              <span className="sr-only">Recherche rapide</span>
-            </Button>
-          </SidebarMenuItem>
-          ) : null}
-        </SidebarMenu>
-
+      <SidebarGroupContent>
         <SidebarMenu>
           {navigation.map((item) => (
             <SidebarMenuItem key={item.href}>

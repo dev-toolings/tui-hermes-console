@@ -3,11 +3,12 @@ import { getDatabase } from "@/db/client";
 import { auditLedgerEntries } from "@/db/schema";
 import { assertSiteAction } from "@/modules/auth/site-authorization";
 import type { SiteRequestContext } from "@/modules/auth/service";
+import type { AuditEntryDto } from "@console/core/modules/audit/types";
 
 export async function listSiteAuditEntries(
   context: SiteRequestContext,
   limit: number,
-) {
+): Promise<AuditEntryDto[]> {
   await assertSiteAction(context, "audit.read");
   const rows = await getDatabase()
     .select()

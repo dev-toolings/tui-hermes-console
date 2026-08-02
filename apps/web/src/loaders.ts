@@ -11,6 +11,7 @@ import {
   fetchAgent,
   fetchAgents,
   fetchArtifacts,
+  fetchAuditEntries,
   fetchRuntime,
   fetchRuntimeProbe,
   fetchStorage,
@@ -33,6 +34,16 @@ export async function loadMissions() {
   return { threads: await fetchThreads("mission") };
 }
 export type MissionsData = Awaited<ReturnType<typeof loadMissions>>;
+
+export async function loadSessions() {
+  return { threads: await fetchThreads("all") };
+}
+export type SessionsData = Awaited<ReturnType<typeof loadSessions>>;
+
+export async function loadAudit() {
+  return { entries: await fetchAuditEntries(200) };
+}
+export type AuditData = Awaited<ReturnType<typeof loadAudit>>;
 
 export async function loadAgents() {
   return { agents: await fetchAgents(true) };

@@ -93,7 +93,6 @@ function ConsoleShellFrame({ children }: { children: ReactNode }) {
       <CloseMobileRailOnNavigation />
       <AppSidebar
         variant={layout === "inset" ? "inset" : "sidebar"}
-        onOpenPalette={() => setPaletteOpen(true)}
         capabilities={capabilities}
       />
       <SidebarInset

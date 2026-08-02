@@ -109,6 +109,7 @@ export type RunActivityPoint = {
 export type ThreadListItemDto = {
   id: string;
   title: string;
+  source: ThreadSource;
   agentName: string;
   provider: string | null;
   model: string;

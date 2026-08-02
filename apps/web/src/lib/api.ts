@@ -21,6 +21,7 @@ import type {
   ThreadListItemDto,
 } from "@console/core/modules/runs/types";
 import type { RuntimeProbeDto } from "@console/core/modules/runtime/probe";
+import type { AuditEntryDto } from "@console/core/modules/audit/types";
 
 export class ApiError extends Error {
   constructor(
@@ -119,6 +120,11 @@ export const fetchThreads = (source: "mission" | "chat" | "all" = "all") =>
   getJson<{ threads: ThreadListItemDto[] }>(
     source === "all" ? "/api/threads" : `/api/threads?source=${source}`,
   ).then((r) => r.threads);
+
+export const fetchAuditEntries = (limit = 200) =>
+  getJson<{ entries: AuditEntryDto[] }>(`/api/audit?limit=${limit}`).then(
+    (response) => response.entries,
+  );
 
 export const fetchActivity = (days = 30) =>
   getJson<{ activity: RunActivityPoint[] }>(`/api/runs/activity?days=${days}`).then(

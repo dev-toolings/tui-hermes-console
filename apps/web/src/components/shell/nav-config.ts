@@ -9,8 +9,10 @@ import {
   BotIcon,
   CircleHelpIcon,
   FileBoxIcon,
+  HistoryIcon,
   LayoutDashboardIcon,
   MessageSquareIcon,
+  ScrollTextIcon,
   SettingsIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -23,32 +25,31 @@ export type NavItem = {
   requiredCapability?: string;
 };
 
-export const PRIMARY_NAV = [
-  { label: "Aperçu", href: "/", icon: LayoutDashboardIcon, requiredCapability: "run.read" },
+export const DEFAULT_CONSOLE_PATH = "/chat";
+
+export const WORK_NAV = [
   { label: "Chat", href: "/chat", icon: MessageSquareIcon, requiredCapability: "thread.read" },
   { label: "Agents", href: "/agents", icon: BotIcon, requiredCapability: "agent.read" },
+  { label: "Sessions", href: "/sessions", icon: HistoryIcon, requiredCapability: "thread.read" },
   { label: "Missions", href: "/runs", icon: ActivityIcon, requiredCapability: "run.read" },
-] satisfies NavItem[];
-
-/**
- * Groupe libellé du milieu — le « Documents » du bloc. Les artefacts sont les
- * seuls livrables persistés par la Console, ils y vont seuls plutôt que d'être
- * accompagnés d'entrées inventées.
- */
-export const DOCUMENTS_NAV = [
   { label: "Artefacts", href: "/artifacts", icon: FileBoxIcon, requiredCapability: "artifact.read" },
 ] satisfies NavItem[];
 
-export const SECONDARY_NAV = [
+export const CONTROL_NAV = [
+  { label: "Aperçu", href: "/overview", icon: LayoutDashboardIcon, requiredCapability: "run.read" },
+  { label: "Journal", href: "/audit", icon: ScrollTextIcon, requiredCapability: "audit.read" },
   // Les paramètres racine chargent encore des endpoints installation-global
   // (runtime/chiffrement) que les rôles site ne peuvent pas appeler. Ne pas
   // afficher ce lien tant qu'un capability installation-admin n'est pas livré.
   { label: "Paramètres", href: "/settings", icon: SettingsIcon, requiredCapability: "installation.admin" },
+] satisfies NavItem[];
+
+export const FOOTER_NAV = [
   { label: "Aide", href: "/support", icon: CircleHelpIcon, requiredCapability: "run.read" },
 ] satisfies NavItem[];
 
 /** Toutes les destinations, pour la palette ⌘K. */
-export const ALL_NAV = [...PRIMARY_NAV, ...DOCUMENTS_NAV, ...SECONDARY_NAV] satisfies NavItem[];
+export const ALL_NAV = [...WORK_NAV, ...CONTROL_NAV, ...FOOTER_NAV] satisfies NavItem[];
 
 export function navForCapabilities<T extends NavItem>(
   items: readonly T[],
@@ -82,7 +83,7 @@ export type PageMeta = {
 };
 
 export function pageMeta(pathname: string): PageMeta {
-  if (pathname === "/") return { title: "Vue d’ensemble", crumb: "Aperçu" };
+  if (pathname === "/overview") return { title: "Vue d’ensemble", crumb: "Aperçu" };
   if (pathname === "/agents/new") {
     return { title: "Nouvel agent", crumb: "Créer", parent: { label: "Agents", href: "/agents" } };
   }
@@ -109,6 +110,7 @@ export function pageMeta(pathname: string): PageMeta {
     };
   }
   if (pathname === "/chat") return { title: "Chat", crumb: "Chat" };
+  if (pathname === "/sessions") return { title: "Sessions", crumb: "Sessions" };
   if (pathname === "/runs/new") {
     return {
       title: "Nouvelle mission",
@@ -125,6 +127,7 @@ export function pageMeta(pathname: string): PageMeta {
   }
   if (pathname === "/runs") return { title: "Missions", crumb: "Missions" };
   if (pathname === "/artifacts") return { title: "Artefacts", crumb: "Artefacts" };
+  if (pathname === "/audit") return { title: "Journal d’audit", crumb: "Journal" };
   if (pathname === "/settings/runtime") {
     return {
       title: "Runtime Hermes",

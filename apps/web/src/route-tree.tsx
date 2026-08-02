@@ -82,16 +82,21 @@ import { SettingsRetentionScreen } from "@/screens/settings-retention";
 import { SettingsSecurityScreen } from "@/screens/settings-security";
 import { SetupScreen } from "@/screens/setup";
 import { NotFoundScreen } from "@/screens/not-found";
+import { SessionsScreen } from "@/screens/sessions";
+import { AuditScreen } from "@/screens/audit";
+import { DEFAULT_CONSOLE_PATH } from "@/components/shell/nav-config";
 
 import {
   loadAgent,
   loadAgents,
   loadArtifacts,
+  loadAudit,
   loadDashboard,
   loadMissions,
   loadRetention,
   loadRuntime,
   loadSupport,
+  loadSessions,
 } from "@/loaders";
 
 export type ConsoleAccessStatus = {
@@ -203,11 +208,55 @@ function RouteFallback() {
   );
 }
 
-const dashboardRoute = createRoute({
+const homeRoute = createRoute({
   getParentRoute: () => consoleLayout,
   path: "/",
+  beforeLoad: () => {
+    throw redirect({ to: DEFAULT_CONSOLE_PATH as never, replace: true });
+  },
+});
+
+const dashboardRoute = createRoute({
+  getParentRoute: () => consoleLayout,
+  path: "/overview",
   loader: loadDashboard,
   component: () => <DashboardScreen data={dashboardRoute.useLoaderData()} />,
+  pendingComponent: Pending,
+  errorComponent: ErrorBox,
+});
+
+const sessionsRoute = createRoute({
+  getParentRoute: () => consoleLayout,
+  path: "/sessions",
+  validateSearch: (search: Record<string, unknown>) => ({
+    source: search.source === "chat" || search.source === "mission" ? search.source : undefined,
+    q: typeof search.q === "string" ? search.q.slice(0, 200) : undefined,
+  }),
+  loader: loadSessions,
+  component: function SessionsRoute() {
+    return (
+      <SessionsScreen
+        data={sessionsRoute.useLoaderData()}
+        search={sessionsRoute.useSearch()}
+      />
+    );
+  },
+  pendingComponent: Pending,
+  errorComponent: ErrorBox,
+});
+
+const auditRoute = createRoute({
+  getParentRoute: () => consoleLayout,
+  path: "/audit",
+  validateSearch: (search: Record<string, unknown>) => ({
+    decision: search.decision === "allowed" || search.decision === "denied" ? search.decision : undefined,
+    resource: typeof search.resource === "string" ? search.resource.slice(0, 100) : undefined,
+    q: typeof search.q === "string" ? search.q.slice(0, 200) : undefined,
+  }),
+  loader: loadAudit,
+  component: function AuditRoute() {
+    return <AuditScreen data={auditRoute.useLoaderData()} search={auditRoute.useSearch()} />;
+  },
   pendingComponent: Pending,
   errorComponent: ErrorBox,
 });
@@ -494,7 +543,10 @@ export const routeTree = rootRoute.addChildren([
   setupRoute,
   installationGuideRoute,
   consoleLayout.addChildren([
+    homeRoute,
     dashboardRoute,
+    sessionsRoute,
+    auditRoute,
     missionsRoute,
     newMissionRoute,
     missionDetailRoute,
