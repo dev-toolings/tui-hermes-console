@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { appendAuditEntry } from "@/modules/audit/service";
 import { AuthError, type SiteRequestContext } from "./service";
+import { describeError, log } from "@/observability/log";
 
 type ScopedMiss = {
   action: string;
@@ -47,11 +48,11 @@ export async function auditScopedMiss(
       occurredAt: new Date(),
     });
   } catch (error) {
-    console.error("Scoped denial audit failed", {
+    log.error("Scoped denial audit failed", {
       siteId: context.siteId,
       resourceType: miss.resourceType,
       correlationId: context.correlationId,
-      error,
+      ...describeError(error),
     });
     throw new AuthError(
       "Le refus d’accès n’a pas pu être inscrit dans le journal d’audit.",

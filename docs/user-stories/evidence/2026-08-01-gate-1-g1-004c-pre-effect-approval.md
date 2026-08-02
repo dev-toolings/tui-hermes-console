@@ -28,7 +28,7 @@ bun run proof:g1-004c
 bun run --filter server typecheck
 exit 0
 
-bun run --filter console typecheck
+bun run --filter web typecheck
 exit 0
 ```
 

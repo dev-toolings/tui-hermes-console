@@ -99,18 +99,25 @@ describeWithCompose("production Compose secret boundaries", () => {
       target: "/home/bun/.ssh",
     });
     expect(sshVolume?.source).toEndWith("/deploy/ssh");
+    const knownHostsVolume = config.services.console?.volumes?.find(
+      (volume) => volume.target === "/data/ssh",
+    );
+    expect(knownHostsVolume).toMatchObject({
+      type: "volume",
+      target: "/data/ssh",
+    });
+    expect(knownHostsVolume?.read_only).not.toBe(true);
+    expect(knownHostsVolume?.source).toContain("ssh-data");
     expect(config.services.console?.environment?.HERMES_SSH_KNOWN_HOSTS_FILE).toBe(
-      "/home/bun/.ssh/known_hosts",
+      "/data/ssh/known_hosts",
     );
     const guide = readFileSync(
       resolve(repositoryRoot, "docs/user-stories/guides/SSH-VPS-VIERGE.md"),
       "utf8",
     );
     const deployGuide = readFileSync(resolve(repositoryRoot, "deploy/README.md"), "utf8");
-    expect(guide).toContain("/home/bun/.ssh/known_hosts");
-    expect(guide).toContain(
-      'install -m 0600 "$HOME/.ssh/<site>.known_hosts" "$ssh_dir/known_hosts"',
-    );
-    expect(deployGuide).toContain("HERMES_SSH_KNOWN_HOSTS_FILE=/home/bun/.ssh/known_hosts");
+    expect(guide).toContain("/data/ssh/known_hosts");
+    expect(guide).toContain("volume persistant `ssh-data`");
+    expect(deployGuide).toContain("/data/ssh/known_hosts");
   });
 });

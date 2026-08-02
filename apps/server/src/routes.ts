@@ -34,6 +34,15 @@ import * as codexAuth from "@/api/runtime/providers/openai-codex/auth/route";
 import * as runtimeRestart from "@/api/runtime/restart/route";
 import * as sshHosts from "@/api/runtime/ssh-hosts/route";
 import * as runtimeTest from "@/api/runtime/test/route";
+import * as runtimeSshConnect from "@/api/runtime/ssh/connect/route";
+import * as runtimeSshWorkspaceDiscover from "@/api/runtime/ssh/workspace/discover/route";
+import * as runtimeSshWorkspaceCheck from "@/api/runtime/ssh/workspace/check/route";
+import * as runtimeSshWorkspace from "@/api/runtime/ssh/workspace/route";
+import * as runtimeSshHostKeyScan from "@/api/runtime/ssh/host-key/scan/route";
+import * as runtimeSshHostKey from "@/api/runtime/ssh/host-key/route";
+import * as runtimeSshPlan from "@/api/runtime/ssh/plan/route";
+import * as runtimeSshProvision from "@/api/runtime/ssh/provision/route";
+import * as runtimeSshProvisionEvents from "@/api/runtime/ssh/provision/[jobId]/events/route";
 import * as settingsStorage from "@/api/settings/storage/route";
 import * as settingsDataLifecycle from "@/api/settings/data-lifecycle/route";
 import * as settingsDataLifecyclePreviews from "@/api/settings/data-lifecycle/previews/route";
@@ -241,6 +250,15 @@ export const ROUTES: RouteDefinition[] = [
   { path: "/api/runtime/restart", module: runtimeRestart, access: installationAccess },
   { path: "/api/runtime/ssh-hosts", module: sshHosts, access: installationAccess },
   { path: "/api/runtime/test", module: runtimeTest, access: installationAccess },
+  { path: "/api/runtime/ssh/connect", module: runtimeSshConnect, access: installationAccess },
+  { path: "/api/runtime/ssh/workspace/discover", module: runtimeSshWorkspaceDiscover, access: installationAccess },
+  { path: "/api/runtime/ssh/workspace/check", module: runtimeSshWorkspaceCheck, access: installationAccess },
+  { path: "/api/runtime/ssh/workspace", module: runtimeSshWorkspace, access: installationAccess },
+  { path: "/api/runtime/ssh/host-key/scan", module: runtimeSshHostKeyScan, access: installationAccess },
+  { path: "/api/runtime/ssh/host-key", module: runtimeSshHostKey, access: installationAccess },
+  { path: "/api/runtime/ssh/plan", module: runtimeSshPlan, access: installationAccess },
+  { path: "/api/runtime/ssh/provision", module: runtimeSshProvision, access: installationAccess },
+  { path: "/api/runtime/ssh/provision/:jobId/events", module: runtimeSshProvisionEvents, access: installationAccess },
   // Avant `/:provider/credentials` : Hono retient la première correspondance,
   // et « openai-codex » matcherait le motif paramétré.
   {

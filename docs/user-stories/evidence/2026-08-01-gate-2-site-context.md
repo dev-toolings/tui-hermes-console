@@ -36,8 +36,8 @@ global du propriétaire, sans mutation métier et sans effet runtime/disque/flux
 - Dépôts scopés : agents, connecteurs, threads, runs, artefacts, fichiers et
   statistiques sous `apps/server/src/`.
 - Sélection UI et switch avec purge des états dérivés :
-  `apps/console/src/screens/setup.tsx` et
-  `apps/console/src/components/shell/nav-user.tsx`.
+  `apps/web/src/screens/setup.tsx` et
+  `apps/web/src/components/shell/nav-user.tsx`.
 - Migration : `apps/server/drizzle/0020_session_site_context.sql`.
 
 ### P-INT

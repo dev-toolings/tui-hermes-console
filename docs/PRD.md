@@ -317,11 +317,11 @@ Composants : SPA/Tauri, serveur Hono/Bun, Postgres, runtime direct ou SSH, workd
 
 ### 7.1 Stack
 
-- apps/console : Vite, React 19, TanStack Router, assistant-ui, BoardUI ;
+- apps/web : Vite, React 19, TanStack Router, assistant-ui, BoardUI ;
 - apps/server : Hono, Bun, Drizzle ORM, PostgreSQL, Zod, ssh2 ;
 - packages/console-core : DTO et logique pure partagés ;
 - packages/ui : design system ;
-- apps/console/src-tauri : shell desktop et sidecar ;
+- apps/web/src-tauri : shell desktop et sidecar ;
 - production : Docker Compose et Caddy.
 
 Le serveur Hono est long-lived. Le runner, la réconciliation et les tunnels ne sont pas compatibles
@@ -377,7 +377,9 @@ Un requester client ne lit et ne modifie que ses ressources ; un operator MSP do
 affiliation MSP, mandat actif et affectation individuelle ; un approver reste client-scoped.
 Le transfert thread est atomique avec runs et artefacts, l'audit append-only snapshotte les deux
 organisations et le mandat, et les caches UI changent de namespace par utilisateur/site/contexte.
-La P-E2E navigateur, la revue Gate et l'autorité `installation_admin` restent à livrer. Une
+La P-E2E navigateur et la revue Gate restent à livrer. L'autorité d'installation est désormais
+séparée des rôles de site par `INSTALLATION_ADMIN_EMAILS`, avec un fallback strictement mono-admin
+quand `GOOGLE_ALLOWED_EMAILS` ne contient qu'une identité. Une
 sélection interactive de mandat est maintenant disponible dans la session et le namespace de cache
 est borné par utilisateur/site/mandat ; elle reste à prouver en P-E2E et à faire accepter par la
 revue. Une révocation snapshotée ferme les nouvelles requêtes et

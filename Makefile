@@ -7,12 +7,14 @@ MAKEFLAGS += --no-print-directory
 
 PKG      := bun
 SERVER   := apps/server
-CONSOLE  := apps/console
+WEB      := apps/web
 SPIKE    := spike
 ENV_FILE := $(SERVER)/.env.local
 ENV_TPL  := $(SERVER)/.env.example
 # Le serveur Hono sert l'API et le SPA compilé sur ce même port.
 PORT     ?= 3170
+# Port du dev server Vite (apps/web), lancé par `make dev` / `make web`.
+WEB_PORT ?= 1420
 
 # Postgres local — conteneur `infra-postgres` (~/Documents/infra/compose.yml)
 PG_HOST ?= localhost
@@ -122,7 +124,7 @@ port-free:
 	if [ "$$ppid" != "1" ]; then \
 	  printf "$(RED)✗$(RESET) %s\n" "port $(PORT) tenu par un processus VIVANT de ce dépôt (PID $$pid, parent $$ppid) :" >&2; \
 	  printf "    %s\n" "$$cmd" >&2; \
-	  printf "    %s\n" "app desktop ou autre 'make dev' en cours — ferme-le, ou : make dev PORT=3171" >&2; \
+	  printf "    %s\n" "app desktop ou autre 'make dev' en cours — 'make stop', ou : make dev PORT=3171" >&2; \
 	  exit 1; \
 	fi; \
 	printf "$(YELLOW)!$(RESET) %s\n" "port $(PORT) tenu par un processus orphelin de ce dépôt (PID $$pid) — arrêt"; \
@@ -139,7 +141,7 @@ port-free:
 
 .PHONY: dev
 dev: port-free ## Lance l'API (3170) et le SPA Vite (1420)
-	$(call say,Starting API on :$(PORT) and SPA on http://localhost:1420)
+	$(call say,Starting API on :$(PORT) and web app on http://127.0.0.1:1420)
 	@CONSOLE_SERVER_PORT=$(PORT) $(PKG) run dev
 
 .PHONY: api
@@ -147,13 +149,53 @@ api: port-free ## Lance l'API seule (3170), sans le SPA
 	$(call say,Starting API on :$(PORT))
 	@CONSOLE_SERVER_PORT=$(PORT) $(PKG) run dev:server
 
-.PHONY: spa
-spa: ## Lance le SPA Vite seul (1420), proxie /api vers l'API
-	$(call say,Starting SPA on http://localhost:1420 — API expected on :$(PORT))
-	@CONSOLE_SERVER_PORT=$(PORT) $(PKG) run dev:console
+.PHONY: web
+web: ## Lance l'app web Vite seule (1420), proxie /api vers l'API
+	$(call say,Starting web app on http://127.0.0.1:1420 — API expected on :$(PORT))
+	@CONSOLE_SERVER_PORT=$(PORT) $(PKG) run dev:web
 
+# `port-free` refuse de tuer un processus vivant : c'est un garde-fou pour `dev`,
+# pas pour un arrêt demandé explicitement. `stop` est l'ordre explicite : il tue
+# tout ce que CE dépôt écoute (API + Vite), orphelin ou non. Il ne touche jamais
+# un processus étranger — il le signale et sort en erreur.
 .PHONY: stop
-stop: port-free ## Libère le port de l'API (processus orphelin resté en place)
+stop: ## Arrête tout ce que ce dépôt a lancé (API + SPA Vite)
+	@owned=""; foreign=0; \
+	for port in $(PORT) $(WEB_PORT); do \
+	  for pid in $$(lsof -nP -iTCP:$$port -sTCP:LISTEN -t 2>/dev/null); do \
+	    cmd=$$(ps -o command= -p "$$pid" 2>/dev/null); \
+	    cwd=$$(lsof -a -p "$$pid" -d cwd -Fn 2>/dev/null | sed -n 's|^n||p' | head -1); \
+	    ours=no; \
+	    case "$$cmd" in $(CURDIR)/*) ours=yes;; esac; \
+	    case "$$cwd" in $(CURDIR)|$(CURDIR)/*) ours=yes;; esac; \
+	    if [ "$$ours" != yes ]; then \
+	      printf "$(RED)✗$(RESET) %s\n" "port $$port occupé par un processus étranger (PID $$pid) — pas touché :" >&2; \
+	      printf "    %s\n" "$$cmd" >&2; \
+	      foreign=1; continue; \
+	    fi; \
+	    printf "$(CYAN)▸$(RESET) %s\n" "arrêt du PID $$pid (port $$port)"; \
+	    printf "    $(DIM)%s$(RESET)\n" "$$cmd"; \
+	    kill "$$pid" 2>/dev/null || true; \
+	    owned="$$owned $$pid"; \
+	  done; \
+	done; \
+	if [ -z "$$owned" ]; then \
+	  [ "$$foreign" = 0 ] && printf "$(GREEN)✓$(RESET) %s\n" "rien à arrêter (ports $(PORT) et $(WEB_PORT) libres)"; \
+	  exit $$foreign; \
+	fi; \
+	alive=""; \
+	for _ in 1 2 3 4 5 6 7 8 9 10; do \
+	  alive=""; \
+	  for pid in $$owned; do kill -0 "$$pid" 2>/dev/null && alive="$$alive $$pid"; done; \
+	  [ -n "$$alive" ] || break; \
+	  sleep 0.3; \
+	done; \
+	for pid in $$alive; do \
+	  printf "$(YELLOW)!$(RESET) %s\n" "PID $$pid ne répond pas à SIGTERM — kill -9"; \
+	  kill -9 "$$pid" 2>/dev/null || true; \
+	done; \
+	printf "$(GREEN)✓$(RESET) %s\n" "arrêté :$$owned"; \
+	exit $$foreign
 
 .PHONY: build
 build: ## Build de production du SPA
@@ -175,7 +217,7 @@ lint: ## ESLint
 .PHONY: lint-fix
 lint-fix: ## ESLint --fix
 	$(call say,Linting with autofix)
-	@$(PKG) run --filter console lint -- --fix
+	@$(PKG) run --filter web lint -- --fix
 
 .PHONY: typecheck
 typecheck: ## tsc --noEmit
@@ -265,7 +307,7 @@ fake-llm: ## Lance le faux LLM du spike
 .PHONY: clean
 clean: ## Supprime les artefacts de build (dist, tsbuildinfo)
 	$(call say,Removing build artifacts)
-	@rm -rf $(CONSOLE)/dist $(CONSOLE)/*.tsbuildinfo $(SERVER)/*.tsbuildinfo
+	@rm -rf $(WEB)/dist $(WEB)/*.tsbuildinfo $(SERVER)/*.tsbuildinfo
 	$(call ok,Build artifacts removed)
 
 .PHONY: clean-all

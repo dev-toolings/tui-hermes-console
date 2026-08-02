@@ -6,17 +6,16 @@
  * le rôle du hook `instrumentation` de Next ; c'est maintenant le serveur Hono
  * qui l'appelle explicitement.
  */
+import { describeError, log } from "@/observability/log";
+
 export async function register() {
   const { reconcileOrphanRuns } = await import("@/modules/runs/reconciler");
   void reconcileOrphanRuns()
     .then((result) => {
       if (result.examined === 0 && result.skippedActive === 0) return;
-      console.info("[hermes-console] reconcile", result);
+      log.info("[hermes-console] reconcile", { ...result });
     })
     .catch((error: unknown) => {
-      console.error(
-        "[hermes-console] reconcile failed",
-        error instanceof Error ? error.message : error,
-      );
+      log.error("[hermes-console] reconcile failed", describeError(error));
     });
 }

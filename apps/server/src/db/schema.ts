@@ -27,6 +27,7 @@ export type {
   RuntimeHealthStatus,
   RuntimeSshAuth,
   RuntimeTransport,
+  RuntimeWorkspaceStatus,
   ThreadSource,
   Usage,
 } from "@console/core/types/domain";
@@ -39,6 +40,7 @@ import type {
   RuntimeHealthStatus,
   RuntimeSshAuth,
   RuntimeTransport,
+  RuntimeWorkspaceStatus,
   ThreadSource,
   Usage,
 } from "@console/core/types/domain";
@@ -171,6 +173,12 @@ export const runtimeConfig = pgTable("runtime_config", {
   encryptedSshPassword: text("encrypted_ssh_password"),
   /** Racine du volume de travail côté machine distante (transport `ssh`). */
   remoteWorkdir: text("remote_workdir"),
+  /** Chemin correspondant vu depuis Hermes (différent du chemin hôte en Docker). */
+  remoteHermesWorkdir: text("remote_hermes_workdir"),
+  workspaceStatus: text("workspace_status")
+    .notNull()
+    .default("not_required")
+    .$type<RuntimeWorkspaceStatus>(),
   detectedVersion: text("detected_version"),
   capabilities: jsonb("capabilities").$type<Record<string, unknown>>(),
   lastHealthStatus: text("last_health_status").notNull().default("unknown").$type<RuntimeHealthStatus>(),

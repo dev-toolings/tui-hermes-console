@@ -7,17 +7,7 @@ const testRuntimeSchema = z
   .object({
     baseUrl: z.string().trim().url().max(500).optional(),
     token: z.string().trim().min(1).max(2_000).optional(),
-    transport: z.enum(["direct", "ssh"]).optional(),
-    ssh: z
-      .object({
-        host: z.string().trim().min(1).max(255),
-        port: z.number().int().min(1).max(65_535).optional(),
-        user: z.string().trim().min(1).max(120),
-        auth: z.enum(["agent", "password"]).optional(),
-        password: z.string().min(1).max(1_000).optional(),
-      })
-      .optional(),
-    remoteWorkdir: z.string().trim().min(1).max(400).optional(),
+    transport: z.literal("direct").optional(),
   })
   .optional();
 

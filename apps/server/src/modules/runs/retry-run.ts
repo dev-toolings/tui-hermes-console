@@ -2,6 +2,8 @@ import { createRunForThread, getRunCancelTarget, isTerminalRunStatus, ProductRep
 import { startRun } from "./runner";
 import type { SiteRequestContext } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
+import { assertRuntimeWorkspaceReady } from "@/modules/runtime/config";
+import { acquireRunStartLease } from "./active-runtime-guard";
 
 export type RetryRunResult = {
   threadId: string;
@@ -26,12 +28,18 @@ export async function retryRun(context: SiteRequestContext, runId: string): Prom
     );
   }
 
-  const created = await createRunForThread(context, source.threadId, source.input);
-  startRun(context, created.runId);
+  const releaseRunStart = acquireRunStartLease();
+  try {
+    await assertRuntimeWorkspaceReady();
+    const created = await createRunForThread(context, source.threadId, source.input);
+    startRun(context, created.runId);
 
-  return {
-    threadId: created.threadId,
-    runId: created.runId,
-    sourceRunId: runId,
-  };
+    return {
+      threadId: created.threadId,
+      runId: created.runId,
+      sourceRunId: runId,
+    };
+  } finally {
+    releaseRunStart();
+  }
 }

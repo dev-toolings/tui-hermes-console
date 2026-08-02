@@ -17,6 +17,7 @@ import { assertSiteAction } from "./site-authorization";
 import { AuthError, type SiteRequestContext } from "./service";
 import { cancelRun } from "@/modules/runs/cancel-run";
 import { failRun } from "@/modules/runs/repository";
+import { describeError, log } from "@/observability/log";
 
 export type MandateInput = {
   operatorOrganizationId: string;
@@ -129,10 +130,10 @@ async function cancelRevokedRuns(
     } catch (error) {
       // The mandate/assignment mutation remains committed. A terminal race is
       // harmless; other failures are retained in logs for operational follow-up.
-      console.error("[msp-revocation] run cancellation failed", {
+      log.error("[msp-revocation] run cancellation failed", {
         mandateId: mandate.id,
         runId: target.id,
-        error,
+        ...describeError(error),
       });
     }
   }

@@ -69,8 +69,8 @@ function waitForPostgres() {
 function applyMigrations() {
   const journal = JSON.parse(
     readFileSync(join(root, "apps/server/drizzle/meta/_journal.json"), "utf8"),
-  ) as { entries: Array<{ idx: number; tag: string }> };
-  for (const entry of journal.entries.filter(({ idx }) => idx <= 28)) {
+  ) as { entries: Array<{ tag: string }> };
+  for (const entry of journal.entries) {
     psql(readFileSync(join(root, `apps/server/drizzle/${entry.tag}.sql`), "utf8"));
   }
 }
@@ -139,7 +139,7 @@ async function main() {
       ...process.env,
       CONSOLE_SERVER_HOST: "127.0.0.1",
       CONSOLE_SERVER_PORT: String(serverPort),
-      CONSOLE_SPA_DIR: join(root, "apps/console/dist"),
+      WEB_DIST_DIR: join(root, "apps/web/dist"),
     },
     stdout: "inherit",
     stderr: "inherit",

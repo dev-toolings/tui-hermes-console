@@ -42,6 +42,13 @@ export type RuntimeTransport = "direct" | "ssh";
  *  `password` = ssh2 avec un mot de passe stocké chiffré. */
 export type RuntimeSshAuth = "agent" | "password";
 
+/** État du volume d'échange requis par un runtime distant. */
+export type RuntimeWorkspaceStatus =
+  | "not_required"
+  | "required"
+  | "verification_required"
+  | "ready";
+
 export type ConnectorType = "gmail_imap" | "outlook_imap" | "pro_imap";
 export type ConnectorTestStatus = "unknown" | "healthy" | "failed";
 export type ThreadSource = "chat" | "mission";

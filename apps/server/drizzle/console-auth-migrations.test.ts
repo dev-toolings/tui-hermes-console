@@ -203,6 +203,42 @@ describeWithDocker("console auth migrations on PostgreSQL", () => {
     );
   });
 
+  test("0029 repairs a drifted legacy identity and restores non-null constraints", () => {
+    psql("postgres", 'CREATE DATABASE "legacy_null_identity";');
+    psql(
+      "legacy_null_identity",
+      `CREATE TABLE "console_users" (
+         "id" text PRIMARY KEY,
+         "email" text,
+         "google_subject" text
+       );
+       INSERT INTO "console_users" ("id") VALUES ('admin');`,
+    );
+
+    psql(
+      "legacy_null_identity",
+      migration("0029_repair_legacy_identity_nulls.sql"),
+    );
+
+    expect(
+      psql(
+        "legacy_null_identity",
+        `SELECT email || ':' || google_subject
+         FROM console_users WHERE id = 'admin';`,
+      ),
+    ).toBe("legacy+admin@legacy.invalid:legacy:admin");
+    expect(
+      psql(
+        "legacy_null_identity",
+        `SELECT string_agg(column_name || ':' || is_nullable, ',' ORDER BY column_name)
+         FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = 'console_users'
+           AND column_name IN ('email', 'google_subject');`,
+      ),
+    ).toBe("email:NO,google_subject:NO");
+  });
+
   test("a runtime revision changed after probe cannot complete setup", () => {
     psql("postgres", 'CREATE DATABASE "runtime_cas";');
     applyJournal("runtime_cas", 0, 16);

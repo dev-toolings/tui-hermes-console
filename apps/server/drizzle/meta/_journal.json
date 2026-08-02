@@ -204,6 +204,20 @@
       "when": 1785736800000,
       "tag": "0028_approval_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1785740400000,
+      "tag": "0029_repair_legacy_identity_nulls",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1785744000000,
+      "tag": "0030_runtime_ssh_workspace",
+      "breakpoints": true
     }
   ]
 }

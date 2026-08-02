@@ -19,7 +19,7 @@ Hermes émet toujours `approval.request`, ni un confinement P-SEC/P-OPS.
 ```sh
 bun run proof:g1-004c
 bun run --filter server typecheck
-bun run --filter console typecheck
+bun run --filter web typecheck
 ```
 
 La suite PostgreSQL utilise l’image `postgres:17.6-alpine` épinglée par digest et vérifie le scope,

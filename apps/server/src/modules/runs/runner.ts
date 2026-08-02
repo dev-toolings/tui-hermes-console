@@ -2,7 +2,10 @@ import { DELTA_FLUSH_MS, HermesEventNormalizer } from "@console/core/lib/hermes-
 import { toProductEvents } from "@/lib/product-events";
 import type { Usage } from "@/db/schema";
 import type { ResolvedRuntimeConfig } from "@/modules/runtime/config";
-import { resolveHermesRuntimeConfig } from "@/modules/runtime/config";
+import {
+  assertRuntimeWorkspaceReady,
+  resolveHermesRuntimeConfig,
+} from "@/modules/runtime/config";
 import {
   HermesRuntimeError,
   createHermesAgentRun,
@@ -38,6 +41,8 @@ import {
 import { pushRunInputs, resolveRunRoot } from "@/modules/artifacts/remote-sync";
 import type { SiteScope } from "@/modules/auth/service";
 import { persistApprovalRequest } from "./approval-requests";
+import { assertRuntimeMutationIdle } from "./active-runtime-guard";
+import { describeError, log } from "@/observability/log";
 
 type ActiveRun = {
   siteId: string;
@@ -56,6 +61,7 @@ const activeRuns =
   (globalRunner.hermesConsoleActiveRuns = new Map<string, ActiveRun>());
 
 export function startRun(scope: SiteScope, runId: string) {
+  assertRuntimeMutationIdle();
   if (activeRuns.has(runId)) return;
   const controller = new AbortController();
   const promise = executeRun(scope, runId, controller)
@@ -76,6 +82,7 @@ export function resumeAgentRun(
   hermesRunId: string,
   runtime: ResolvedRuntimeConfig,
 ) {
+  assertRuntimeMutationIdle();
   if (activeRuns.has(runId)) return;
   const controller = new AbortController();
   const promise = resumeAgentStream(scope, runId, hermesRunId, runtime, controller)
@@ -127,6 +134,7 @@ async function executeAgentRun(scope: SiteScope, runId: string, controller: Abor
 
   try {
     context = await getRunContext(scope, runId);
+    await assertRuntimeWorkspaceReady();
     await markRunStarting(scope, runId);
 
     const runtime = await resolveHermesRuntimeConfig();
@@ -305,7 +313,7 @@ async function consumeAgentStream(
       // socket fermée par Hermes) sans que rien ne soit perdu. `respondRunApproval`
       // se rebranchera au moment de la réponse — PRD §9.4, la perte du temps réel
       // ne transforme pas un run en échec.
-      console.warn("[runner] flux fermé pendant une demande d’autorisation", { runId });
+      log.warn("[runner] flux fermé pendant une demande d’autorisation", { runId });
       return;
     }
     const event = toProductEvents([
@@ -351,7 +359,7 @@ async function backfillToolOutputs(
       // Une mission sans outil est normale ; un transcript vide alors que la
       // mission en a appelé ne l'est pas. Le distinguer évite de reproduire
       // l'échec silencieux qui laissait « Sortie non transmise » sans trace.
-      console.warn("[runner] aucune sortie d’outil dans le transcript", {
+      log.warn("[runner] aucune sortie d’outil dans le transcript", {
         runId,
         sessionId,
         transcriptMessages: transcript.length,
@@ -362,7 +370,11 @@ async function backfillToolOutputs(
     const updated = await applyToolOutputs(scope, runId, outputs);
     for (const event of updated) publishThreadEvent(threadId, event);
   } catch (error) {
-    console.error("[runner] tool output backfill failed", { runId, sessionId, error });
+    log.error("[runner] tool output backfill failed", {
+      runId,
+      sessionId,
+      ...describeError(error),
+    });
   }
 }
 
@@ -395,7 +407,7 @@ async function handleAgentRunError(
   // Même règle qu'à la fermeture propre du flux : une mission qui attend une
   // autorisation ne meurt pas d'une socket coupée pendant que l'humain lit.
   if (await isAwaitingApproval(context, runId)) {
-    console.warn("[runner] flux interrompu pendant une demande d’autorisation", {
+    log.warn("[runner] flux interrompu pendant une demande d’autorisation", {
       runId,
       message,
     });
@@ -423,6 +435,7 @@ async function executeResponsesRun(scope: SiteScope, runId: string, controller: 
 
   try {
     context = await getRunContext(scope, runId);
+    await assertRuntimeWorkspaceReady();
     await markRunStarting(scope, runId);
 
     const runtime = await resolveHermesRuntimeConfig();
@@ -570,7 +583,7 @@ async function persistEventsBestEffort(
   try {
     await persistEvents(scope, threadId, runId, events);
   } catch (error) {
-    console.error("[runner] event append failed", { runId, error });
+    log.error("[runner] event append failed", { runId, ...describeError(error) });
   }
 }
 

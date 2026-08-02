@@ -122,7 +122,7 @@ async function startConsole(port: number, databaseUrl: string) {
       HERMES_PROTOCOL: "agent",
       CONSOLE_SERVER_HOST: "127.0.0.1",
       CONSOLE_SERVER_PORT: String(port),
-      CONSOLE_SPA_DIR: join(root, "apps/console/dist"),
+      WEB_DIST_DIR: join(root, "apps/web/dist"),
       GOOGLE_ALLOWED_EMAILS: "g1-007a@example.invalid,g1-007a-approver@example.invalid",
     },
     stdout: "inherit",

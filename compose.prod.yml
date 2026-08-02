@@ -64,18 +64,15 @@ services:
       HERMES_PROTOCOL: ${HERMES_PROTOCOL:-agent}
       CONSOLE_SERVER_HOST: 0.0.0.0
       CONSOLE_SERVER_PORT: "3170"
-      CONSOLE_SPA_DIR: /app/apps/console/dist
+      WEB_DIST_DIR: /app/apps/web/dist
       HERMES_CONSOLE_ARTIFACTS_DIR: /data/files
-      HERMES_SSH_KNOWN_HOSTS_FILE: /etc/hermes-console/ssh/known_hosts
+      HERMES_SSH_KNOWN_HOSTS_FILE: /data/ssh/known_hosts
       HERMES_SHARED_WORKDIR: /data/work
       CONSOLE_TRUST_PROXY: "1"
     volumes:
       - files-data:/data/files
       - work-data:/data/work
-      - type: bind
-        source: ${CONSOLE_SSH_KNOWN_HOSTS_FILE:-./deploy/ssh/known_hosts}
-        target: /etc/hermes-console/ssh/known_hosts
-        read_only: true
+      - ssh-data:/data/ssh
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -128,5 +125,6 @@ volumes:
   postgres-data:
   files-data:
   work-data:
+  ssh-data:
   caddy-data:
   caddy-config:

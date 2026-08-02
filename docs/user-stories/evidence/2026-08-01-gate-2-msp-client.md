@@ -119,8 +119,8 @@ bun test apps/server/drizzle/audit-ledger-migration.test.ts
 bun test apps/server/src/db/production-migration.test.ts
   3 pass
 bun test apps/server/src/routes.test.ts apps/server/src/api/auth/route.test.ts \
-  apps/console/src/components/shell/nav-config.test.ts apps/console/src/lib/auth-site-context.test.ts \
-  apps/console/src/route-tree.test.ts apps/console/src/lib/session-cache-scope.test.ts
+  apps/web/src/components/shell/nav-config.test.ts apps/web/src/lib/auth-site-context.test.ts \
+  apps/web/src/route-tree.test.ts apps/web/src/lib/session-cache-scope.test.ts
   16 pass · 94 assertions
 bun test
   372 pass · 0 fail · 1281 expect() calls · 76 fichiers

@@ -280,23 +280,27 @@ rm -f "$tmp_file"
 La suppression distante du fichier de test fait partie du nettoyage documenté du rapport. Ne jamais
 utiliser un fichier client réel pour le smoke test.
 
-### Nom du fichier avec l'overlay Compose
+### Empreintes et overlay Compose
 
-Lorsque la Console tourne avec `compose.prod.ssh.yml`, le dossier SSH dédié est monté en lecture seule
-à `/home/bun/.ssh`. L'overlay impose donc le fichier d'empreintes exact
-`/home/bun/.ssh/known_hosts` via `HERMES_SSH_KNOWN_HOSTS_FILE`; un fichier nommé seulement
-`<site>.known_hosts` ne sera pas lu par le runtime.
+Lorsque la Console tourne avec `compose.prod.ssh.yml`, le dossier fourni par `CONSOLE_SSH_DIR` est
+monté en lecture seule à `/home/bun/.ssh`. Il contient uniquement `config` et l'`IdentityFile`
+référencé par cette configuration. Les empreintes vérifiées depuis l'écran Runtime Hermes sont
+conservées séparément dans le volume persistant `ssh-data`, dans
+`/data/ssh/known_hosts`. L'API peut ainsi enregistrer une empreinte confirmée sans obtenir le droit
+de modifier les clés privées.
 
-Après la vérification hors bande ci-dessus, préparer le dossier fourni par `CONSOLE_SSH_DIR` :
+Préparer le dossier fourni par `CONSOLE_SSH_DIR` sans y copier `known_hosts` :
 
 ~~~sh
 ssh_dir=/secure/hermes-console-ssh
 install -d -m 0700 "$ssh_dir"
-install -m 0600 "$HOME/.ssh/<site>.known_hosts" "$ssh_dir/known_hosts"
+install -m 0600 "$HOME/.ssh/<site>" "$ssh_dir/<site>"
+install -m 0600 "$HOME/.ssh/config" "$ssh_dir/config"
 ~~~
 
-Le même dossier doit contenir `config` et l'`IdentityFile` référencé par cette configuration. Ne pas
-modifier le `known_hosts` de confiance pour provoquer un test négatif ; utiliser un fichier jetable.
+Après le scan dans l'interface, comparer l'empreinte hors bande avant de cliquer sur « J'ai vérifié
+cette empreinte ». Ne pas modifier le `known_hosts` de confiance pour provoquer un test négatif ;
+utiliser un fichier jetable.
 
 ## 8. Qualifier l'hôte et installer Hermes sans collision
 

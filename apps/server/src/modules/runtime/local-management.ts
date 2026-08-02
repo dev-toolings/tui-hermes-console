@@ -5,6 +5,12 @@ import { HermesRuntimeError } from "./hermes-adapter";
 
 const CONSOLE_CREDENTIAL_PREFIX = "console-web-";
 
+export function hermesCliExecutable(
+  env: Record<string, string | undefined> = process.env,
+) {
+  return env.HERMES_CLI_PATH?.trim() || "hermes";
+}
+
 type CommandResult = {
   stdout: string;
   stderr: string;
@@ -109,9 +115,13 @@ async function runHermesCommand(
   return new Promise((resolve, reject) => {
     // Hermes utilise getpass pour les clés API et exige donc un terminal. `script`
     // fournit ce PTY tout en gardant le secret sur stdin, hors des arguments du process.
-    const executable = options.pseudoTerminal ? "script" : "hermes";
+    const executable = options.pseudoTerminal ? "script" : hermesCliExecutable();
     const commandArgs = options.pseudoTerminal
-      ? ["-qefc", ["hermes", ...args].map(shellQuote).join(" "), "/dev/null"]
+      ? [
+          "-qefc",
+          [hermesCliExecutable(), ...args].map(shellQuote).join(" "),
+          "/dev/null",
+        ]
       : args;
     const child = spawn(executable, commandArgs, {
       env: {

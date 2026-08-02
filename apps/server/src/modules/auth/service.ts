@@ -13,6 +13,7 @@ import {
 } from "@/db/schema";
 import { getDatabase } from "@/db/client";
 import { appendAuditEntry } from "@/modules/audit/service";
+import { describeError, log } from "@/observability/log";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 const AUTH_TRANSACTION_TTL_MS = 1000 * 60 * 10;
@@ -85,9 +86,10 @@ function readCookie(request: Request, name: string) {
 }
 
 export function isGoogleEmailAllowed(
-  email: string,
+  email: string | null,
   configuredEmails = process.env.GOOGLE_ALLOWED_EMAILS ?? "",
 ) {
+  if (!email) return false;
   const allowed = new Set(
     configuredEmails
       .split(",")
@@ -97,9 +99,17 @@ export function isGoogleEmailAllowed(
   return allowed.has(email.trim().toLowerCase());
 }
 
+export function hasConnectableSiteMembership(
+  googleSubjects: Array<string | null>,
+) {
+  return googleSubjects.some(
+    (subject) => typeof subject === "string" && !subject.startsWith("legacy:"),
+  );
+}
+
 /** Une session existante ne doit pas survivre au retrait de son opérateur. */
 export async function keepSessionIfEmailAllowed(
-  email: string,
+  email: string | null,
   revoke: () => Promise<unknown>,
   configuredEmails = process.env.GOOGLE_ALLOWED_EMAILS ?? "",
 ) {
@@ -395,12 +405,12 @@ async function denyAndRevokeOrganizationSession(
       occurredAt: new Date(),
     });
   } catch (error) {
-    console.error("MSP/client denial audit failed", {
+    log.error("MSP/client denial audit failed", {
       siteId: membership.id,
       userId: session.userId,
       reasonCode,
       correlationId,
-      error,
+      ...describeError(error),
     });
     throw new AuthError(
       "Le refus d’accès n’a pas pu être inscrit dans le journal d’audit.",
@@ -592,19 +602,28 @@ export async function completeGoogleLogin(request: Request, code: string, state:
   const created = await db.transaction(async (tx) => {
 
     let memberships = await listMemberships(tx, userId);
-    if (memberships.length === 0 && insertedUser) {
-      // Le tout premier compte d'une installation vide peut administrer son
-      // unique site. Le verrou sérialise deux callbacks OAuth concurrents : le
-      // second observera alors un ledger memberships non vide et sera refusé.
+    if (memberships.length === 0) {
+      // Le premier compte Google connectable peut administrer l'unique site,
+      // même si une identité password historique non connectable possède
+      // encore le membership de migration. Le verrou sérialise deux callbacks
+      // OAuth concurrents : le second verra alors un membership Google actif.
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext('hermes-console-site-bootstrap'))`,
       );
       memberships = await listMemberships(tx, userId);
       if (memberships.length === 0) {
-        const [{ value: membershipCount }] = await tx
-          .select({ value: count() })
-          .from(siteMemberships);
-        if (membershipCount !== 0) {
+        const existingMemberships = await tx
+          .select({ googleSubject: consoleUsers.googleSubject })
+          .from(siteMemberships)
+          .innerJoin(
+            consoleUsers,
+            eq(consoleUsers.id, siteMemberships.userId),
+          );
+        if (
+          hasConnectableSiteMembership(
+            existingMemberships.map(({ googleSubject }) => googleSubject),
+          )
+        ) {
           throw new AuthError(
             "Aucun site n’est attribué à ce compte.",
             403,
@@ -818,11 +837,11 @@ async function auditInvalidMandateSelection(
       occurredAt: new Date(),
     });
   } catch (error) {
-    console.error("MSP mandate selection denial audit failed", {
+    log.error("MSP mandate selection denial audit failed", {
       siteId: activeSite.id,
       userId: session.userId,
       mandateId,
-      error,
+      ...describeError(error),
     });
     throw new AuthError(
       "Le refus du mandat n’a pas pu être inscrit dans le journal d’audit.",

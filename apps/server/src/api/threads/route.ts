@@ -7,6 +7,8 @@ import { getRuntimeModelSelection } from "@/modules/runtime/model-settings";
 import type { ThreadSource } from "@/db/schema";
 import { withCurrentAiDisclosureConsent } from "@/modules/setup/ai-disclosure";
 import type { AuthenticatedRouteContext } from "@/modules/api/route-context";
+import { assertRuntimeWorkspaceReady } from "@/modules/runtime/config";
+import { acquireRunStartLease } from "@/modules/runs/active-runtime-guard";
 
 const FREE_CHAT_INSTRUCTIONS = `Tu es un assistant conversationnel. Réponds directement à la demande.
 
@@ -54,43 +56,49 @@ export async function POST(
   try {
     return await dependencies.withConsent(request, async () => {
       const input = createThreadSchema.parse(await request.json());
+      const releaseRunStart = acquireRunStartLease();
+      try {
+        await assertRuntimeWorkspaceReady();
 
-      const agent = input.agentId
-        ? await requireActiveAgent(context.siteContext, input.agentId)
-        : input.agentRef
-          ? await resolveActiveAgentRef(context.siteContext, input.agentRef)
-          : null;
+        const agent = input.agentId
+          ? await requireActiveAgent(context.siteContext, input.agentId)
+          : input.agentRef
+            ? await resolveActiveAgentRef(context.siteContext, input.agentRef)
+            : null;
 
-      const resolved = agent
-        ? {
-            source: "mission" as const,
-            agentId: agent.id,
-            agentName: agent.name,
-            instructions: agent.instructions,
-            provider: agent.provider,
-            model: agent.model || "hermes-agent",
-            reasoningEffort: agent.reasoningEffort,
-            projectId: agent.projectId ?? null,
-            message: input.message,
-          }
-        : await (async () => {
-            const selection = await getRuntimeModelSelection();
-            return {
-              source: "chat" as const,
-              agentId: null,
-              agentName: "Chat libre",
-              instructions: FREE_CHAT_INSTRUCTIONS,
-              provider: selection.provider,
-              model: selection.model || "hermes-agent",
-              reasoningEffort: selection.reasoningEffort,
-              projectId: null,
+        const resolved = agent
+          ? {
+              source: "mission" as const,
+              agentId: agent.id,
+              agentName: agent.name,
+              instructions: agent.instructions,
+              provider: agent.provider,
+              model: agent.model || "hermes-agent",
+              reasoningEffort: agent.reasoningEffort,
+              projectId: agent.projectId ?? null,
               message: input.message,
-            };
-          })();
+            }
+          : await (async () => {
+              const selection = await getRuntimeModelSelection();
+              return {
+                source: "chat" as const,
+                agentId: null,
+                agentName: "Chat libre",
+                instructions: FREE_CHAT_INSTRUCTIONS,
+                provider: selection.provider,
+                model: selection.model || "hermes-agent",
+                reasoningEffort: selection.reasoningEffort,
+                projectId: null,
+                message: input.message,
+              };
+            })();
 
-      const created = await createThreadWithRun(context.siteContext, resolved);
-      startRun(context.siteContext, created.runId);
-      return Response.json(created, { status: 202 });
+        const created = await createThreadWithRun(context.siteContext, resolved);
+        startRun(context.siteContext, created.runId);
+        return Response.json(created, { status: 202 });
+      } finally {
+        releaseRunStart();
+      }
     });
   } catch (error) {
     return apiErrorResponse(error);

@@ -11,18 +11,18 @@ consentement. Elle ne ferme pas la preuve P-E2E navigateur ni la revue par lecte
   `bf5c4a2` — `refactor([user-story G1-003]): derive consent guard from route manifest` ;
   `579ab8f` — `fix([user-story G1-003]): pin disclosure content hash` ;
   `7fa1662` — `test([user-story G1-003]): prove consent persistence and isolation`
-- Rendu SSR contrôlé par `apps/console/src/screens/setup.a11y.test.tsx` : région nommée, titre
+- Rendu SSR contrôlé par `apps/web/src/screens/setup.a11y.test.tsx` : région nommée, titre
   `h2`, résumé et liste identifiés, checkbox reliée par `label[for]` et `aria-describedby`.
 - Tests ciblés :
 
   ```text
-  bun test apps/console/src/screens/setup.a11y.test.tsx \
+  bun test apps/web/src/screens/setup.a11y.test.tsx \
     apps/server/src/modules/setup/ai-disclosure.test.ts \
     apps/server/src/modules/setup/ai-disclosure-routes.test.ts
   12 pass, 0 fail, 38 expect calls
   ```
 
-- Typecheck Console : `bun run --filter console typecheck` — PASS.
+- Typecheck Console : `bun run --filter web typecheck` — PASS.
 - Le middleware serveur dérive désormais les trois méthodes protégées du manifeste `ROUTES` ; aucun
   second inventaire regex indépendant ne décide du refus `428`.
 - P-INT PostgreSQL/Hono : `bun run proof:g1-003` — 5 pass, 0 fail, 43 expect calls. La preuve couvre

@@ -20,7 +20,7 @@ Canal    = web d’abord (messaging / workspace = transports futurs)
 
 ## Interface actuelle
 
-`apps/console` reprend la coque BoardUI pour en faire l’interface Hermes Console :
+`apps/web` reprend la coque BoardUI pour en faire l’interface Hermes Console :
 
 - sidebar, recherche, thèmes BoardUI ;
 - aperçu, agents, missions, **artefacts (DB)**, paramètres ;
@@ -35,7 +35,7 @@ Créer un agent sur `/agents/new`, lancer sur `/runs/new`, suivre sur `/runs/thr
 
 ```text
 ┌──────────────────────────────────┐
-│ apps/console — Vite + React 19   │
+│ apps/web — Vite + React 19   │
 │ TanStack Router · BoardUI        │
 │ navigateur ou fenêtre Tauri      │
 └─────────┬────────────────────────┘
@@ -80,6 +80,11 @@ Variables serveur :
   (`postgres://test:test@localhost:5432/hermes_console`) ;
 - `HERMES_BASE_URL` / `HERMES_RUNTIME_TOKEN` — fallback **accès direct** si pas de config DB ;
   le mode tunnel SSH (Hermes sur une autre machine) se configure dans Paramètres → Runtime ;
+- `HERMES_CLI_PATH` — chemin absolu optionnel vers la CLI Hermes pour un service background dont
+  le `PATH` n'inclut pas `~/.local/bin` ;
+- `INSTALLATION_ADMIN_EMAILS` — allowlist séparée des comptes autorisés à modifier le runtime et
+  ses credentials ; si elle est absente, la compatibilité mono-admin ne s'active que lorsque
+  `GOOGLE_ALLOWED_EMAILS` contient exactement une adresse ;
 - `HERMES_PROTOCOL` — `agent` (défaut) ou `responses` ;
 - `HERMES_SHARED_WORKDIR` — même chemin que l’hôte Hermes (défaut `/tmp/hermes-console-work`) ;
 - `APP_ENCRYPTION_KEY` — chiffrement du token runtime.
@@ -110,6 +115,18 @@ un SSH non interactif ne charge pas le `PATH` du shell de connexion. Vérifiez p
 Le redémarrage d'Hermes depuis la Console reste réservé à un runtime local : en mode tunnel, le
 `127.0.0.1` que voit la Console n'est pas la machine d'Hermes.
 
+Pour sonder le contrat réellement consommé par la Console sans afficher le token :
+
+```bash
+HERMES_BASE_URL=http://127.0.0.1:8642 \
+HERMES_RUNTIME_TOKEN='<secret>' \
+bun run runtime:probe
+```
+
+Ajoutez `HERMES_TRANSPORT=ssh`, `HERMES_SSH_HOST` et `HERMES_SSH_USER` pour passer par le tunnel
+strict du serveur. La commande appelle `/health` et `/v1/capabilities`, puis ferme explicitement le
+ControlMaster avant de quitter.
+
 ## Démarrage
 
 ```bash
@@ -126,6 +143,7 @@ Parcours : `/agents/new` → `/runs/new` → `/runs/thr_*` → composer (± piè
 | [`PRODUCT.md`](PRODUCT.md) | Axe produit, anti-références, principes UX |
 | [`docs/PRD.md`](docs/PRD.md) | PRD v0.7 — phases 0–4 + axe généraliste |
 | [`docs/DESKTOP.md`](docs/DESKTOP.md) | Architecture : SPA Vite, serveur Hono, app Tauri |
+| [`docs/INSTALLATION-UTILISATION.md`](docs/INSTALLATION-UTILISATION.md) | Installation et utilisation : Hermes local, Docker et VPS |
 | [`docs/SPIKE-REPORT.md`](docs/SPIKE-REPORT.md) | Rapport Phase 0 : mesures runtime |
 | `spike/` | Sonde v0 + faux LLM + fixtures |
 

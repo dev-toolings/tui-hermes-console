@@ -1,6 +1,7 @@
 import { afterEach, expect, mock, test } from "bun:test";
 import {
   isGoogleEmailAllowed,
+  hasConnectableSiteMembership,
   keepSessionIfEmailAllowed,
   pkceChallenge,
   resolveSiteRequirement,
@@ -66,6 +67,15 @@ test("normalizes the current Google email allowlist", () => {
   expect(isGoogleEmailAllowed("removed@example.com", "other@example.com")).toBe(
     false,
   );
+  expect(isGoogleEmailAllowed(null, "operator@example.com")).toBe(false);
+});
+
+test("legacy memberships do not block the first connectable Google operator", () => {
+  expect(hasConnectableSiteMembership([])).toBe(false);
+  expect(hasConnectableSiteMembership(["legacy:admin"])).toBe(false);
+  expect(
+    hasConnectableSiteMembership(["legacy:admin", "google-subject"]),
+  ).toBe(true);
 });
 
 test("revokes an existing session as soon as its email leaves the allowlist", async () => {
@@ -88,6 +98,11 @@ test("revokes an existing session as soon as its email leaves the allowlist", as
     ),
   ).resolves.toBe(true);
   expect(revoke).not.toHaveBeenCalled();
+
+  await expect(
+    keepSessionIfEmailAllowed(null, revoke, "operator@example.com"),
+  ).resolves.toBe(false);
+  expect(revoke).toHaveBeenCalledTimes(1);
 });
 
 test("resolves zero, one, and multiple memberships without choosing arbitrarily", () => {

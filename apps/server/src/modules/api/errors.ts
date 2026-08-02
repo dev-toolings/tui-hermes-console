@@ -10,8 +10,17 @@ import { OwnershipRepositoryError } from "@/modules/ownership/repository";
 import { DataLifecycleError } from "@/modules/retention/service";
 import { LifecycleExportError } from "@/modules/retention/export";
 import { ArtifactIntegrityError } from "@/modules/artifacts/integrity";
+import { describeError, log } from "@/observability/log";
 
-export function apiErrorResponse(error: unknown) {
+/**
+ * `context` sert au seul appelant qui connaît la requête (`app.onError`) : le
+ * log reste émis ici, à l'unique endroit que traversent toutes les erreurs, au
+ * lieu d'être dupliqué par chaque filet en amont.
+ */
+export function apiErrorResponse(
+  error: unknown,
+  context?: { method: string; path: string },
+) {
   if (error instanceof AuthError) {
     return Response.json(
       { error: { code: error.code, message: error.message } },
@@ -113,7 +122,7 @@ export function apiErrorResponse(error: unknown) {
     );
   }
 
-  console.error("Unhandled API error", error);
+  log.error("Unhandled API error", { ...describeError(error), ...context });
   return Response.json(
     { error: { code: "INTERNAL_ERROR", message: "Erreur interne de la Console." } },
     { status: 500 },

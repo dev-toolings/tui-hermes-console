@@ -86,6 +86,21 @@ describe("system ssh arguments", () => {
     expect(controlPath(target).length).toBeLessThan(104);
   });
 
+  test("isolates each channel instance at the OpenSSH ControlMaster layer", () => {
+    expect(controlPath(target, "runtime")).not.toBe(
+      controlPath(target, "ephemeral"),
+    );
+    expect(
+      forwardArgs(target, 51234, "127.0.0.1:8642", "ephemeral").find(
+        (arg) => arg.startsWith("ControlPath="),
+      ),
+    ).not.toBe(
+      forwardArgs(target, 51234, "127.0.0.1:8642", "runtime").find(
+        (arg) => arg.startsWith("ControlPath="),
+      ),
+    );
+  });
+
   test("port is passed with -p", () => {
     expect(baseSshArgs({ ...target, port: 2222 })).toContain("2222");
   });

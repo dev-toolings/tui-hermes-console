@@ -28,12 +28,20 @@ export type SftpOps = {
   ): Promise<void>;
 };
 
+export type SshExecResult = {
+  stdout: string;
+  stderr: string;
+  code: number;
+};
+
 /** Une connexion SSH partagée : le port-forward HTTP et le SFTP des artefacts
  *  passent par le même canal, donc une seule authentification. */
 export type SshChannel = {
   /** Ouvre (ou réutilise) un forward local et renvoie `http://127.0.0.1:<port>`. */
   forward(remoteHost: string, remotePort: number): Promise<string>;
   sftp(): Promise<SftpOps>;
+  /** Exécute une commande produite côté serveur, jamais une chaîne fournie par le navigateur. */
+  exec(command: string): Promise<SshExecResult>;
   /** `sync` : arrêt du process — la fermeture doit aboutir avant de rendre la main. */
   close(sync?: boolean): void;
 };

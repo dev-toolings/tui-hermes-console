@@ -8,6 +8,12 @@ export { readSshConfigHosts, type SshConfigHost } from "./ssh-config";
 
 let active: { fingerprint: string; channel: SshChannel } | null = null;
 
+function createChannel(target: SshTarget): SshChannel {
+  return target.auth === "password"
+    ? createSsh2Channel(target)
+    : createSystemSshChannel(target);
+}
+
 /** Identité d'une cible. Le mot de passe est haché : deux cibles identiques réutilisent
  *  le canal, un changement de mot de passe en ouvre un neuf. */
 export function targetFingerprint(target: SshTarget): string {
@@ -23,10 +29,25 @@ export function getChannel(target: SshTarget): SshChannel {
   if (active?.fingerprint === fingerprint) return active.channel;
 
   closeChannel();
-  const channel =
-    target.auth === "password" ? createSsh2Channel(target) : createSystemSshChannel(target);
+  const channel = createChannel(target);
   active = { fingerprint, channel };
   return channel;
+}
+
+/**
+ * Canal réservé à une opération de contrôle. Il ne touche jamais au tunnel
+ * partagé par une mission et est fermé même si le probe distant échoue.
+ */
+export async function withEphemeralSshChannel<T>(
+  target: SshTarget,
+  operation: (channel: SshChannel) => Promise<T>,
+): Promise<T> {
+  const channel = createChannel(target);
+  try {
+    return await operation(channel);
+  } finally {
+    channel.close();
+  }
 }
 
 export function closeChannel(sync = false) {
@@ -41,8 +62,15 @@ export function closeChannel(sync = false) {
 let hooked = false;
 if (!hooked) {
   hooked = true;
-  for (const signal of ["exit", "SIGINT", "SIGTERM"] as const) {
-    process.once(signal, () => closeChannel(true));
+  process.once("exit", () => closeChannel(true));
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.once(signal, () => {
+      closeChannel(true);
+      // Installer un listener remplace le comportement de sortie par défaut de
+      // Node/Bun. Sans cette sortie explicite, un service systemd reste bloqué
+      // en `deactivating` après avoir pourtant fermé son ControlMaster.
+      process.exit(0);
+    });
   }
 }
 

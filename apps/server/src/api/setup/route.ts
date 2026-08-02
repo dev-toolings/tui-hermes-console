@@ -1,8 +1,11 @@
 import { z } from "zod";
 import { apiErrorResponse } from "@/modules/api/errors";
-import { getConsoleSetup } from "@/modules/setup/service";
+import {
+  getConsoleSetup,
+  setConsoleSetupStep,
+} from "@/modules/setup/service";
 import { requireSession } from "@/modules/auth/service";
-import { denyInstallationAccess } from "@/modules/auth/site-authorization";
+import { assertInstallationAccess } from "@/modules/auth/site-authorization";
 import type { AuthenticatedRouteContext } from "@/modules/api/route-context";
 import {
   acceptCurrentAiDisclosure,
@@ -52,11 +55,20 @@ export async function POST(
   try {
     const input = updateSetupSchema.parse(await request.json());
     if ("step" in input) {
-      return denyInstallationAccess(
+      const session = await requireSession(request);
+      await assertInstallationAccess(
         context.siteContext,
+        session.email,
         request.method,
         "/api/setup",
       );
+      return Response.json({
+        setup: publicSetupState(
+          await setConsoleSetupStep(input.step, {
+            hasCurrentAiConsent: hasCurrentAiDisclosureConsent(session),
+          }),
+        ),
+      });
     }
     const session = await requireSession(request);
     if ("consentVersion" in input) {

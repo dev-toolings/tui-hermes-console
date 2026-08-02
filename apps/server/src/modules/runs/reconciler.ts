@@ -13,6 +13,7 @@ import {
   type SiteRequestContext,
 } from "@/modules/auth/service";
 import { cancelRun } from "./cancel-run";
+import { describeError, log } from "@/observability/log";
 import {
   appendRunEvents,
   completeRun,
@@ -94,7 +95,7 @@ async function runReconcile(): Promise<ReconcileResult> {
     try {
       await reconcileOne(run, runtime, protocol, result);
     } catch (error) {
-      console.error("[reconcile] run skipped", { runId: run.id, error });
+      log.error("[reconcile] run skipped", { runId: run.id, ...describeError(error) });
     }
   }
 
@@ -224,7 +225,7 @@ async function closeAsFailed(scope: { siteId: string }, threadId: string, runId:
     const stored = await appendRunEvents(scope, threadId, runId, [event]);
     for (const item of stored) publishThreadEvent(threadId, item);
   } catch (error) {
-    console.error("[reconcile] event append failed", { runId, error });
+    log.error("[reconcile] event append failed", { runId, ...describeError(error) });
   }
   await failRun(scope, runId, message);
 }

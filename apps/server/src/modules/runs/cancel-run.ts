@@ -15,6 +15,7 @@ import {
 import { cancelActiveRun } from "./runner";
 import type { SiteRequestContext } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
+import { describeError, log } from "@/observability/log";
 
 export type CancelRunResult = {
   runId: string;
@@ -94,7 +95,7 @@ async function closeAsCancelled(context: SiteRequestContext, threadId: string, r
     const stored = await appendRunEvents(context, threadId, runId, events);
     for (const item of stored) publishThreadEvent(threadId, item);
   } catch (error) {
-    console.error("[cancel] event append failed", { runId, error });
+    log.error("[cancel] event append failed", { runId, ...describeError(error) });
   }
   await failRun(context, runId, "", "cancelled");
 }

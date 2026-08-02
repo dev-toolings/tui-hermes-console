@@ -38,8 +38,8 @@ before the API is allowed to start.
 ## External Hermes over SSH
 
 When the runtime uses SSH, set `CONSOLE_SSH_DIR` to an operator-owned directory
-containing only the verified `known_hosts` file and the SSH configuration/identity
-required by the `hermes-console` service account. Apply the opt-in overlay:
+containing the SSH configuration and identity required by the `hermes-console`
+service account. Apply the opt-in overlay:
 
 ```sh
 docker compose --env-file deploy/production.env \
@@ -48,11 +48,11 @@ docker compose --env-file deploy/production.env \
   -f compose.prod.yml -f compose.prod.ssh.yml up -d --build
 ```
 
-The overlay mounts that directory read-only at `/home/bun/.ssh` and sets
-`HERMES_SSH_KNOWN_HOSTS_FILE=/home/bun/.ssh/known_hosts`; the verified file must
-therefore be named exactly `known_hosts` inside `CONSOLE_SSH_DIR` (not only
-`<site>.known_hosts`). No private key belongs in Git. The SSH config must use a
-deterministic `IdentityFile` readable by UID `bun` because the runtime enforces `BatchMode=yes`,
+The overlay mounts that directory read-only at `/home/bun/.ssh`. Host keys
+verified from the Runtime Hermes screen are stored separately in the persistent
+`ssh-data` volume at `/data/ssh/known_hosts`, writable only by the `bun` service
+user. No private key belongs in Git. The SSH config must use a deterministic
+`IdentityFile` readable by UID `bun` because the runtime enforces `BatchMode=yes`,
 `StrictHostKeyChecking=yes` and `IdentitiesOnly=yes`. An agent socket requires
 an additional deployment-specific read-only socket mount and a bun-readable
 `SSH_AUTH_SOCK`. Repeat the overlay flags for every upgrade or restart that must

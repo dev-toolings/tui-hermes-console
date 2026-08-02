@@ -43,6 +43,7 @@ import {
 } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
 import { auditOwnershipCreation } from "@/modules/ownership/audit";
+import { describeError, log } from "@/observability/log";
 
 const ACTIVE_STATUSES: ProductRunStatus[] = [
   "pending",
@@ -721,10 +722,10 @@ export async function completeRun(
       .update(runs)
       .set({ error: delivery.message })
       .where(and(eq(runs.siteId, scope.siteId), eq(runs.id, runId)));
-    console.error("[hermes-console] artifact delivery failed", {
+    log.error("[hermes-console] artifact delivery failed", {
       runId,
       operation: delivery.operation,
-      error: delivery.cause,
+      ...describeError(delivery.cause),
     });
   }
 }

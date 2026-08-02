@@ -156,11 +156,6 @@ export function getHermesRuntimeConfigFromEnv() {
   return { baseUrl, token };
 }
 
-/** @deprecated Use resolveHermesRuntimeConfig from modules/runtime/config */
-export function getHermesRuntimeConfig() {
-  return getHermesRuntimeConfigFromEnv();
-}
-
 export async function testHermesRuntimeAgainst(config: {
   baseUrl: string;
   token: string;

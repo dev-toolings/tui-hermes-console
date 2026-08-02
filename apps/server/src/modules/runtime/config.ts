@@ -8,6 +8,7 @@ import {
   type RuntimeHealthStatus,
   type RuntimeSshAuth,
   type RuntimeTransport,
+  type RuntimeWorkspaceStatus,
 } from "@/db/schema";
 import { decryptSecret, encryptSecret, hasEncryptionKey } from "@/lib/crypto";
 import {
@@ -15,7 +16,16 @@ import {
   testHermesRuntimeAgainst,
   type HermesCapabilities,
 } from "./hermes-adapter";
-import { closeChannel, ensureTunnel, getChannel, type SshTarget } from "./ssh";
+import {
+  ensureTunnel,
+  getChannel,
+  withEphemeralSshChannel,
+  type SshTarget,
+} from "./ssh";
+import {
+  withRuntimeMutationLease,
+  type RuntimeMutationLease,
+} from "@/modules/runs/active-runtime-guard";
 
 const RUNTIME_ID = "default";
 
@@ -66,6 +76,22 @@ export function requireDurableRemoteWorkdir(value: string | null | undefined): s
   return normalized;
 }
 
+export function assertWorkspaceStatusReady(status: RuntimeWorkspaceStatus) {
+  if (status === "not_required" || status === "ready") return;
+  throw new HermesRuntimeError(
+    "La connexion SSH est valide, mais son dossier de travail doit être vérifié avant de lancer une mission.",
+    409,
+    "SSH_WORKSPACE_REQUIRED",
+  );
+}
+
+/** Garde produit appelée avant toute création de thread/run/message. */
+export async function assertRuntimeWorkspaceReady() {
+  const row = await getRuntimeRow();
+  if (!row || row.transport !== "ssh") return;
+  assertWorkspaceStatusReady(row.workspaceStatus);
+}
+
 export type { RuntimePublicDto } from "@console/core/types/api";
 import type { RuntimePublicDto } from "@console/core/types/api";
 
@@ -92,9 +118,15 @@ export type RuntimeConnectionInput = {
   baseUrl: string;
   token?: string;
   name?: string;
-  transport?: RuntimeTransport;
-  ssh?: SshConnectionInput;
-  remoteWorkdir?: string;
+  transport?: "direct";
+};
+
+export type RuntimeSshConnectInput = {
+  baseUrl: string;
+  token?: string;
+  name?: string;
+  expectedRevision?: number | null;
+  ssh: SshConnectionInput;
 };
 
 export type RuntimeConfigurationVersion =
@@ -184,6 +216,9 @@ export async function getRuntimePublic(): Promise<RuntimePublicDto> {
       sshAuth: row.sshAuth,
       sshPasswordConfigured: Boolean(row.encryptedSshPassword),
       remoteWorkdir: row.remoteWorkdir,
+      remoteHermesWorkdir: row.remoteHermesWorkdir,
+      workspaceStatus: row.workspaceStatus,
+      configRevision: row.configRevision,
       detectedVersion: row.detectedVersion,
       capabilities: row.capabilities,
       lastHealthStatus: row.lastHealthStatus,
@@ -202,6 +237,9 @@ export async function getRuntimePublic(): Promise<RuntimePublicDto> {
     sshAuth: "agent" as const,
     sshPasswordConfigured: false,
     remoteWorkdir: null,
+    remoteHermesWorkdir: null,
+    workspaceStatus: "not_required" as const,
+    configRevision: null,
   };
 
   if (envUrl && envToken) {
@@ -243,7 +281,6 @@ export async function resolveHermesRuntimeConfig(): Promise<ResolvedRuntimeConfi
     const remoteBaseUrl = normalizeBaseUrl(row.baseUrl);
     const token = decryptSecret(row.encryptedToken);
     if (row.transport === "ssh") {
-      requireDurableRemoteWorkdir(row.remoteWorkdir);
       const endpoint = remoteEndpoint(remoteBaseUrl);
       const baseUrl = await ensureTunnel(sshTargetFromRow(row), endpoint.host, endpoint.port);
       return { baseUrl, remoteBaseUrl, token, transport: "ssh", source: "database" };
@@ -263,7 +300,19 @@ export async function resolveHermesRuntimeConfig(): Promise<ResolvedRuntimeConfi
   return { baseUrl, remoteBaseUrl: baseUrl, token, transport: "direct", source: "env" };
 }
 
-export async function saveRuntimeConfig(input: RuntimeConnectionInput): Promise<RuntimePublicDto> {
+export async function saveRuntimeConfig(
+  input: RuntimeConnectionInput,
+  mutationLease?: RuntimeMutationLease,
+): Promise<RuntimePublicDto> {
+  return withRuntimeMutationLease(
+    () => saveRuntimeConfigUnlocked(input),
+    mutationLease,
+  );
+}
+
+async function saveRuntimeConfigUnlocked(
+  input: RuntimeConnectionInput,
+): Promise<RuntimePublicDto> {
   if (!hasEncryptionKey()) {
     throw new HermesRuntimeError(
       "APP_ENCRYPTION_KEY manquant côté serveur — impossible de stocker le token.",
@@ -273,11 +322,14 @@ export async function saveRuntimeConfig(input: RuntimeConnectionInput): Promise<
   }
 
   const baseUrl = normalizeBaseUrl(input.baseUrl);
-  const transport = input.transport ?? "direct";
   const existing = await getRuntimeRow();
 
-  let encryptedToken = existing?.encryptedToken;
-  if (input.token?.trim()) encryptedToken = encryptSecret(input.token.trim());
+  const encryptedToken = input.token?.trim()
+    ? encryptSecret(input.token.trim())
+    : existing?.transport === "direct" &&
+        normalizeBaseUrl(existing.baseUrl) === baseUrl
+      ? existing.encryptedToken
+      : undefined;
   if (!encryptedToken) {
     throw new HermesRuntimeError(
       "Un token d’accès est requis pour enregistrer la connexion.",
@@ -286,53 +338,21 @@ export async function saveRuntimeConfig(input: RuntimeConnectionInput): Promise<
     );
   }
 
-  let encryptedSshPassword = existing?.encryptedSshPassword ?? null;
-  let sshHost = existing?.sshHost ?? null;
-  let sshPort = existing?.sshPort ?? 22;
-  let sshUser = existing?.sshUser ?? null;
-  let sshAuth: RuntimeSshAuth = existing?.sshAuth ?? "agent";
-  let remoteWorkdir = existing?.remoteWorkdir ?? null;
-
-  if (transport === "ssh") {
-    const ssh = input.ssh;
-    if (!ssh?.host.trim() || !ssh.user.trim()) {
-      throw new HermesRuntimeError(
-        "Hôte et utilisateur SSH sont requis en mode tunnel.",
-        400,
-        "SSH_CONFIG_INCOMPLETE",
-      );
-    }
-    sshHost = ssh.host.trim();
-    sshPort = ssh.port ?? 22;
-    sshUser = ssh.user.trim();
-    sshAuth = ssh.auth ?? "agent";
-    remoteWorkdir = requireDurableRemoteWorkdir(input.remoteWorkdir ?? remoteWorkdir);
-
-    if (ssh.password?.trim()) encryptedSshPassword = encryptSecret(ssh.password.trim());
-    if (sshAuth === "password" && !encryptedSshPassword) {
-      throw new HermesRuntimeError(
-        "Un mot de passe SSH est requis pour ce mode d’authentification.",
-        400,
-        "SSH_PASSWORD_REQUIRED",
-      );
-    }
-    // Valide l'URL distante avant de persister (rejette https, cf. remoteEndpoint).
-    remoteEndpoint(baseUrl);
-  }
-
   const now = new Date();
   const db = getDatabase();
   const values = {
     name: input.name?.trim() || existing?.name || "Hermes",
     baseUrl,
     encryptedToken,
-    transport,
-    sshHost,
-    sshPort,
-    sshUser,
-    sshAuth,
-    encryptedSshPassword,
-    remoteWorkdir,
+    transport: "direct" as const,
+    sshHost: null,
+    sshPort: 22,
+    sshUser: null,
+    sshAuth: "agent" as const,
+    encryptedSshPassword: null,
+    remoteWorkdir: null,
+    remoteHermesWorkdir: null,
+    workspaceStatus: "not_required" as const,
     lastHealthStatus: "unknown" as const,
     lastCheckedAt: null,
     detectedVersion: null,
@@ -369,9 +389,176 @@ export async function saveRuntimeConfig(input: RuntimeConnectionInput): Promise<
       .where(eq(consoleSetup.step, "completed"));
   });
 
-  // La cible a pu changer : le prochain appel rouvrira un canal à jour.
-  closeChannel();
+  // L'ancien canal reste vivant pour une mission déjà active. Le prochain
+  // appel avec une autre identité ouvrira son propre canal au moment utile.
   return getRuntimePublic();
+}
+
+type SshIdentityRow = {
+  transport: RuntimeTransport;
+  baseUrl: string;
+  sshHost: string | null;
+  sshPort: number;
+  sshUser: string | null;
+  sshAuth: RuntimeSshAuth;
+};
+
+/** Les secrets ne peuvent être repris que pour leur destination exacte. */
+export function sameSshConnectionIdentity(
+  row: SshIdentityRow | null,
+  input: RuntimeSshConnectInput,
+) {
+  if (!row || row.transport !== "ssh") return false;
+  return (
+    normalizeBaseUrl(row.baseUrl) === normalizeBaseUrl(input.baseUrl) &&
+    row.sshHost === input.ssh.host.trim() &&
+    row.sshPort === (input.ssh.port ?? 22) &&
+    row.sshUser === input.ssh.user.trim() &&
+    row.sshAuth === (input.ssh.auth ?? "agent")
+  );
+}
+
+/**
+ * Valide une nouvelle cible dans un canal éphémère, puis la persiste via CAS.
+ * Le tunnel partagé des missions n'est donc jamais fermé par un clic « Tester ».
+ */
+export async function connectAndSaveSshRuntime(
+  input: RuntimeSshConnectInput,
+  mutationLease?: RuntimeMutationLease,
+) {
+  return withRuntimeMutationLease(
+    () => connectAndSaveSshRuntimeUnlocked(input),
+    mutationLease,
+  );
+}
+
+async function connectAndSaveSshRuntimeUnlocked(input: RuntimeSshConnectInput) {
+  if (!hasEncryptionKey()) {
+    throw new HermesRuntimeError(
+      "APP_ENCRYPTION_KEY manquant côté serveur — impossible de stocker les secrets.",
+      503,
+      "APP_ENCRYPTION_KEY_MISSING",
+    );
+  }
+
+  const remoteBaseUrl = normalizeBaseUrl(input.baseUrl);
+  const endpoint = remoteEndpoint(remoteBaseUrl);
+  const existing = await getRuntimeRow();
+  const observedRevision = existing?.configRevision ?? null;
+  if (
+    input.expectedRevision !== undefined &&
+    input.expectedRevision !== observedRevision
+  ) {
+    throw runtimeConfigurationChanged();
+  }
+
+  const sameIdentity = sameSshConnectionIdentity(existing, input);
+  const token = input.token?.trim() ||
+    (sameIdentity && existing ? decryptSecret(existing.encryptedToken) : "");
+  if (!token) {
+    throw new HermesRuntimeError(
+      "Saisissez le token Hermes pour cette nouvelle cible.",
+      400,
+      "RUNTIME_TOKEN_REQUIRED",
+    );
+  }
+
+  const auth = input.ssh.auth ?? "agent";
+  const password = input.ssh.password?.trim() ||
+    (sameIdentity && auth === "password" && existing?.encryptedSshPassword
+      ? decryptSecret(existing.encryptedSshPassword)
+      : undefined);
+  if (auth === "password" && !password) {
+    throw new HermesRuntimeError(
+      "Saisissez le mot de passe SSH pour cette nouvelle cible.",
+      400,
+      "SSH_PASSWORD_REQUIRED",
+    );
+  }
+
+  const target: SshTarget = {
+    host: input.ssh.host.trim(),
+    port: input.ssh.port ?? 22,
+    user: input.ssh.user.trim(),
+    auth,
+    password,
+  };
+  const verified = await withEphemeralSshChannel(target, async (channel) => {
+    const baseUrl = await channel.forward(endpoint.host, endpoint.port);
+    return testHermesRuntimeAgainst({ baseUrl, token });
+  });
+  const version = healthVersion(verified.health);
+
+  const now = new Date();
+  const workspaceStatus: RuntimeWorkspaceStatus = sameIdentity
+    ? existing?.workspaceStatus ?? "required"
+    : "required";
+  const values = {
+    name: input.name?.trim() || existing?.name || "Hermes",
+    baseUrl: remoteBaseUrl,
+    encryptedToken: encryptSecret(token),
+    transport: "ssh" as const,
+    sshHost: target.host,
+    sshPort: target.port,
+    sshUser: target.user,
+    sshAuth: target.auth,
+    encryptedSshPassword:
+      target.auth === "password" && password ? encryptSecret(password) : null,
+    remoteWorkdir: sameIdentity ? existing?.remoteWorkdir ?? null : null,
+    remoteHermesWorkdir: sameIdentity
+      ? existing?.remoteHermesWorkdir ?? null
+      : null,
+    workspaceStatus,
+    lastHealthStatus: "healthy" as const,
+    lastCheckedAt: now,
+    detectedVersion: version,
+    capabilities: verified.capabilities as Record<string, unknown>,
+    updatedAt: now,
+  };
+
+  await getDatabase().transaction(async (tx) => {
+    if (observedRevision !== null) {
+      const [updated] = await tx
+        .update(runtimeConfig)
+        .set({ ...values, configRevision: observedRevision + 1 })
+        .where(
+          and(
+            eq(runtimeConfig.id, RUNTIME_ID),
+            eq(runtimeConfig.configRevision, observedRevision),
+          ),
+        )
+        .returning({ id: runtimeConfig.id });
+      if (!updated) throw runtimeConfigurationChanged();
+    } else {
+      const [inserted] = await tx
+        .insert(runtimeConfig)
+        .values({
+          id: RUNTIME_ID,
+          ...values,
+          configRevision: 1,
+          createdAt: now,
+        })
+        .onConflictDoNothing({ target: runtimeConfig.id })
+        .returning({ id: runtimeConfig.id });
+      if (!inserted) throw runtimeConfigurationChanged();
+    }
+    await tx
+      .update(consoleSetup)
+      .set({
+        step: "agent",
+        completedAt: null,
+        runtimeVerifiedAt: null,
+        runtimeConfigVersion: null,
+        updatedAt: now,
+      })
+      .where(eq(consoleSetup.step, "completed"));
+  });
+
+  return {
+    runtime: await getRuntimePublic(),
+    health: verified.health,
+    capabilities: verified.capabilities,
+  };
 }
 
 export async function probeAndPersistRuntime(
@@ -448,11 +635,13 @@ async function resolveProbeTarget(
 
   const remoteBaseUrl = normalizeBaseUrl(options.baseUrl);
   const row = await getRuntimeRow();
-  const transport = options.transport ?? "direct";
-
   let token = options.token?.trim() ?? "";
   if (!token) {
-    if (!row || normalizeBaseUrl(row.baseUrl) !== remoteBaseUrl) {
+    if (
+      !row ||
+      row.transport !== "direct" ||
+      normalizeBaseUrl(row.baseUrl) !== remoteBaseUrl
+    ) {
       throw new HermesRuntimeError(
         "Saisissez le token du runtime pour tester cette adresse.",
         400,
@@ -462,50 +651,7 @@ async function resolveProbeTarget(
     token = decryptSecret(row.encryptedToken);
   }
 
-  if (transport !== "ssh") {
-    return { baseUrl: remoteBaseUrl, token };
-  }
-
-  const ssh = options.ssh;
-  if (!ssh?.host.trim() || !ssh.user.trim()) {
-    throw new HermesRuntimeError(
-      "Hôte et utilisateur SSH sont requis pour tester le tunnel.",
-      400,
-      "SSH_CONFIG_INCOMPLETE",
-    );
-  }
-
-  const host = ssh.host.trim();
-  const user = ssh.user.trim();
-  const port = ssh.port ?? 22;
-  const auth = ssh.auth ?? "agent";
-  requireDurableRemoteWorkdir(options.remoteWorkdir);
-
-  let password: string | undefined;
-  if (auth === "password") {
-    password = ssh.password?.trim() || undefined;
-    if (!password) {
-      const reusable =
-        row?.transport === "ssh" &&
-        row.sshAuth === "password" &&
-        row.encryptedSshPassword !== null &&
-        row.sshHost === host &&
-        row.sshUser === user &&
-        row.sshPort === port;
-      if (!reusable) {
-        throw new HermesRuntimeError(
-          "Saisissez le mot de passe SSH pour tester ce tunnel.",
-          400,
-          "SSH_PASSWORD_REQUIRED",
-        );
-      }
-      password = decryptSecret(row.encryptedSshPassword!);
-    }
-  }
-
-  const endpoint = remoteEndpoint(remoteBaseUrl);
-  const baseUrl = await ensureTunnel({ host, port, user, auth, password }, endpoint.host, endpoint.port);
-  return { baseUrl, token };
+  return { baseUrl: remoteBaseUrl, token };
 }
 
 function sshTargetFromRow(row: {
@@ -529,6 +675,74 @@ function sshTargetFromRow(row: {
     auth: row.sshAuth,
     password: row.encryptedSshPassword ? decryptSecret(row.encryptedSshPassword) : undefined,
   };
+}
+
+export type StoredSshRuntime = {
+  target: SshTarget;
+  remoteBaseUrl: string;
+  token: string;
+  configRevision: number;
+  remoteWorkdir: string | null;
+  remoteHermesWorkdir: string | null;
+  workspaceStatus: RuntimeWorkspaceStatus;
+};
+
+export async function getStoredSshRuntime(
+  expectedRevision?: number,
+): Promise<StoredSshRuntime> {
+  const row = await getRuntimeRow();
+  if (!row || row.transport !== "ssh") {
+    throw new HermesRuntimeError(
+      "Enregistrez et testez d’abord la connexion SSH.",
+      409,
+      "SSH_CONNECTION_REQUIRED",
+    );
+  }
+  if (
+    expectedRevision !== undefined &&
+    expectedRevision !== row.configRevision
+  ) {
+    throw runtimeConfigurationChanged();
+  }
+  return {
+    target: sshTargetFromRow(row),
+    remoteBaseUrl: normalizeBaseUrl(row.baseUrl),
+    token: decryptSecret(row.encryptedToken),
+    configRevision: row.configRevision,
+    remoteWorkdir: row.remoteWorkdir,
+    remoteHermesWorkdir: row.remoteHermesWorkdir,
+    workspaceStatus: row.workspaceStatus,
+  };
+}
+
+export async function persistSshWorkspace(input: {
+  remoteWorkdir: string;
+  remoteHermesWorkdir: string;
+  expectedRevision: number;
+}) {
+  const remoteWorkdir = requireDurableRemoteWorkdir(input.remoteWorkdir);
+  const remoteHermesWorkdir = requireDurableRemoteWorkdir(
+    input.remoteHermesWorkdir,
+  );
+  const [updated] = await getDatabase()
+    .update(runtimeConfig)
+    .set({
+      remoteWorkdir,
+      remoteHermesWorkdir,
+      workspaceStatus: "ready",
+      configRevision: input.expectedRevision + 1,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(runtimeConfig.id, RUNTIME_ID),
+        eq(runtimeConfig.transport, "ssh"),
+        eq(runtimeConfig.configRevision, input.expectedRevision),
+      ),
+    )
+    .returning({ id: runtimeConfig.id });
+  if (!updated) throw runtimeConfigurationChanged();
+  return getRuntimePublic();
 }
 
 /** Décompose l'URL distante en cible de forward. Le tunnel transporte du TCP brut :
@@ -559,18 +773,38 @@ function remoteEndpoint(remoteBaseUrl: string): { host: string; port: number } {
 /** Canal SSH courant + racine de travail distante, pour la synchro des artefacts. */
 export async function getRemoteWorkspace(): Promise<{
   channel: ReturnType<typeof getChannel>;
-  root: string;
+  hostRoot: string;
+  hermesRoot: string;
 } | null> {
   const row = await getRuntimeRow();
   if (!row || row.transport !== "ssh") return null;
+  assertWorkspaceStatusReady(row.workspaceStatus);
   return {
     channel: getChannel(sshTargetFromRow(row)),
-    root: requireDurableRemoteWorkdir(row.remoteWorkdir),
+    hostRoot: requireDurableRemoteWorkdir(row.remoteWorkdir),
+    hermesRoot: requireDurableRemoteWorkdir(row.remoteHermesWorkdir),
   };
 }
 
 function normalizeBaseUrl(value: string) {
   return value.trim().replace(/\/+$/, "");
+}
+
+function healthVersion(health: unknown) {
+  return typeof health === "object" &&
+    health !== null &&
+    "version" in health &&
+    typeof (health as { version?: unknown }).version === "string"
+    ? (health as { version: string }).version
+    : null;
+}
+
+function runtimeConfigurationChanged() {
+  return new HermesRuntimeError(
+    "La configuration Hermes a changé pendant l’opération. Rechargez puis réessayez.",
+    409,
+    "RUNTIME_CONFIGURATION_CHANGED",
+  );
 }
 
 async function persistProbeResult(input: {

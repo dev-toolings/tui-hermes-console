@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { SiteMembershipRole } from "@/db/schema";
 import { appendAuditEntry } from "@/modules/audit/service";
 import { AuthError, type SiteRequestContext } from "./service";
+import { describeError, log } from "@/observability/log";
 
 export const SITE_ROLE_MATRIX_VERSION = "2026-08-01.us-g1-006e.v1";
 
@@ -120,6 +121,7 @@ export function siteCapabilitiesForRole(role: SiteMembershipRole): SiteAction[] 
 
 type AuthorizationDependencies = {
   append?: (input: Parameters<typeof appendAuditEntry>[0]) => Promise<unknown>;
+  env?: Record<string, string | undefined>;
 };
 
 type SiteDenial = {
@@ -131,11 +133,57 @@ type SiteDenial = {
   error: { message: string; status: number; code: string };
 };
 
-/**
- * Aucun rôle d'administration de l'installation n'existe encore. Le refus est
- * donc inscrit dans le ledger du site acteur, sans prétendre qu'il s'agit du
- * ledger d'une ressource globale.
- */
+function emailSet(value: string | undefined) {
+  return new Set(
+    (value ?? "")
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+export function isInstallationAdminEmail(
+  email: string,
+  env: Record<string, string | undefined> = process.env,
+) {
+  const normalized = email.trim().toLowerCase();
+  const explicit = emailSet(env.INSTALLATION_ADMIN_EMAILS);
+  if (explicit.size > 0) return explicit.has(normalized);
+
+  // Compatibilité sûre avec la technical preview mono-admin : une unique
+  // identité Google allowlistée reste l'opérateur d'installation. Dès que
+  // plusieurs comptes existent, l'autorité doit être déclarée explicitement.
+  const loginAllowlist = emailSet(env.GOOGLE_ALLOWED_EMAILS);
+  return loginAllowlist.size === 1 && loginAllowlist.has(normalized);
+}
+
+export function assertInstallationAccess(
+  context: SiteRequestContext,
+  email: string,
+  method: string,
+  routePath: string,
+  dependencies: AuthorizationDependencies = {},
+) {
+  if (isInstallationAdminEmail(email, dependencies.env)) return;
+  return denySiteAction(
+    context,
+    {
+      action: "installation.access",
+      resourceType: "installation_route",
+      resourceId: `${method.toUpperCase()} ${routePath}`,
+      reasonCode: "INSTALLATION_ADMIN_REQUIRED",
+      state: { role: context.role },
+      error: {
+        message: "Une autorisation d’administration de l’installation est requise.",
+        status: 403,
+        code: "INSTALLATION_ADMIN_REQUIRED",
+      },
+    },
+    dependencies,
+  );
+}
+
+/** @deprecated Use assertInstallationAccess with the authenticated email. */
 export function denyInstallationAccess(
   context: SiteRequestContext,
   method: string,
@@ -213,11 +261,11 @@ export async function denySiteAction(
       occurredAt: new Date(),
     });
   } catch (error) {
-    console.error("Role denial audit failed", {
+    log.error("Role denial audit failed", {
       siteId: context.siteId,
       action: denial.action,
       correlationId: context.correlationId,
-      error,
+      ...describeError(error),
     });
     throw new AuthError(
       "Le refus d’accès n’a pas pu être inscrit dans le journal d’audit.",

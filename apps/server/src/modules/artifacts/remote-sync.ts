@@ -61,7 +61,7 @@ export async function resolveRunRoot(): Promise<{
 }> {
   const workspace = await getRemoteWorkspace();
   if (!workspace) return { root: "", remote: false };
-  return { root: workspace.root, remote: true };
+  return { root: workspace.hermesRoot, remote: true };
 }
 
 /** Monte les pièces jointes sur la machine distante avant de lancer le run.
@@ -69,7 +69,10 @@ export async function resolveRunRoot(): Promise<{
 export async function pushRunInputs(runId: string): Promise<void> {
   const workspace = await getRemoteWorkspace();
   if (!workspace) return;
-  await pushRunInputsToWorkspace(runId, workspace);
+  await pushRunInputsToWorkspace(runId, {
+    channel: workspace.channel,
+    root: workspace.hostRoot,
+  });
 }
 
 export async function pushRunInputsToWorkspace(
@@ -119,7 +122,10 @@ export async function pushRunInputsToWorkspace(
 export async function pullRunOutputs(runId: string): Promise<void> {
   const workspace = await getRemoteWorkspace();
   if (!workspace) return;
-  await pullRunOutputsFromWorkspace(runId, workspace);
+  await pullRunOutputsFromWorkspace(runId, {
+    channel: workspace.channel,
+    root: workspace.hostRoot,
+  });
 }
 
 export async function pullRunOutputsFromWorkspace(

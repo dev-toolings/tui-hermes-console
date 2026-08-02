@@ -8,12 +8,12 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun --env-file=apps/server/.env.local run --filter server --filter console --elide-lines=0 dev",
+    "dev": "bun --env-file=apps/server/.env.local run --filter server --filter web dev",
     "dev:server": "bun --env-file=apps/server/.env.local run --filter server dev",
-    "dev:console": "bun run --filter console dev",
-    "build": "bun run --filter console build",
+    "dev:web": "bun run --filter web dev",
+    "build": "bun run --filter web build",
     "start": "bun --env-file=apps/server/.env.local run --filter server start",
-    "lint": "bun run --filter console lint",
+    "lint": "bun run --filter web lint",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun run --filter '*' test",
     "db:generate": "bun --env-file=apps/server/.env.local run --filter server db:generate",
@@ -33,6 +33,7 @@
     "proof:g1-006e": "bun test apps/server/src/modules/retention/purge.test.ts apps/server/drizzle/lifecycle-purge.integration.test.ts --max-concurrency=1",
     "proof:g1-003": "bun test apps/server/drizzle/ai-disclosure-consent.integration.test.ts",
     "proof:g1-007a": "bun apps/server/scripts/prove-g1-007a-local.ts",
+    "runtime:probe": "bun apps/server/scripts/probe-runtime.ts",
     "prepare:e2e:g1-003": "bun apps/server/scripts/prepare-ai-disclosure-e2e.ts"
   }
 }

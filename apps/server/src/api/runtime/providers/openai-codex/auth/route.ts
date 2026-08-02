@@ -4,6 +4,7 @@ import { z } from "zod";
 import { apiErrorResponse } from "@/modules/api/errors";
 import { resolveHermesRuntimeConfig } from "@/modules/runtime/config";
 import { HermesRuntimeError } from "@/modules/runtime/hermes-adapter";
+import { hermesCliExecutable } from "@/modules/runtime/local-management";
 
 type AuthStatus = "starting" | "pending" | "connected" | "failed" | "cancelled";
 type AuthSession = {
@@ -41,7 +42,7 @@ export async function POST() {
 
     const id = randomUUID();
     const child = spawn(
-      "hermes",
+      hermesCliExecutable(),
       ["auth", "add", "openai-codex", "--no-browser"],
       {
         env: {

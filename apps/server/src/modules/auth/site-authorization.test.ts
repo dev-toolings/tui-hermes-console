@@ -3,8 +3,10 @@ import type { SiteMembershipRole } from "@/db/schema";
 import {
   SITE_ACTIONS,
   SITE_ROLE_MATRIX_VERSION,
+  assertInstallationAccess,
   assertSiteAction,
   canPerformSiteAction,
+  isInstallationAdminEmail,
   type SiteAction,
 } from "./site-authorization";
 
@@ -30,6 +32,46 @@ const readActions: SiteAction[] = [
 ];
 
 describe("site role permission matrix", () => {
+  test("keeps installation authority separate from site roles", async () => {
+    expect(
+      isInstallationAdminEmail("owner@example.test", {
+        INSTALLATION_ADMIN_EMAILS: "owner@example.test",
+        GOOGLE_ALLOWED_EMAILS: "owner@example.test,client@example.test",
+      }),
+    ).toBe(true);
+    expect(
+      isInstallationAdminEmail("client@example.test", {
+        INSTALLATION_ADMIN_EMAILS: "owner@example.test",
+        GOOGLE_ALLOWED_EMAILS: "owner@example.test,client@example.test",
+      }),
+    ).toBe(false);
+    expect(
+      isInstallationAdminEmail("owner@example.test", {
+        GOOGLE_ALLOWED_EMAILS: "owner@example.test",
+      }),
+    ).toBe(true);
+    expect(
+      isInstallationAdminEmail("owner@example.test", {
+        GOOGLE_ALLOWED_EMAILS: "owner@example.test,client@example.test",
+      }),
+    ).toBe(false);
+
+    const append = mock(async (_input: unknown) => undefined);
+    expect(
+      assertInstallationAccess(
+        context("requester"),
+        "owner@example.test",
+        "POST",
+        "/api/runtime/providers/openai-codex/auth",
+        {
+          append,
+          env: { INSTALLATION_ADMIN_EMAILS: "owner@example.test" },
+        },
+      ),
+    ).toBeUndefined();
+    expect(append).not.toHaveBeenCalled();
+  });
+
   test("assigns every current action to the five roles without broadening specialized roles", () => {
     expect(SITE_ROLE_MATRIX_VERSION).toBe("2026-08-01.us-g1-006e.v1");
     expect(SITE_ACTIONS).toHaveLength(31);

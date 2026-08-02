@@ -22,4 +22,4 @@ deploy
 *.md
 pnpm-lock.yaml
 
-apps/console/src-tauri
+apps/web/src-tauri

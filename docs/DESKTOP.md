@@ -21,7 +21,7 @@ dans un seul module métier ; seulement `next/link` (18 sites) et
 
 ```
 ┌── Tauri (Rust) ──────────────────────────────────────┐
-│  WebView → apps/console  (Vite + React 19 + TanStack)│
+│  WebView → apps/web  (Vite + React 19 + TanStack)│
 │      │  fetch → origine injectée par Rust            │
 │      ▼                                                │
 │  sidecar → apps/server  (Hono, binaire 65 Mo)        │
@@ -29,7 +29,7 @@ dans un seul module métier ; seulement `next/link` (18 sites) et
 │   ├ ssh2 → tunnel SSH                                 │
 │   ├ runner + SSE                                      │
 │   ├ crypto AES-256-GCM                                │
-│   └ sert aussi apps/console/dist  ← accès navigateur │
+│   └ sert aussi apps/web/dist  ← accès navigateur │
 └───────────────────────────────────────────────────────┘
 
 packages/console-core   logique pure partagée serveur ↔ UI :
@@ -67,9 +67,9 @@ Reproduire :
 ```bash
 bun run dev                              # serveur (3170) + SPA (1420)
 bun run build && bun run start           # un seul process, tout sur :3170
-bun run --cwd apps/console sidecar:build # binaire autonome
-cd apps/console/src-tauri && cargo check
-bun run --cwd apps/console tauri:dev     # fenêtre native
+bun run --cwd apps/web sidecar:build # binaire autonome
+cd apps/web/src-tauri && cargo check
+bun run --cwd apps/web tauri:dev     # fenêtre native
 ```
 
 ## Fluidité — ce qui a été mesuré

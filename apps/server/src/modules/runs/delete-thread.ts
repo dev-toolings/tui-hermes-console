@@ -13,6 +13,7 @@ import { ProductRepositoryError, isTerminalRunStatus } from "./repository";
 import type { ProductRunStatus } from "@console/core/modules/runs/types";
 import type { SiteRequestContext } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
+import { describeError, log } from "@/observability/log";
 
 const ACTIVE_STATUSES: ProductRunStatus[] = [
   "pending",
@@ -102,7 +103,7 @@ export async function deleteThread(
       ) {
         continue;
       }
-      console.warn("Thread delete: cancel skipped", { runId: run.id, error });
+      log.warn("Thread delete: cancel skipped", { runId: run.id, ...describeError(error) });
     }
   }
 
@@ -125,16 +126,16 @@ export async function deleteThread(
           } catch (error) {
             if (error instanceof HermesRuntimeError && error.status === 404)
               return;
-            console.warn("Thread delete: Hermes session cleanup skipped", {
+            log.warn("Thread delete: Hermes session cleanup skipped", {
               sessionId,
-              error,
+              ...describeError(error),
             });
           }
         }),
       );
     } catch (error) {
       if (!(error instanceof HermesRuntimeError)) throw error;
-      console.warn("Thread delete: Hermes unreachable", error);
+      log.warn("Thread delete: Hermes unreachable", describeError(error));
     }
   }
 
@@ -150,10 +151,10 @@ export async function deleteThread(
       ]);
       workdirsPurged += 1;
     } catch (error) {
-      console.warn("Thread delete: workdir purge skipped", {
+      log.warn("Thread delete: workdir purge skipped", {
         runId: run.id,
         dir,
-        error,
+        ...describeError(error),
       });
     }
   }

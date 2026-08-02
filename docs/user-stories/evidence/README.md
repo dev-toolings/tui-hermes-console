@@ -6,6 +6,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 
 ## Rapports disponibles
 
+- [02-08-2026 — connectivité Hermes native, Docker locale et Docker VPS](2026-08-02-gate-1-hermes-runtime-connectivity.md) :
+  Console en arrière-plan, probes réels `/health` + `/v1/capabilities` et tunnel créé par le module
+  SSH du projet ; SFTP, compte non-root, confinement et acceptation Gate restent ouverts.
 - [01-08-2026 — RBAC des cinq rôles](2026-08-01-gate-2-rbac.md) : preuve P-INT/P-SEC backend,
   P-E2E et acceptation produit encore ouvertes.
 - [01-08-2026 — ownership explicite](2026-08-01-gate-2-ownership.md) : preuve migration,

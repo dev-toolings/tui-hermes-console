@@ -7,6 +7,7 @@ import { deleteHermesSession, HermesRuntimeError } from "@/modules/runtime/herme
 import type { SiteRequestContext } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
 import { auditOwnershipCreation } from "@/modules/ownership/audit";
+import { describeError, log } from "@/observability/log";
 
 export class AgentRepositoryError extends Error {
   constructor(
@@ -243,13 +244,16 @@ export async function deleteAgent(
           await dependencies.deleteSession(runtime, row.id);
         } catch (error) {
           if (error instanceof HermesRuntimeError && error.status === 404) return;
-          console.warn("Hermes session cleanup skipped", { sessionId: row.id, error });
+          log.warn("Hermes session cleanup skipped", {
+            sessionId: row.id,
+            ...describeError(error),
+          });
         }
       }),
     );
   } catch (error) {
     if (!(error instanceof HermesRuntimeError)) throw error;
-    console.warn("Hermes unreachable during agent deletion", error);
+    log.warn("Hermes unreachable during agent deletion", describeError(error));
   }
 
   await db.delete(agents).where(and(eq(agents.siteId, context.siteId), eq(agents.id, agentId)));

@@ -1,4 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import { createWriteStream, mkdirSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -6,7 +7,7 @@ import { pipeline } from "node:stream/promises";
 import { createByteLimit } from "./byte-limit";
 import { mapSystemSshStderr, sshBinaryMissing } from "./errors";
 import { configuredKnownHostsPath } from "./known-hosts";
-import type { SftpOps, SshChannel, SshTarget } from "./types";
+import type { SftpOps, SshChannel, SshExecResult, SshTarget } from "./types";
 
 /** Socket ControlMaster. `/tmp` plutôt que os.tmpdir() : sur macOS ce dernier est un chemin
  *  très long et un socket Unix est limité à ~104 caractères. */
@@ -22,7 +23,7 @@ const EXIT_GRACE_MS = 1_500;
 
 /** Options communes à toutes les invocations : jamais de prompt interactif (le serveur
  *  n'a pas de TTY), et échec immédiat si le forward ne peut pas être établi. */
-export function baseSshArgs(target: SshTarget): string[] {
+export function baseSshArgs(target: SshTarget, controlId = "shared"): string[] {
   return [
     "-o",
     "BatchMode=yes",
@@ -31,7 +32,7 @@ export function baseSshArgs(target: SshTarget): string[] {
     "-o",
     "ControlMaster=auto",
     "-o",
-    `ControlPath=${controlPath(target)}`,
+    `ControlPath=${controlPath(target, controlId)}`,
     "-o",
     `ControlPersist=${CONTROL_PERSIST}`,
     "-o",
@@ -56,9 +57,14 @@ export function baseSshArgs(target: SshTarget): string[] {
   ];
 }
 
-export function forwardArgs(target: SshTarget, localPort: number, remote: string): string[] {
+export function forwardArgs(
+  target: SshTarget,
+  localPort: number,
+  remote: string,
+  controlId = "shared",
+): string[] {
   return [
-    ...baseSshArgs(target),
+    ...baseSshArgs(target, controlId),
     "-o",
     "ExitOnForwardFailure=yes",
     "-N",
@@ -68,7 +74,12 @@ export function forwardArgs(target: SshTarget, localPort: number, remote: string
   ];
 }
 
-export function scpArgs(target: SshTarget, from: string, to: string): string[] {
+export function scpArgs(
+  target: SshTarget,
+  from: string,
+  to: string,
+  controlId = "shared",
+): string[] {
   return [
     "-o",
     "BatchMode=yes",
@@ -77,7 +88,7 @@ export function scpArgs(target: SshTarget, from: string, to: string): string[] {
     "-o",
     "ControlMaster=auto",
     "-o",
-    `ControlPath=${controlPath(target)}`,
+    `ControlPath=${controlPath(target, controlId)}`,
     "-o",
     "StrictHostKeyChecking=yes",
     "-o",
@@ -94,11 +105,18 @@ export function scpArgs(target: SshTarget, from: string, to: string): string[] {
   ];
 }
 
-export function controlPath(target: SshTarget) {
-  return path.join(CONTROL_DIR, `${target.user}@${target.host}-${target.port}`);
+export function controlPath(target: SshTarget, controlId = "shared") {
+  const digest = createHash("sha256")
+    .update(`${target.user}\0${target.host}\0${target.port}\0${controlId}`)
+    .digest("hex")
+    .slice(0, 32);
+  return path.join(CONTROL_DIR, digest);
 }
 
 export function createSystemSshChannel(target: SshTarget): SshChannel {
+  // Deux objets canal ne doivent jamais partager le ControlMaster OpenSSH :
+  // fermer un probe éphémère tuerait sinon le tunnel d'une mission active.
+  const controlId = randomUUID();
   let master: ChildProcess | null = null;
   let stderr = "";
   let forwarded: { url: string; remote: string; port: number } | null = null;
@@ -134,7 +152,7 @@ export function createSystemSshChannel(target: SshTarget): SshChannel {
     const localPort = await reserveLocalPort();
 
     stderr = "";
-    const child = spawn("ssh", forwardArgs(target, localPort, remote), {
+    const child = spawn("ssh", forwardArgs(target, localPort, remote, controlId), {
       stdio: ["ignore", "ignore", "pipe"],
     });
     master = child;
@@ -191,7 +209,7 @@ export function createSystemSshChannel(target: SshTarget): SshChannel {
     // Le master vit dans un process détaché (ControlPersist) : tuer l'enfant ne suffit pas.
     // Sur arrêt du serveur, il faut la variante synchrone — un spawn asynchrone n'aurait
     // pas le temps de partir et la connexion survivrait jusqu'à l'expiration du persist.
-    const args = [...baseSshArgs(target), "-O", "exit", `${target.user}@${target.host}`];
+    const args = [...baseSshArgs(target, controlId), "-O", "exit", `${target.user}@${target.host}`];
     if (sync) {
       spawnSync("ssh", args, { stdio: "ignore" });
       return;
@@ -202,14 +220,14 @@ export function createSystemSshChannel(target: SshTarget): SshChannel {
   /** Commande distante via le master existant : pas de nouvelle authentification. */
   function run(command: string[]): Promise<string> {
     return exec("ssh", [
-      ...baseSshArgs(target),
+      ...baseSshArgs(target, controlId),
       `${target.user}@${target.host}`,
       command.join(" "),
     ]);
   }
 
   function scp(from: string, to: string): Promise<string> {
-    return exec("scp", scpArgs(target, from, to));
+    return exec("scp", scpArgs(target, from, to, controlId));
   }
 
   async function downloadBounded(
@@ -220,7 +238,7 @@ export function createSystemSshChannel(target: SshTarget): SshChannel {
     const child = spawn(
       "ssh",
       [
-        ...baseSshArgs(target),
+        ...baseSshArgs(target, controlId),
         `${target.user}@${target.host}`,
         `cat -- ${shellQuote(remotePath)}`,
       ],
@@ -258,7 +276,31 @@ export function createSystemSshChannel(target: SshTarget): SshChannel {
     }
   }
 
-  return { forward, sftp, close };
+  async function execRemote(command: string): Promise<SshExecResult> {
+    return new Promise((resolve, reject) => {
+      const child = spawn(
+        "ssh",
+        [...baseSshArgs(target, controlId), `${target.user}@${target.host}`, command],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+      let stdout = "";
+      let stderr = "";
+      child.stdout?.on("data", (chunk: Buffer) => {
+        stdout = (stdout + chunk.toString()).slice(-64_000);
+      });
+      child.stderr?.on("data", (chunk: Buffer) => {
+        stderr = (stderr + chunk.toString()).slice(-16_000);
+      });
+      child.on("error", (error: NodeJS.ErrnoException) => {
+        reject(error.code === "ENOENT" ? sshBinaryMissing() : mapSystemSshStderr(error.message, ""));
+      });
+      child.on("close", (code) => {
+        resolve({ stdout, stderr, code: typeof code === "number" ? code : 1 });
+      });
+    });
+  }
+
+  return { forward, sftp, exec: execRemote, close };
 }
 
 export function systemSftpListCommand(remotePath: string, maxEntries: number) {
