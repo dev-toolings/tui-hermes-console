@@ -15,3 +15,4 @@ auth.md
 !apps/web/src/assets/setup-operation-board.png
 .playwright-mcp/
 .impeccable/
+.playwright-cli/
