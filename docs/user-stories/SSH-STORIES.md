@@ -30,6 +30,13 @@ recovery, compte SSH de service, transports Hermes, cycle de vie des identités.
 
 **Reviewer commun :** responsable sécurité/exploitation distinct de l'implémenteur.
 
+> **GEL DE L'EPIC — décidé le 04-08-2026.** `US-G1-SSH-001` est gelée faute de VPS vierge (voir
+> [décision de gel](evidence/2026-08-04-ssh-001-gel-decision.md)). `US-G1-SSH-002` à `US-G1-SSH-009`
+> en dépendent transitivement et sont gelées avec elle : aucune ne peut atteindre `ACCEPTÉE` tant que
+> `US-G1-SSH-001` n'est pas dégelée, quelle que soit la qualité des preuves partielles produites
+> entre-temps. Ne pas relancer de campagne de preuve sur ces stories sans hôte vierge provisionné.
+> `US-G1-SSH-010` n'est pas concernée : elle est déjà `VÉRIFIÉE` sur cible réelle.
+
 ## US-G1-SSH-001 — Bootstrapper un VPS sans notre clé
 
 > En tant qu'administrateur, je veux installer les clés publiques via le fournisseur, afin d'obtenir
@@ -41,7 +48,18 @@ recovery, compte SSH de service, transports Hermes, cycle de vie des identités.
 - **Négatif :** une clé privée, un secret en argument ou un hôte déjà occupé bloque la recette sans
   mutation supplémentaire.
 - **Preuves :** `P-OPS`, méthode fournisseur, comptes, codes de sortie et inventaire avant/après.
-- **État courant :** `BLOQUÉE` — la cible observée n'était pas vierge.
+- **État courant :** `BLOQUÉE` — **gelée le 04-08-2026**, la cible observée n'était pas vierge.
+  - **Obstacle :** aucun VPS vierge n'est disponible. La seule cible fournie, `187.55.227.55`, porte
+    un Docker Swarm actif (`caddy`, `ghostsearch`, `pulsevault`, `qualiopi-audit-tracker`) et expose
+    `80`/`443` ; le scénario négatif de cette story la disqualifie explicitement (« un hôte déjà
+    occupé bloque la recette »).
+  - **Propriétaire de l'obstacle :** commanditaire du projet, seul à pouvoir provisionner un hôte.
+  - **Critère de dégel :** un hôte fraîchement provisionné, sans workload, sans compte
+    `hermes-console` préexistant, et dont l'empreinte d'hôte est lisible hors bande.
+  - **Date de revue :** à fixer par le propriétaire ; aucune relance automatique.
+  - **État `BLOQUÉE` conservé volontairement :** `CONVENTIONS.md` fige la liste des états autorisés et
+    ne contient pas de statut « gelée ». Le gel est donc porté par la documentation d'obstacle et de
+    propriétaire qu'exige déjà `BLOQUÉE`, sans élargir le vocabulaire normatif.
 
 ## US-G1-SSH-002 — Établir la confiance dans la clé d'hôte
 

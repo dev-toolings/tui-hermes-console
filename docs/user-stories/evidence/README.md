@@ -13,6 +13,18 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 - [02-08-2026 — connectivité Hermes native, Docker locale et Docker VPS](2026-08-02-gate-1-hermes-runtime-connectivity.md) :
   Console en arrière-plan, probes réels `/health` + `/v1/capabilities` et tunnel créé par le module
   SSH du projet ; SFTP, compte non-root, confinement et acceptation Gate restent ouverts.
+- [04-08-2026 — décision de gel SSH-001](2026-08-04-ssh-001-gel-decision.md) : `US-G1-SSH-001` est
+  gelée faute de VPS vierge, et `US-G1-SSH-002` à `US-G1-SSH-009` le sont par dépendance.
+- [04-08-2026 — analyse du pin registre Hermes](2026-08-04-g1-002-registry-pin-analysis.md) :
+  tags amont en CalVer, digest G1-002C orphelin de tag, candidats épinglables identifiés.
+- Gabarit de preuve SSH-001/002 : [`guides/SSH-001-002-EVIDENCE-TEMPLATE.md`](../guides/SSH-001-002-EVIDENCE-TEMPLATE.md)
+  (feuille à remplir ; rangée dans `guides/` et non ici, un gabarit vide n'étant pas une preuve).
+- [script] `scripts/run-ssh-001-002.sh` (optionnel) :
+  exécution semi-automatisée de la preuve `US-G1-SSH-001` / `US-G1-SSH-002`.  
+  Sans `EVIDENCE_FILE`, le script écrit dans un rapport horodaté :
+  `docs/user-stories/evidence/YYYY-MM-DD-ssh-001-002-<host_alias>.md`.
+  Mode accéléré host-key disponible via `SSH_SKIP_TUNNEL_TEST=1` (scan + known_hosts, pas de
+  tunnel SSH tant que la vraie identité de service n’est pas disponible).
 - [01-08-2026 — RBAC des cinq rôles](2026-08-01-gate-2-rbac.md) : preuve P-INT/P-SEC backend,
   P-E2E et acceptation produit encore ouvertes.
 - [01-08-2026 — ownership explicite](2026-08-01-gate-2-ownership.md) : preuve migration,

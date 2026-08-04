@@ -4,6 +4,18 @@
 
 **Critère de sortie :** séparation opérateur MSP/client final démontrée par tests croisés.
 
+> **Revue de cohérence du 04-08-2026.** Les états ci-dessous datent du 01-08-2026 et n'ont pas été
+> rejoués depuis. Deux réserves les affectent, détaillées dans le
+> [registre des incohérences](INCOHERENCES.md) :
+>
+> - **INC-04 :** l'application front `apps/console` a été supprimée le 02-08-2026 et remplacée par
+>   `apps/web`. Tout volet `UI` de ces preuves porte sur une application qui n'existe plus. Les volets
+>   backend et DB ne sont pas remis en cause.
+> - **INC-05 :** la suite de tests n'est pas déterministe au 04-08-2026 (4 puis 2 échecs sur deux
+>   exécutions du même commit). Aucun passage à `VÉRIFIÉE` n'est recevable tant qu'elle est instable.
+>
+> Ces stories restent donc au mieux `IMPLÉMENTÉE`, et aucune ne peut être promue sans rejeu.
+
 ## US-G2-001 — Isoler par site et projet
 
 > En tant qu'administrateur MSP, je veux rattacher toute ressource à un site et éventuellement un
@@ -54,6 +66,9 @@
 - **État courant au 2026-08-01 :** `IMPLÉMENTÉE` backend/DB/UI et vérifiée localement par P-CODE/P-INT ;
   non `ACCEPTÉE` tant que la P-E2E navigateur, la revue produit/sécurité et la dépendance Gate 1
   ne sont pas clôturées.
+- **Révision du 04-08-2026 :** `IMPLÉMENTÉE` backend/DB uniquement. La mention `UI` est retirée : elle
+  a été constatée sur `apps/console`, supprimée le 02-08-2026 et remplacée par `apps/web` sans rejeu
+  (INC-04). Le volet interface de cette story est à re-prouver.
 - **Preuve datée :** [`2026-08-01-gate-2-ownership.md`](evidence/2026-08-01-gate-2-ownership.md).
 
 ## US-G2-004 — Séparer l'opérateur MSP du client final
