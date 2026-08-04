@@ -11,10 +11,14 @@
 import type {
   ArtifactDirection,
   RuntimeHealthStatus,
+  RuntimeCredentialAdapter,
+  RuntimeManagementMode,
   RuntimeSshAuth,
   RuntimeTransport,
   RuntimeWorkspaceStatus,
 } from "./domain";
+
+export type { RuntimeCredentialAdapter, RuntimeManagementMode } from "./domain";
 
 /** `GET /api/agents`, `GET /api/agents/:agentId` */
 export type AgentDto = {
@@ -32,6 +36,14 @@ export type AgentDto = {
   updatedAt: string;
   runs: number;
   lastRunAt: string | null;
+};
+
+/** `GET /api/skills` — inventaire des skills exposés par Hermes. */
+export type HermesSkillDto = {
+  name: string;
+  description: string;
+  category: string | null;
+  enabled: boolean;
 };
 
 /** `GET /api/files` — jamais le chemin de stockage, seulement de quoi l'afficher. */
@@ -59,6 +71,9 @@ export type RuntimePublicDto = {
   baseUrl: string | null;
   name: string | null;
   tokenConfigured: boolean;
+  managementMode: RuntimeManagementMode;
+  credentialAdapter: RuntimeCredentialAdapter;
+  lastCredentialRotatedAt: string | null;
   /** `APP_ENCRYPTION_KEY` est présente : les secrets peuvent être chiffrés au repos. */
   encryptionReady: boolean;
   sshHost: string | null;
@@ -78,6 +93,118 @@ export type RuntimePublicDto = {
   lastCheckedAt: string | null;
   updatedAt: string | null;
 };
+
+export type HermesRuntimeUpdateMethod =
+  | "native"
+  | "docker-compose"
+  | "external"
+  | "unknown";
+
+export type HermesRuntimeUpdatePlanDto = {
+  supported: boolean;
+  available: boolean;
+  method: HermesRuntimeUpdateMethod;
+  transport: RuntimeTransport;
+  configRevision: number | null;
+  currentVersion: string | null;
+  latestVersion: string | null;
+  latestTag: string | null;
+  releaseName: string | null;
+  releaseUrl: string | null;
+  reason: string | null;
+  checkedAt: string;
+};
+
+export type HermesRuntimeUpdateResultDto = {
+  updated: boolean;
+  rolledBack: boolean;
+  previousVersion: string | null;
+  currentVersion: string | null;
+  method: HermesRuntimeUpdateMethod;
+  plan: HermesRuntimeUpdatePlanDto;
+};
+
+export type HermesRuntimeUpdateOperationStatus =
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "rolled_back"
+  | "failed"
+  | "recovery_required";
+
+export type HermesRuntimeUpdateOperationPhase =
+  | "preflight"
+  | "backup"
+  | "download"
+  | "apply"
+  | "verify"
+  | "rollback"
+  | "complete";
+
+export type HermesRuntimeUpdateOperationDto = {
+  id: string;
+  trigger: "manual" | "automatic";
+  status: HermesRuntimeUpdateOperationStatus;
+  phase: HermesRuntimeUpdateOperationPhase;
+  progress: number;
+  message: string;
+  method: HermesRuntimeUpdateMethod;
+  previousVersion: string | null;
+  targetVersion: string | null;
+  targetTag: string;
+  currentVersion: string | null;
+  error?: { code: string; message: string };
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+};
+
+export type RuntimeCredentialOperationDto = {
+  id: string;
+  operation: "import" | "generate" | "rotate";
+  adapter: RuntimeCredentialAdapter;
+  status:
+    | "planned"
+    | "applying"
+    | "verifying"
+    | "succeeded"
+    | "rolled_back"
+    | "failed"
+    | "recovery_required";
+  phase: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+};
+
+export type RuntimeCredentialPlanDto = {
+  id: string;
+  operation: "import" | "generate" | "rotate";
+  adapter: RuntimeCredentialAdapter;
+  target: string;
+  configRevision: number;
+  expectedDowntime: boolean;
+  confirmation: string;
+  blockers: string[];
+  warnings: string[];
+};
+
+/** `GET /api/runtime/dashboard` — état public du Dashboard Hermes. */
+export type HermesDashboardDto = {
+  status: "running" | "stopped" | "unreachable" | "unsupported" | "unknown";
+  manager: "systemd-user" | "systemd-system" | "docker" | "docker-s6" | "s6" | "cli" | "unknown";
+  transport: "local" | "ssh";
+  port: number;
+  version: string | null;
+  canStart: boolean;
+  canRestart: boolean;
+  reason: string | null;
+  checkedAt: string;
+};
+
+export type HermesDashboardLifecycleAction = "start" | "restart";
 
 export type RuntimeSshHostKeyDto = {
   host: string;
@@ -126,6 +253,7 @@ export type RuntimeSshWorkspaceDiscoveryDto = {
   candidates: RuntimeSshWorkspaceCandidateDto[];
   warnings: string[];
   blockers: string[];
+  storageMigration?: RuntimeSshStorageMigrationAvailabilityDto;
   checkedAt: string;
 };
 
@@ -163,6 +291,15 @@ export type RuntimeSshInspectionDto = {
     hermesVersion: string | null;
     hermesMode: "docker" | "native" | "unknown";
     port8642: "listening" | "closed" | "unknown";
+    dashboard: "listening" | "closed" | "unknown";
+    dashboardManager:
+      | "systemd-user"
+      | "systemd-system"
+      | "docker"
+      | "docker-s6"
+      | "s6"
+      | "cli"
+      | "unknown";
     workdir: "ready" | "missing" | "not_writable" | "unknown";
   };
   warnings: string[];
@@ -195,6 +332,78 @@ export type RuntimeSshProvisionJobDto = {
   step: string | null;
   progress: number;
   message: string;
+  runtime?: RuntimePublicDto;
+  error?: { code: string; message: string };
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RuntimeSshStorageMigrationAvailabilityDto = {
+  state: "available" | "manual_required";
+  reasonCode: string;
+  defaultTargetRoot: string;
+  sourceVolume: string | null;
+  sourceBytes: number | null;
+};
+
+export type RuntimeSshStorageMigrationStepDto = {
+  id: string;
+  label: string;
+  description: string;
+  destructive: boolean;
+};
+
+export type RuntimeSshStorageMigrationPlanDto = {
+  id: string;
+  expectedRevision: number;
+  source: {
+    containerName: string;
+    volumeName: string;
+    bytes: number;
+    fileCount: number;
+    imageDigest: string;
+  };
+  target: {
+    hostDataRoot: string;
+    hermesDataRoot: "/opt/data";
+    hostWorkspace: string;
+    hermesWorkspace: "/opt/data/workspace";
+    composeDirectory: string;
+    backupDirectory: string;
+  };
+  steps: RuntimeSshStorageMigrationStepDto[];
+  blockers: string[];
+  warnings: string[];
+  confirmation: string;
+  expiresAt: string;
+};
+
+export type RuntimeSshStorageMigrationStatus =
+  | "planned"
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "rolled_back"
+  | "failed"
+  | "recovery_required";
+
+export type RuntimeSshStorageMigrationPhase =
+  | "preflight"
+  | "backup"
+  | "copy"
+  | "cutover"
+  | "verify"
+  | "activate"
+  | "rollback"
+  | "complete";
+
+export type RuntimeSshStorageMigrationJobDto = {
+  id: string;
+  status: RuntimeSshStorageMigrationStatus;
+  phase: RuntimeSshStorageMigrationPhase;
+  progress: number;
+  message: string;
+  rollbackAvailable: boolean;
   runtime?: RuntimePublicDto;
   error?: { code: string; message: string };
   createdAt: string;

@@ -5,7 +5,6 @@
  * barre de titre (`site-header`) et la palette ⌘K lisent tous la même source.
  */
 import {
-  ActivityIcon,
   BotIcon,
   CircleHelpIcon,
   FileBoxIcon,
@@ -14,6 +13,8 @@ import {
   MessageSquareIcon,
   ScrollTextIcon,
   SettingsIcon,
+  SparklesIcon,
+  RocketIcon,
   type LucideIcon,
 } from "lucide-react";
 
@@ -30,21 +31,18 @@ export const DEFAULT_CONSOLE_PATH = "/chat";
 export const WORK_NAV = [
   { label: "Chat", href: "/chat", icon: MessageSquareIcon, requiredCapability: "thread.read" },
   { label: "Agents", href: "/agents", icon: BotIcon, requiredCapability: "agent.read" },
+  { label: "Skills", href: "/skills", icon: SparklesIcon, requiredCapability: "agent.read" },
   { label: "Sessions", href: "/sessions", icon: HistoryIcon, requiredCapability: "thread.read" },
-  { label: "Missions", href: "/runs", icon: ActivityIcon, requiredCapability: "run.read" },
   { label: "Artefacts", href: "/artifacts", icon: FileBoxIcon, requiredCapability: "artifact.read" },
+  { label: "Aperçu", href: "/overview", icon: LayoutDashboardIcon, requiredCapability: "run.read" },
 ] satisfies NavItem[];
 
-export const CONTROL_NAV = [
-  { label: "Aperçu", href: "/overview", icon: LayoutDashboardIcon, requiredCapability: "run.read" },
-  { label: "Journal", href: "/audit", icon: ScrollTextIcon, requiredCapability: "audit.read" },
-  // Les paramètres racine chargent encore des endpoints installation-global
-  // (runtime/chiffrement) que les rôles site ne peuvent pas appeler. Ne pas
-  // afficher ce lien tant qu'un capability installation-admin n'est pas livré.
-  { label: "Paramètres", href: "/settings", icon: SettingsIcon, requiredCapability: "installation.admin" },
-] satisfies NavItem[];
+export const CONTROL_NAV: NavItem[] = [];
 
 export const FOOTER_NAV = [
+  { label: "Settings", href: "/settings", icon: SettingsIcon, requiredCapability: "installation.admin" },
+  { label: "Mises à jour", href: "/updates", icon: RocketIcon, requiredCapability: "run.read" },
+  { label: "Journal", href: "/audit", icon: ScrollTextIcon, requiredCapability: "audit.read" },
   { label: "Aide", href: "/support", icon: CircleHelpIcon, requiredCapability: "run.read" },
 ] satisfies NavItem[];
 
@@ -61,6 +59,11 @@ export function navForCapabilities<T extends NavItem>(
 }
 
 export function navItemMatches(item: NavItem, pathname: string): boolean {
+  // Une mission est une exécution ouverte depuis l'index Sessions. Les routes
+  // historiques `/runs/*` restent stables, mais le rail garde Sessions actif.
+  if (item.href === "/sessions" && (pathname === "/runs" || pathname.startsWith("/runs/"))) {
+    return true;
+  }
   return item.href === "/"
     ? pathname === "/"
     : pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -95,6 +98,7 @@ export function pageMeta(pathname: string): PageMeta {
     };
   }
   if (pathname === "/agents") return { title: "Agents", crumb: "Agents" };
+  if (pathname === "/skills") return { title: "Skills", crumb: "Skills" };
   if (pathname === "/chat/new") {
     return {
       title: "New session",
@@ -115,17 +119,17 @@ export function pageMeta(pathname: string): PageMeta {
     return {
       title: "Nouvelle mission",
       crumb: "Créer",
-      parent: { label: "Missions", href: "/runs" },
+      parent: { label: "Sessions", href: "/sessions?source=mission" },
     };
   }
   if (pathname.startsWith("/runs/")) {
     return {
       title: "Mission",
       crumb: "Exécution",
-      parent: { label: "Missions", href: "/runs" },
+      parent: { label: "Sessions", href: "/sessions?source=mission" },
     };
   }
-  if (pathname === "/runs") return { title: "Missions", crumb: "Missions" };
+  if (pathname === "/runs") return { title: "Sessions", crumb: "Sessions" };
   if (pathname === "/artifacts") return { title: "Artefacts", crumb: "Artefacts" };
   if (pathname === "/audit") return { title: "Journal d’audit", crumb: "Journal" };
   if (pathname === "/settings/runtime") {
@@ -156,6 +160,7 @@ export function pageMeta(pathname: string): PageMeta {
       parent: { label: "Paramètres", href: "/settings" },
     };
   }
+  if (pathname === "/updates") return { title: "Mises à jour Hermes", crumb: "Mises à jour" };
   if (pathname === "/settings/retention") {
     return {
       title: "Conservation",
