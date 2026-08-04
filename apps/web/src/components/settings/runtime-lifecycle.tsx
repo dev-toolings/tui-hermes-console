@@ -6,6 +6,7 @@ import { CheckCircle2Icon, LoaderCircleIcon, RotateCwIcon, TriangleAlertIcon } f
 import { Button } from "@/components/ui/boardui";
 import { cn } from "@/lib/cn";
 import { notifyRuntimePublicChanged } from "@/lib/runtime/public-client";
+import { useRuntimeMutation } from "./runtime-mutation-provider";
 
 type LifecycleState =
   | { kind: "idle" }
@@ -22,6 +23,7 @@ export function RuntimeLifecycle({
   onRuntimeChange: (runtime: RuntimePublicDto) => void;
 }) {
   const [state, setState] = React.useState<LifecycleState>({ kind: "idle" });
+  const { runMutation } = useRuntimeMutation();
   // En mode tunnel, baseUrl côté serveur pointe sur 127.0.0.1 sans qu'Hermes soit local.
   const managedLocally =
     runtime?.transport !== "ssh" && isLocalRuntimeUrl(runtime?.baseUrl);
@@ -29,21 +31,28 @@ export function RuntimeLifecycle({
   async function restart() {
     setState({ kind: "restarting" });
     try {
-      const response = await fetch("/api/runtime/restart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirm: true }),
+      const body = await runMutation("Redémarrage du runtime Hermes", async (signal) => {
+        const response = await fetch("/api/runtime/restart", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Hermes-Toast": "0",
+          },
+          signal,
+          body: JSON.stringify({ confirm: true }),
+        });
+        const nextBody = (await response.json()) as {
+          ok?: boolean;
+          recoveryMs?: number;
+          runtime?: RuntimePublicDto;
+          error?: { message?: string };
+        };
+        if (!response.ok || !nextBody.ok || !nextBody.runtime) {
+          throw new Error(nextBody.error?.message ?? "Le redémarrage Hermes a échoué.");
+        }
+        return nextBody;
       });
-      const body = (await response.json()) as {
-        ok?: boolean;
-        recoveryMs?: number;
-        runtime?: RuntimePublicDto;
-        error?: { message?: string };
-      };
-      if (!response.ok || !body.ok || !body.runtime) {
-        throw new Error(body.error?.message ?? "Le redémarrage Hermes a échoué.");
-      }
-      onRuntimeChange(body.runtime);
+      onRuntimeChange(body.runtime!);
       notifyRuntimePublicChanged();
       setState({
         kind: "success",

@@ -11,6 +11,8 @@
  */
 
 import * as agents from "@/api/agents/route";
+import * as skills from "@/api/skills/route";
+import * as skillToggle from "@/api/skills/toggle/route";
 import * as audit from "@/api/audit/route";
 import * as auditExports from "@/api/audit/exports/route";
 import * as auth from "@/api/auth/route";
@@ -27,11 +29,21 @@ import * as runApproval from "@/api/runs/[runId]/approval/route";
 import * as runCancel from "@/api/runs/[runId]/cancel/route";
 import * as runRetry from "@/api/runs/[runId]/retry/route";
 import * as runtime from "@/api/runtime/route";
+import * as runtimeDashboard from "@/api/runtime/dashboard/route";
 import * as runtimeModels from "@/api/runtime/models/route";
 import * as runtimeProbe from "@/api/runtime/probe/route";
+import * as runtimeEvents from "@/api/runtime/events/route";
 import * as providerCredentials from "@/api/runtime/providers/[provider]/credentials/route";
 import * as codexAuth from "@/api/runtime/providers/openai-codex/auth/route";
 import * as runtimeRestart from "@/api/runtime/restart/route";
+import * as runtimeUpdate from "@/api/runtime/update/route";
+import * as runtimeUpdateOperation from "@/api/runtime/update/[operationId]/route";
+import * as runtimeUpdateOperationEvents from "@/api/runtime/update/[operationId]/events/route";
+import * as runtimeCredentials from "@/api/runtime/credentials/route";
+import * as runtimeCredentialPlan from "@/api/runtime/credentials/plan/route";
+import * as runtimeCredentialOperation from "@/api/runtime/credentials/[operationId]/route";
+import * as runtimeSecretRevealChallenge from "@/api/runtime/secret-reveal/challenge/route";
+import * as runtimeSecretRevealVerify from "@/api/runtime/secret-reveal/verify/route";
 import * as sshHosts from "@/api/runtime/ssh-hosts/route";
 import * as runtimeTest from "@/api/runtime/test/route";
 import * as runtimeSshConnect from "@/api/runtime/ssh/connect/route";
@@ -43,6 +55,10 @@ import * as runtimeSshHostKey from "@/api/runtime/ssh/host-key/route";
 import * as runtimeSshPlan from "@/api/runtime/ssh/plan/route";
 import * as runtimeSshProvision from "@/api/runtime/ssh/provision/route";
 import * as runtimeSshProvisionEvents from "@/api/runtime/ssh/provision/[jobId]/events/route";
+import * as runtimeSshStorageMigrationPlan from "@/api/runtime/ssh/storage-migration/plan/route";
+import * as runtimeSshStorageMigration from "@/api/runtime/ssh/storage-migration/route";
+import * as runtimeSshStorageMigrationJob from "@/api/runtime/ssh/storage-migration/[jobId]/route";
+import * as runtimeSshStorageMigrationEvents from "@/api/runtime/ssh/storage-migration/[jobId]/events/route";
 import * as settingsStorage from "@/api/settings/storage/route";
 import * as settingsDataLifecycle from "@/api/settings/data-lifecycle/route";
 import * as settingsDataLifecyclePreviews from "@/api/settings/data-lifecycle/previews/route";
@@ -55,6 +71,7 @@ import * as threadDetail from "@/api/threads/[threadId]/route";
 import * as threadCommands from "@/api/threads/[threadId]/commands/route";
 import * as threadEvents from "@/api/threads/[threadId]/events/route";
 import * as threadMessages from "@/api/threads/[threadId]/messages/route";
+import * as updatesHermes from "@/api/updates/hermes/route";
 import * as siteMembership from "@/api/site/memberships/[userId]/route";
 import * as siteMemberships from "@/api/site/memberships/route";
 import * as siteMandates from "@/api/site/mandates/route";
@@ -159,6 +176,16 @@ export const ROUTES: RouteDefinition[] = [
       DELETE: "agent.delete",
     }),
   },
+  {
+    path: "/api/skills",
+    module: skills,
+    access: siteAccess({ GET: "agent.read" }),
+  },
+  {
+    path: "/api/skills/toggle",
+    module: skillToggle,
+    access: siteAccess({ PUT: "agent.update" }),
+  },
 
   {
     path: "/api/connectors",
@@ -245,9 +272,19 @@ export const ROUTES: RouteDefinition[] = [
   },
 
   { path: "/api/runtime", module: runtime, access: installationAccess },
+  { path: "/api/runtime/dashboard", module: runtimeDashboard, access: installationAccess },
   { path: "/api/runtime/models", module: runtimeModels, access: installationAccess },
   { path: "/api/runtime/probe", module: runtimeProbe, access: installationAccess },
+  { path: "/api/runtime/events", module: runtimeEvents, access: installationAccess },
   { path: "/api/runtime/restart", module: runtimeRestart, access: installationAccess },
+  { path: "/api/runtime/update", module: runtimeUpdate, access: installationAccess },
+  { path: "/api/runtime/update/:operationId", module: runtimeUpdateOperation, access: installationAccess },
+  { path: "/api/runtime/update/:operationId/events", module: runtimeUpdateOperationEvents, access: installationAccess },
+  { path: "/api/runtime/credentials", module: runtimeCredentials, access: installationAccess },
+  { path: "/api/runtime/credentials/plan", module: runtimeCredentialPlan, access: installationAccess },
+  { path: "/api/runtime/credentials/:operationId", module: runtimeCredentialOperation, access: installationAccess },
+  { path: "/api/runtime/secret-reveal/challenge", module: runtimeSecretRevealChallenge, access: installationAccess },
+  { path: "/api/runtime/secret-reveal/verify", module: runtimeSecretRevealVerify, access: installationAccess },
   { path: "/api/runtime/ssh-hosts", module: sshHosts, access: installationAccess },
   { path: "/api/runtime/test", module: runtimeTest, access: installationAccess },
   { path: "/api/runtime/ssh/connect", module: runtimeSshConnect, access: installationAccess },
@@ -259,6 +296,10 @@ export const ROUTES: RouteDefinition[] = [
   { path: "/api/runtime/ssh/plan", module: runtimeSshPlan, access: installationAccess },
   { path: "/api/runtime/ssh/provision", module: runtimeSshProvision, access: installationAccess },
   { path: "/api/runtime/ssh/provision/:jobId/events", module: runtimeSshProvisionEvents, access: installationAccess },
+  { path: "/api/runtime/ssh/storage-migration/plan", module: runtimeSshStorageMigrationPlan, access: installationAccess },
+  { path: "/api/runtime/ssh/storage-migration", module: runtimeSshStorageMigration, access: installationAccess },
+  { path: "/api/runtime/ssh/storage-migration/:jobId", module: runtimeSshStorageMigrationJob, access: installationAccess },
+  { path: "/api/runtime/ssh/storage-migration/:jobId/events", module: runtimeSshStorageMigrationEvents, access: installationAccess },
   // Avant `/:provider/credentials` : Hono retient la première correspondance,
   // et « openai-codex » matcherait le motif paramétré.
   {
@@ -298,6 +339,11 @@ export const ROUTES: RouteDefinition[] = [
     module: threadMessages,
     access: siteAccess({ POST: "thread.message" }),
     requiresAiConsent: { POST: true },
+  },
+  {
+    path: "/api/updates/hermes",
+    module: updatesHermes,
+    access: siteAccess({ GET: "run.read" }),
   },
 ];
 

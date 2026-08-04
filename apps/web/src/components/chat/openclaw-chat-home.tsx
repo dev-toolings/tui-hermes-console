@@ -13,8 +13,8 @@ export function OpenClawChatHome() {
       <h1 className="text-xl font-semibold tracking-tight">Chat</h1>
       <p className="mt-2 max-w-sm text-sm text-muted-foreground">
         Select a thread in the sidebar, or start a new session. Slash commands work inside a
-        session (<code className="rounded bg-muted px-1">/model</code>). Agents are configured
-        from <strong>Missions</strong>.
+        session (<code className="rounded bg-muted px-1">/model</code>). Configure reusable
+        agents from the <Link href="/agents" className="font-semibold hover:underline">Agents</Link> workspace.
       </p>
       <Link
         href="/chat/new"

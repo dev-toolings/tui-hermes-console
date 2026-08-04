@@ -1,14 +1,21 @@
 /**
- * Rattrapage des runs orphelins au démarrage.
+ * Réconciliation de démarrage.
  *
- * Un run laissé « en cours » par un arrêt brutal du process ne se terminerait
- * jamais tout seul : la Console le réconcilie contre le runtime au boot. C'était
- * le rôle du hook `instrumentation` de Next ; c'est maintenant le serveur Hono
- * qui l'appelle explicitement.
+ * Le stockage est traité en premier et de manière bloquante : une coupure en
+ * plein cutover ne doit jamais laisser démarrer une mission. Les runs orphelins
+ * sont ensuite rattrapés en arrière-plan contre le runtime.
  */
 import { describeError, log } from "@/observability/log";
 
 export async function register() {
+  const { reconcilePendingStorageMigrations } = await import(
+    "@/modules/runtime/ssh/storage-migration"
+  );
+  const storage = await reconcilePendingStorageMigrations();
+  if (storage.examined > 0) {
+    log.info("[hermes-console] storage migration reconcile", { ...storage });
+  }
+
   const { reconcileOrphanRuns } = await import("@/modules/runs/reconciler");
   void reconcileOrphanRuns()
     .then((result) => {

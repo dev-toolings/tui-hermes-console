@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Hermes release catalogue sync
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=15m
+Unit=hermes-console-release-sync.service
+
+[Install]
+WantedBy=timers.target

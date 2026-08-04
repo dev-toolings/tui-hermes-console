@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { authStatusPayload } from "./route";
+import { POST, authStatusPayload } from "./route";
 import { CURRENT_AI_DISCLOSURE } from "@/modules/setup/ai-disclosure";
 import type { AuthSession } from "@/modules/auth/service";
 
@@ -33,6 +33,7 @@ describe("GET /api/auth status", () => {
   test("exposes installation setup and current individual consent separately", () => {
     expect(authStatusPayload(session(), false)).toMatchObject({
       authenticated: true,
+      developmentLoginAvailable: false,
       setupRequired: false,
       consentRequired: false,
       user: {
@@ -101,5 +102,24 @@ describe("GET /api/auth status", () => {
         }],
       },
     });
+  });
+});
+
+describe("POST /api/auth?action=dev-login", () => {
+  test("rejects a cross-site login before creating a development session", async () => {
+    const response = await POST(
+      new Request("http://127.0.0.1:3170/api/auth?action=dev-login", {
+        method: "POST",
+        headers: {
+          origin: "https://attacker.example",
+          "sec-fetch-site": "cross-site",
+        },
+      }),
+    );
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "CROSS_SITE_MUTATION_REJECTED" },
+    });
+    expect(response.headers.has("set-cookie")).toBe(false);
   });
 });

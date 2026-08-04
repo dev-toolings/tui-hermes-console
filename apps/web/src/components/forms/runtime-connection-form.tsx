@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@boardui/ui";
 import {
   CableIcon,
   CheckCircle2Icon,
@@ -13,8 +14,11 @@ import {
 import type { RuntimePublicDto } from "@console/core/types/api";
 import { SshRuntimeSetup } from "@/components/forms/ssh-runtime-setup";
 import { HermesTokenGuide } from "@/components/settings/hermes-token-guide";
+import { RuntimeSecretReveal } from "@/components/settings/runtime-secret-reveal";
+import { useRuntimeMutation } from "@/components/settings/runtime-mutation-provider";
 import { Button } from "@/components/ui/boardui";
-import { cn } from "@/lib/cn";
+import { useRouter } from "@/lib/router";
+import { canReuseDirectRuntimeToken } from "@/lib/runtime-secret-reuse";
 import {
   getRuntimePublicClient,
   notifyRuntimePublicChanged,
@@ -28,14 +32,23 @@ type FormStatus =
   | { kind: "error"; message: string };
 
 export function RuntimeConnectionForm({
+  mode,
   onRuntimeChange,
 }: {
+  mode?: Transport;
   onRuntimeChange?: (runtime: RuntimePublicDto) => void;
 } = {}) {
+  const router = useRouter();
   const [runtime, setRuntime] = useState<RuntimePublicDto | null>(null);
-  const [transport, setTransport] = useState<Transport>("direct");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // `mode` (l'URL) prime sur la donnée chargée : sans lui, l'onglet suit le
+  // transport déjà configuré. Dérivé au rendu, pas via un effet — l'URL et le
+  // runtime chargé restent les deux seules sources de vérité.
+  const transport: Transport = mode ?? (runtime?.transport === "ssh" ? "ssh" : "direct");
+  const showingUnsavedTransport = Boolean(
+    mode && runtime?.configured && runtime.transport !== mode,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -45,7 +58,6 @@ export function RuntimeConnectionForm({
       .then((next) => {
         if (cancelled) return;
         setRuntime(next);
-        setTransport(next.transport === "ssh" ? "ssh" : "direct");
         onRuntimeChange?.(next);
       })
       .catch((reason: unknown) => {
@@ -65,6 +77,10 @@ export function RuntimeConnectionForm({
     };
   }, [onRuntimeChange]);
 
+  function changeTransport(next: Transport) {
+    router.replace(`/settings/runtime?mode=${next}`);
+  }
+
   function publish(next: RuntimePublicDto) {
     setRuntime(next);
     onRuntimeChange?.(next);
@@ -83,37 +99,60 @@ export function RuntimeConnectionForm({
 
   return (
     <div className="space-y-6">
-      <fieldset>
-        <legend className="text-[0.8125rem] font-medium">Mode de connexion</legend>
-        <p className="mt-1 max-w-[70ch] text-[0.6875rem] leading-5 text-muted-foreground">
-          Le serveur de la Console appelle Hermes. Le navigateur ne reçoit jamais les secrets du
-          runtime.
+      <p className="max-w-[70ch] text-[0.6875rem] leading-5 text-muted-foreground">
+        Le serveur de la Console appelle Hermes. Les secrets restent masqués par défaut ; une
+        révélation ponctuelle exige un code envoyé à l’adresse de votre session.
+      </p>
+      {showingUnsavedTransport ? (
+        <p
+          role="status"
+          className="rounded-xl border border-info-100 bg-info-soft px-3 py-2 text-[0.6875rem] leading-5 text-info-700"
+        >
+          Le statut ci-dessus concerne le runtime enregistré en {runtime?.transport === "ssh" ? "tunnel SSH" : "accès direct"}. La cible {transport === "ssh" ? "SSH" : "directe"} affichée ici n’est pas encore testée.
         </p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <TransportChoice
-            active={transport === "direct"}
-            onClick={() => setTransport("direct")}
-            icon={CableIcon}
-            title="Accès direct"
-            description="Hermes local, sur VPN ou déjà joignable en HTTP."
-          />
-          <TransportChoice
-            active={transport === "ssh"}
-            onClick={() => setTransport("ssh")}
-            icon={TerminalIcon}
-            title="Tunnel SSH"
-            description="Hermes sur un VPS sans exposer son API sur Internet."
-          />
-        </div>
-      </fieldset>
+      ) : null}
 
-      <div className="border-t border-seam pt-5">
-        {transport === "ssh" ? (
-          <SshRuntimeSetup runtime={runtime} onRuntimeChange={publish} />
-        ) : (
+      <Tabs
+        value={transport}
+        onValueChange={(next) => {
+          if (next === "direct" || next === "ssh") changeTransport(next);
+        }}
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          {/* L'onglet actif du Tabs shadcn ne remplit qu'en `bg-card`, un gris qui se
+              confond avec le fond de la liste en dark. On reprend ici le même
+              remplissage plein `bg-primary` que le toggle d'authentification SSH
+              plus bas, pour un contraste net et cohérent entre les deux contrôles. */}
+          <TabsList className="h-auto w-fit gap-0.5 rounded-full border border-seam bg-inset p-1">
+            <TabsTrigger
+              value="direct"
+              className="rounded-full border-transparent px-3 py-1.5 data-[state=active]:border-transparent data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-board-xs data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground"
+            >
+              <CableIcon aria-hidden />
+              Accès direct
+            </TabsTrigger>
+            <TabsTrigger
+              value="ssh"
+              className="rounded-full border-transparent px-3 py-1.5 data-[state=active]:border-transparent data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-board-xs data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground"
+            >
+              <TerminalIcon aria-hidden />
+              Tunnel SSH
+            </TabsTrigger>
+          </TabsList>
+          <p className="text-[0.6875rem] text-muted-foreground">
+            {transport === "direct"
+              ? "Hermes local, sur VPN ou déjà joignable en HTTP."
+              : "Hermes sur un VPS sans exposer son API sur Internet."}
+          </p>
+        </div>
+
+        <TabsContent value="direct" className="border-t border-seam pt-5">
           <DirectRuntimeForm runtime={runtime} onRuntimeChange={publish} />
-        )}
-      </div>
+        </TabsContent>
+        <TabsContent value="ssh" className="border-t border-seam pt-5">
+          <SshRuntimeSetup runtime={runtime} onRuntimeChange={publish} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -132,12 +171,20 @@ function DirectRuntimeForm({
   );
   const [token, setToken] = useState("");
   const [status, setStatus] = useState<FormStatus>({ kind: "idle" });
-  const tokenConfigured = runtime?.transport === "direct" && runtime.tokenConfigured;
+  const { runMutation } = useRuntimeMutation();
+  const tokenReusable = canReuseDirectRuntimeToken(runtime, baseUrl);
+  const canReveal = Boolean(
+    tokenReusable ||
+      (runtime?.configured &&
+        runtime.source === "env" &&
+        runtime.transport === "direct" &&
+        runtime.baseUrl?.replace(/\/+$/, "") === baseUrl.trim().replace(/\/+$/, "")),
+  );
   const busy = status.kind === "loading";
 
   function payload() {
     if (!baseUrl.trim()) throw new Error("Indiquez l’URL Hermes.");
-    if (!token.trim() && !tokenConfigured) {
+    if (!token.trim() && !tokenReusable) {
       throw new Error("Saisissez le token Hermes (API_SERVER_KEY).");
     }
     return {
@@ -150,16 +197,23 @@ function DirectRuntimeForm({
   async function test() {
     setStatus({ kind: "loading", label: "Test réseau en cours…" });
     try {
-      const response = await fetch("/api/runtime/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload()),
+      const body = await runMutation("Test de connexion Hermes", async (signal) => {
+        const response = await fetch("/api/runtime/test", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Hermes-Toast": "0",
+          },
+          signal,
+          body: JSON.stringify(payload()),
+        });
+        const nextBody = (await response.json()) as {
+          health?: { version?: string };
+          error?: { message?: string };
+        };
+        if (!response.ok) throw new Error(nextBody.error?.message ?? "Le test a échoué.");
+        return nextBody;
       });
-      const body = (await response.json()) as {
-        health?: { version?: string };
-        error?: { message?: string };
-      };
-      if (!response.ok) throw new Error(body.error?.message ?? "Le test a échoué.");
       setStatus({
         kind: "ok",
         message: `Hermes répond${body.health?.version ? ` · ${body.health.version}` : ""}.`,
@@ -173,20 +227,27 @@ function DirectRuntimeForm({
     event.preventDefault();
     setStatus({ kind: "loading", label: "Enregistrement…" });
     try {
-      const response = await fetch("/api/runtime", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload()),
+      const body = await runMutation("Enregistrement de la connexion runtime", async (signal) => {
+        const response = await fetch("/api/runtime", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Hermes-Toast": "updated",
+          },
+          signal,
+          body: JSON.stringify(payload()),
+        });
+        const nextBody = (await response.json()) as {
+          runtime?: RuntimePublicDto;
+          error?: { message?: string };
+        };
+        if (!response.ok || !nextBody.runtime) {
+          throw new Error(nextBody.error?.message ?? "Enregistrement impossible.");
+        }
+        return nextBody;
       });
-      const body = (await response.json()) as {
-        runtime?: RuntimePublicDto;
-        error?: { message?: string };
-      };
-      if (!response.ok || !body.runtime) {
-        throw new Error(body.error?.message ?? "Enregistrement impossible.");
-      }
       setToken("");
-      onRuntimeChange(body.runtime);
+      onRuntimeChange(body.runtime!);
       setStatus({ kind: "ok", message: "Connexion directe enregistrée." });
     } catch (reason) {
       setStatus({ kind: "error", message: errorMessage(reason) });
@@ -215,17 +276,19 @@ function DirectRuntimeForm({
         label="Token d’accès Hermes"
         htmlFor="direct-runtime-token"
         action={<HermesTokenGuide />}
-        hint={tokenConfigured ? "Déjà enregistré. Laissez vide pour le conserver." : "API_SERVER_KEY d’Hermes."}
+        hint={
+          tokenReusable
+            ? "Déjà enregistré pour cette adresse. Laissez vide pour le conserver."
+            : "API_SERVER_KEY requise pour cette nouvelle adresse Hermes."
+        }
       >
-        <input
+        <RuntimeSecretReveal
           id="direct-runtime-token"
-          type="password"
-          autoComplete="new-password"
           value={token}
-          onChange={(event) => setToken(event.target.value)}
-          placeholder={tokenConfigured ? "Inchangé si vide" : "Requis"}
+          onChange={setToken}
+          canReveal={canReveal}
           disabled={busy}
-          className={inputClass}
+          placeholder={canReveal ? "••••••••••••••••" : tokenReusable ? "Inchangé si vide" : "Requis pour cette adresse"}
         />
       </Field>
       <div className="flex flex-col gap-3 border-t border-seam pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -284,47 +347,6 @@ function RuntimeFormSkeleton() {
   );
 }
 
-function TransportChoice({
-  active,
-  onClick,
-  icon: Icon,
-  title,
-  description,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: typeof CableIcon;
-  title: string;
-  description: string;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "flex min-h-24 items-start gap-3 rounded-2xl border p-3 text-start transition-colors",
-        active ? "border-ring bg-info-soft" : "border-input bg-card hover:bg-muted",
-      )}
-    >
-      <span
-        className={cn(
-          "flex size-8 shrink-0 items-center justify-center rounded-[10px]",
-          active ? "bg-primary text-primary-foreground" : "bg-ai-tertiary text-muted-foreground",
-        )}
-      >
-        <Icon className="size-4" aria-hidden />
-      </span>
-      <span>
-        <span className="block text-[0.8125rem] font-medium">{title}</span>
-        <span className="mt-1 block text-[0.6875rem] leading-5 text-muted-foreground">
-          {description}
-        </span>
-      </span>
-    </button>
-  );
-}
-
 export function Field({
   icon: Icon,
   label,
@@ -377,5 +399,7 @@ export const inputClass =
   "min-h-10 w-full rounded-[10px] border border-input bg-card px-3 text-[0.8125rem] text-foreground shadow-board-xs outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60";
 
 export function errorMessage(reason: unknown) {
-  return reason instanceof Error ? reason.message : "Opération impossible.";
+  if (!(reason instanceof Error)) return "Opération impossible.";
+  const code = "code" in reason && typeof reason.code === "string" ? reason.code : null;
+  return code ? `${reason.message} (${code})` : reason.message;
 }

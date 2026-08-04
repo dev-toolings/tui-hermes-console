@@ -88,7 +88,7 @@ export async function executeSessionCommand(input: {
     return {
       handled: true,
       systemMessage:
-        "Les agents s’attachent uniquement aux missions `/runs`. Démarrez une mission depuis **Missions → Nouvelle mission**.",
+        "Les agents s’attachent uniquement aux sessions de mission. Démarrez-en une depuis **Sessions → Nouvelle mission**.",
     };
   }
 

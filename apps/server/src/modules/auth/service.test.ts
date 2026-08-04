@@ -1,5 +1,7 @@
 import { afterEach, expect, mock, test } from "bun:test";
 import {
+  canCreateDevelopmentSession,
+  developmentAuthBypassConfig,
   isGoogleEmailAllowed,
   hasConnectableSiteMembership,
   keepSessionIfEmailAllowed,
@@ -68,6 +70,57 @@ test("normalizes the current Google email allowlist", () => {
     false,
   );
   expect(isGoogleEmailAllowed(null, "operator@example.com")).toBe(false);
+});
+
+test("enables the explicit auth bypass only on local development origins", () => {
+  const local = {
+    NODE_ENV: "development",
+    CONSOLE_DEV_AUTH_BYPASS: "1",
+    CONSOLE_DEV_AUTH_EMAIL: " Operator@Example.COM ",
+    GOOGLE_ALLOWED_EMAILS: "operator@example.com",
+    CONSOLE_SERVER_HOST: "127.0.0.1",
+    CONSOLE_APP_ORIGIN: "http://localhost:1420/setup",
+  };
+  expect(developmentAuthBypassConfig(local)).toEqual({
+    email: "operator@example.com",
+    appOrigin: "http://localhost:1420",
+  });
+  expect(
+    developmentAuthBypassConfig({ ...local, CONSOLE_DEV_AUTH_BYPASS: "0" }),
+  ).toBeNull();
+});
+
+test("rejects the auth bypass in production or on a non-loopback boundary", () => {
+  const local = {
+    NODE_ENV: "development",
+    CONSOLE_DEV_AUTH_BYPASS: "1",
+    CONSOLE_DEV_AUTH_EMAIL: "operator@example.com",
+    GOOGLE_ALLOWED_EMAILS: "operator@example.com",
+    CONSOLE_SERVER_HOST: "127.0.0.1",
+    CONSOLE_APP_ORIGIN: "http://localhost:1420",
+  };
+  expect(() =>
+    developmentAuthBypassConfig({ ...local, NODE_ENV: "production" }),
+  ).toThrow("NODE_ENV=development");
+  expect(() =>
+    developmentAuthBypassConfig({ ...local, NODE_ENV: undefined }),
+  ).toThrow("NODE_ENV=development");
+  expect(() =>
+    developmentAuthBypassConfig({ ...local, CONSOLE_SERVER_HOST: "0.0.0.0" }),
+  ).toThrow("strictement locaux");
+  expect(() =>
+    developmentAuthBypassConfig({ ...local, CONSOLE_APP_ORIGIN: "https://console.example.com" }),
+  ).toThrow("strictement locaux");
+  expect(() =>
+    developmentAuthBypassConfig({ ...local, CONSOLE_DEV_AUTH_EMAIL: "other@example.com" }),
+  ).toThrow("explicitement autorisé");
+});
+
+test("bounds development sessions without deleting existing OAuth sessions", () => {
+  expect(canCreateDevelopmentSession(0)).toBe(true);
+  expect(canCreateDevelopmentSession(7)).toBe(true);
+  expect(canCreateDevelopmentSession(8)).toBe(false);
+  expect(canCreateDevelopmentSession(-1)).toBe(false);
 });
 
 test("legacy memberships do not block the first connectable Google operator", () => {

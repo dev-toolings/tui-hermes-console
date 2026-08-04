@@ -3,10 +3,17 @@
 import { useEffect, type ReactNode } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { TooltipProvider } from "@boardui/ui";
+import {
+  HERMES_TOAST_HEADER,
+  mutationToastTitle,
+  parseMutationToastIntent,
+  type MutationToastIntent,
+} from "@/lib/mutation-toast";
+import { HermesUpdateWatcher } from "@/components/updates/hermes-update-watcher";
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-/** Skip high-frequency chat traffic — everything else /api mutates → toast. */
+/** Skip high-frequency chat traffic even if a caller accidentally annotates it. */
 const SILENT_PATH = /^\/api\/threads\/[^/]+\/messages(?:\/|$)/;
 
 /** Default ToastBar look from https://react-hot-toast.com */
@@ -54,6 +61,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
         toastOptions={HOT_TOAST_OPTIONS}
       />
       <MutationToastBridge />
+      <HermesUpdateWatcher />
       {children}
     </TooltipProvider>
   );
@@ -79,7 +87,7 @@ function MutationToastBridge() {
         if (toastable) {
           toast.error(
             [
-              titleFor(method, false),
+              mutationToastTitle(toastable, false),
               error instanceof Error ? error.message : "Réseau indisponible.",
             ]
               .filter(Boolean)
@@ -91,11 +99,11 @@ function MutationToastBridge() {
 
       if (toastable) {
         if (response.ok) {
-          toast.success(titleFor(method, true));
+          toast.success(mutationToastTitle(toastable, true));
         } else {
           toast.error(
             [
-              titleFor(method, false),
+              mutationToastTitle(toastable, false),
               `${response.status} ${response.statusText || ""}`.trim(),
             ]
               .filter(Boolean)
@@ -117,29 +125,38 @@ function MutationToastBridge() {
   return null;
 }
 
-function shouldToast(url: string, method: string, init?: RequestInit): boolean {
-  if (!MUTATING.has(method)) return false;
-  if (init?.headers && silentHeader(init.headers)) return false;
+function shouldToast(
+  url: string,
+  method: string,
+  init?: RequestInit,
+): Exclude<MutationToastIntent, "silent"> | null {
+  if (!MUTATING.has(method)) return null;
+  const intent = parseMutationToastIntent(readToastHeader(init?.headers));
+  if (!intent || intent === "silent") return null;
   try {
     const parsed = new URL(url, window.location.origin);
-    if (parsed.origin !== window.location.origin) return false;
-    if (!parsed.pathname.startsWith("/api/")) return false;
-    if (SILENT_PATH.test(parsed.pathname)) return false;
-    return true;
+    if (parsed.origin !== window.location.origin) return null;
+    if (!parsed.pathname.startsWith("/api/")) return null;
+    if (SILENT_PATH.test(parsed.pathname)) return null;
+    return intent;
   } catch {
-    return false;
+    return null;
   }
 }
 
-function silentHeader(headers: HeadersInit): boolean {
-  const value =
-    headers instanceof Headers
-      ? headers.get("X-Hermes-Toast")
-      : Array.isArray(headers)
-        ? headers.find(([k]) => k.toLowerCase() === "x-hermes-toast")?.[1]
-        : (headers as Record<string, string>)["X-Hermes-Toast"] ??
-          (headers as Record<string, string>)["x-hermes-toast"];
-  return value === "0" || value === "false";
+function readToastHeader(headers: HeadersInit | undefined): string | null {
+  if (!headers) return null;
+  if (headers instanceof Headers) return headers.get(HERMES_TOAST_HEADER);
+  if (Array.isArray(headers)) {
+    return (
+      headers.find(([name]) => name.toLowerCase() === HERMES_TOAST_HEADER.toLowerCase())?.[1] ??
+      null
+    );
+  }
+  const entry = Object.entries(headers).find(
+    ([name]) => name.toLowerCase() === HERMES_TOAST_HEADER.toLowerCase(),
+  );
+  return entry?.[1] ?? null;
 }
 
 function resolveMethod(input: RequestInfo | URL, init?: RequestInit): string {
@@ -155,15 +172,4 @@ function resolveUrl(input: RequestInfo | URL): string {
   if (input instanceof URL) return input.href;
   if (typeof Request !== "undefined" && input instanceof Request) return input.url;
   return String(input);
-}
-
-function titleFor(method: string, ok: boolean): string {
-  if (!ok) {
-    if (method === "DELETE") return "Suppression échouée";
-    if (method === "POST") return "Création échouée";
-    return "Enregistrement échoué";
-  }
-  if (method === "DELETE") return "Supprimé";
-  if (method === "POST") return "Créé";
-  return "Enregistré";
 }

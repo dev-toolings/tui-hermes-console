@@ -35,7 +35,10 @@ export function AgentForm({
         try {
           const response = await fetch(agentId ? `/api/agents/${agentId}` : "/api/agents", {
             method: agentId ? "PATCH" : "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "X-Hermes-Toast": agentId ? "updated" : "created",
+            },
             body: JSON.stringify(payload),
           });
           const body = (await response.json()) as {

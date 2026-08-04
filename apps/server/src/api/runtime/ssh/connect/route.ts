@@ -6,6 +6,7 @@ import { connectAndSaveSshRuntime } from "@/modules/runtime/config";
 const schema = z.object({
   baseUrl: z.string().trim().url().max(500),
   token: z.string().trim().min(1).max(2_000).optional(),
+  credentialMode: z.enum(["manual", "import"]).optional(),
   name: z.string().trim().min(1).max(120).optional(),
   expectedRevision: z.number().int().positive().nullable().optional(),
   ssh: z.object({

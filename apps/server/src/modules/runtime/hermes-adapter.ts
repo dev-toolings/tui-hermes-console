@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { hermesModelOptionsForEffort } from "@console/core/lib/runtime/reasoning-effort";
+import type { HermesSkillDto } from "@console/core/types/api";
 import type { ApprovalChoice } from "@console/core/lib/thread-snapshot-mutations";
 import { parseHermesAgentEvents } from "./sse";
 
@@ -54,6 +55,20 @@ const modelOptionsSchema = z
   })
   .passthrough();
 
+const hermesSkillSchema = z
+  .object({
+    name: z.string().min(1),
+    description: z.string().default(""),
+    category: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+const hermesSkillsResponseSchema = z
+  .object({
+    data: z.array(hermesSkillSchema),
+  })
+  .passthrough();
+
 export type HermesCapabilities = z.infer<typeof capabilitiesSchema>;
 export type HermesSessionDetails = {
   id: string;
@@ -81,6 +96,8 @@ export type HermesModelCatalog = {
   currentProvider: string;
   runtimeDefaultModel: string;
 };
+
+export type HermesSkill = HermesSkillDto;
 
 const NON_API_KEY_PROVIDER_SLUGS = new Set([
   "bedrock",
@@ -249,6 +266,54 @@ export async function listHermesModels(config: {
   }
 }
 
+export async function listHermesSkills(config: {
+  baseUrl: string;
+  token: string;
+}): Promise<HermesSkill[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
+
+  try {
+    const response = await fetch(`${config.baseUrl}/v1/skills`, {
+      headers: authHeaders(config.token),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!response.ok) await throwResponseError(response);
+
+    const body = hermesSkillsResponseSchema.parse(await response.json());
+    return body.data.map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      category: skill.category ?? null,
+      enabled: true,
+    }));
+  } catch (error) {
+    if (error instanceof HermesRuntimeError) throw error;
+    if (error instanceof z.ZodError) {
+      throw new HermesRuntimeError(
+        "Réponse /v1/skills inattendue.",
+        502,
+        "HERMES_SKILLS_INVALID",
+      );
+    }
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new HermesRuntimeError(
+        "Hermes n’a pas répondu pendant le chargement des skills.",
+        504,
+        "HERMES_TIMEOUT",
+      );
+    }
+    throw new HermesRuntimeError(
+      "Impossible de charger les skills Hermes.",
+      502,
+      "HERMES_UNREACHABLE",
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function listHermesModelOptions(config: {
   baseUrl: string;
   token: string;
@@ -291,9 +356,12 @@ export async function listHermesModelOptions(config: {
 
 export function normalizeHermesModelOptions(input: unknown): HermesModelCatalog {
   const body = modelOptionsSchema.parse(input);
+  const runtimeDefaultModel = body.model.trim();
+  const declaredProvider = body.provider.trim();
   const currentProvider =
-    body.providers.find((item) => item.slug === body.provider)?.slug ??
-    body.providers.find((item) => item.is_current)?.slug;
+    body.providers.find((item) => item.slug === declaredProvider)?.slug ??
+    body.providers.find((item) => item.is_current)?.slug ??
+    (declaredProvider && runtimeDefaultModel ? declaredProvider : "");
 
   if (!currentProvider) {
     throw new HermesRuntimeError(
@@ -330,6 +398,52 @@ export function normalizeHermesModelOptions(input: unknown): HermesModelCatalog 
     };
   });
 
+  // Hermes peut exposer une route active comme `provider: "auto"` sans
+  // ajouter cette route virtuelle à `providers`. Le modèle effectif reste
+  // néanmoins la seule valeur fiable à afficher et à transmettre aux runs.
+  // Conserver ce couple évite de transformer un runtime distant valide en
+  // erreur « provider manquant » dans Settings > Modèles.
+  if (runtimeDefaultModel) {
+    const activeProvider = providers.find((provider) => provider.slug === currentProvider);
+    if (!activeProvider) {
+      const backingProvider =
+        currentProvider === "auto"
+          ? providers.find((provider) => {
+              const prefix = runtimeDefaultModel.split("/", 1)[0]?.toLowerCase();
+              return (
+                provider.slug.toLowerCase() === prefix ||
+                provider.models.some((model) => model.id === runtimeDefaultModel)
+              );
+            })
+          : providers.find((provider) => provider.slug === currentProvider);
+      const authenticated = backingProvider?.authenticated === true;
+      providers.unshift({
+        slug: currentProvider,
+        name:
+          currentProvider === "auto"
+            ? "Routage automatique Hermes"
+            : currentProvider,
+        isCurrent: true,
+        authenticated,
+        acceptsApiKey: false,
+        authType: "runtime",
+        warning:
+          backingProvider?.warning ??
+          (authenticated
+            ? null
+            : "Hermes n’a pas confirmé l’authentification du provider de la route active."),
+        source: "hermes_runtime",
+        models: [{ id: runtimeDefaultModel, fast: false, reasoning: false }],
+      });
+    } else if (!activeProvider.models.some((model) => model.id === runtimeDefaultModel)) {
+      activeProvider.models.unshift({
+        id: runtimeDefaultModel,
+        fast: false,
+        reasoning: false,
+      });
+    }
+  }
+
   if (!providers.some((provider) => provider.models.length > 0)) {
     throw new HermesRuntimeError(
       "Hermes n’a retourné aucun modèle disponible.",
@@ -341,7 +455,7 @@ export function normalizeHermesModelOptions(input: unknown): HermesModelCatalog 
   return {
     providers,
     currentProvider,
-    runtimeDefaultModel: body.model,
+    runtimeDefaultModel,
   };
 }
 

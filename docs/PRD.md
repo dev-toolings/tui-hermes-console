@@ -475,6 +475,15 @@ La synchronisation SFTP applique aussi une garde lexicale au workdir configuré 
 `mkdirp`, listing, stat, upload ou download ; cette garde réduit les traversées côté Console mais
 ne constitue pas une frontière OS distante.
 
+Pour un Hermes Docker existant, la Console distingue les bind mounts des volumes nommés. Elle ne
+réutilise jamais `/var/lib/docker/volumes/.../_data` comme chemin produit. Une migration guidée et
+journalisée est disponible uniquement pour le conteneur reconnu `hermes-console-runtime` dans une
+topologie bornée : copie intégrale de `/opt/data` vers `/srv/hermes-console/data`, manifestes,
+Compose épinglé par digest, preuves runtime/SFTP/Hermes, persistance finale par CAS et rollback
+automatique. Les installations personnalisées restent connectables mais suivent le guide manuel.
+Une migration active ou ambiguë bloque le démarrage de nouvelles missions et est réconciliée au
+redémarrage de la Console.
+
 Restent non prouvés :
 
 - cycle de vie complet forward/close/reconnect ;
@@ -483,6 +492,8 @@ Restent non prouvés :
 - SFTP et remote-sync contre une machine réelle ;
 - restauration après coupure réseau ;
 - quotas et capacité disque distants.
+- mission réelle et artefact relu après la migration de stockage, sauvegarde externe et revue
+  indépendante du rapport P-OPS.
 
 Le mot de passe SSH reste un chemin de compatibilité, pas le chemin recommandé B2B. La cible est une
 identité enrôlée, rotative et révocable, sans secret utilisateur longue durée.

@@ -13,6 +13,11 @@ import type {
   AgentDto,
   ArtifactDto,
   FileLimits,
+  HermesSkillDto,
+  HermesDashboardDto,
+  HermesDashboardLifecycleAction,
+  HermesRuntimeUpdatePlanDto,
+  HermesRuntimeUpdateOperationDto,
   RuntimePublicDto,
   StorageStats,
 } from "@console/core/types/api";
@@ -100,6 +105,25 @@ async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
 export const fetchRuntime = () =>
   getJson<{ runtime: RuntimePublicDto }>("/api/runtime").then((r) => r.runtime);
 
+export const fetchHermesDashboard = () =>
+  getJson<{ dashboard: HermesDashboardDto }>("/api/runtime/dashboard").then(
+    (r) => r.dashboard,
+  );
+
+export const manageHermesDashboard = (
+  action: HermesDashboardLifecycleAction,
+  signal?: AbortSignal,
+) =>
+  getJson<{ dashboard: HermesDashboardDto }>("/api/runtime/dashboard", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Hermes-Toast": "0",
+    },
+    body: JSON.stringify({ action, confirm: true }),
+    signal,
+  }).then((r) => r.dashboard);
+
 export const fetchAgents = (includeArchived = false) =>
   getJson<{ agents: AgentDto[] }>(
     includeArchived ? "/api/agents?includeArchived=true" : "/api/agents",
@@ -109,6 +133,25 @@ export const fetchAgent = (agentId: string) =>
   getJson<{ agent: AgentDto }>(`/api/agents/${encodeURIComponent(agentId)}`).then(
     (r) => r.agent,
   );
+
+export type SkillsResponse = {
+  skills: HermesSkillDto[];
+  projectId: string | null;
+  scope: "project" | "site";
+  skillsMutable: boolean;
+};
+
+export const fetchSkills = () => getJson<SkillsResponse>("/api/skills");
+
+export const toggleSkill = (name: string, enabled: boolean) =>
+  getJson<{ name: string; enabled: boolean }>("/api/skills/toggle", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Hermes-Toast": "0",
+    },
+    body: JSON.stringify({ name, enabled }),
+  });
 
 /**
  * `source` n'est pas optionnel par confort : l'Aperçu et l'écran Missions ne
@@ -136,6 +179,44 @@ export const fetchArtifacts = (limit = 50) =>
     (r) => r.artifacts,
   );
 
+export const fetchHermesUpdates = (limit = 20) =>
+  getJson<{
+    releases: Array<{
+      id: number;
+      tagName: string;
+      name: string | null;
+      body: string | null;
+      htmlUrl: string;
+      publishedAt: string;
+      createdAt: string;
+      prerelease: boolean;
+      draft: boolean;
+    }>;
+  }>(`/api/updates/hermes?limit=${limit}`).then((response) => response.releases);
+
+export const fetchHermesRuntimeUpdatePlan = () =>
+  getJson<{ plan: HermesRuntimeUpdatePlanDto; activeOperation: HermesRuntimeUpdateOperationDto | null }>("/api/runtime/update").then(
+    (response) => response.plan,
+  );
+
+export const fetchHermesRuntimeUpdateState = () =>
+  getJson<{ plan: HermesRuntimeUpdatePlanDto; activeOperation: HermesRuntimeUpdateOperationDto | null }>("/api/runtime/update");
+
+export const startHermesRuntimeUpdate = (input: {
+  expectedConfigRevision: number | null;
+  targetTag: string;
+  trigger: "manual" | "automatic";
+}) =>
+  getJson<{ operation: HermesRuntimeUpdateOperationDto }>("/api/runtime/update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Hermes-Toast": "0" },
+    body: JSON.stringify({ confirm: true, ...input }),
+  }).then((response) => response.operation);
+
+export const fetchHermesRuntimeUpdateOperation = (operationId: string) =>
+  getJson<{ operation: HermesRuntimeUpdateOperationDto }>(`/api/runtime/update/${encodeURIComponent(operationId)}`)
+    .then((response) => response.operation);
+
 export const fetchStorage = () =>
   getJson<{ stats: StorageStats; limits: FileLimits }>("/api/settings/storage");
 
@@ -153,11 +234,11 @@ export const fetchRuntimeProbe = () =>
 export const cancelRun = (runId: string) =>
   getJson<{ runId: string; status: "stopping" | "cancelled" }>(
     `/api/runs/${encodeURIComponent(runId)}/cancel`,
-    { method: "POST" },
+    { method: "POST", headers: { "X-Hermes-Toast": "0" } },
   );
 
 export const retryRun = (runId: string) =>
   getJson<{ threadId: string; runId: string; sourceRunId: string }>(
     `/api/runs/${encodeURIComponent(runId)}/retry`,
-    { method: "POST" },
+    { method: "POST", headers: { "X-Hermes-Toast": "0" } },
   );

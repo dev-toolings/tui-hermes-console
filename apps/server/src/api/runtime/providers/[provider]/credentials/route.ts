@@ -8,7 +8,6 @@ import {
   listHermesModelOptions,
 } from "@/modules/runtime/hermes-adapter";
 import {
-  assertLocalHermesRuntime,
   replaceConsoleManagedApiKey,
 } from "@/modules/runtime/local-management";
 
@@ -34,9 +33,7 @@ export async function POST(
     const { provider: rawProvider } = await params;
     const provider = rawProvider.trim().toLowerCase();
     const input = apiKeySchema.parse(await request.json());
-    const config = await assertLocalHermesRuntime(
-      "La gestion des clés API depuis la Console",
-    );
+    const config = await resolveHermesRuntimeConfig();
     const catalog = await listHermesModelOptions(config);
     const catalogProvider = catalog.providers.find((item) => item.slug === provider);
     if (!catalogProvider) {

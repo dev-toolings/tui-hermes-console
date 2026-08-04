@@ -7,7 +7,13 @@ import { pipeline } from "node:stream/promises";
 import { createByteLimit } from "./byte-limit";
 import { mapSystemSshStderr, sshBinaryMissing } from "./errors";
 import { configuredKnownHostsPath } from "./known-hosts";
-import type { SftpOps, SshChannel, SshExecResult, SshTarget } from "./types";
+import type {
+  SftpOps,
+  SshChannel,
+  SshCommandSession,
+  SshExecResult,
+  SshTarget,
+} from "./types";
 
 /** Socket ControlMaster. `/tmp` plutôt que os.tmpdir() : sur macOS ce dernier est un chemin
  *  très long et un socket Unix est limité à ~104 caractères. */
@@ -276,31 +282,72 @@ export function createSystemSshChannel(target: SshTarget): SshChannel {
     }
   }
 
-  async function execRemote(command: string): Promise<SshExecResult> {
-    return new Promise((resolve, reject) => {
-      const child = spawn(
-        "ssh",
-        [...baseSshArgs(target, controlId), `${target.user}@${target.host}`, command],
-        { stdio: ["ignore", "pipe", "pipe"] },
-      );
-      let stdout = "";
-      let stderr = "";
-      child.stdout?.on("data", (chunk: Buffer) => {
-        stdout = (stdout + chunk.toString()).slice(-64_000);
-      });
-      child.stderr?.on("data", (chunk: Buffer) => {
-        stderr = (stderr + chunk.toString()).slice(-16_000);
-      });
-      child.on("error", (error: NodeJS.ErrnoException) => {
-        reject(error.code === "ENOENT" ? sshBinaryMissing() : mapSystemSshStderr(error.message, ""));
-      });
-      child.on("close", (code) => {
-        resolve({ stdout, stderr, code: typeof code === "number" ? code : 1 });
-      });
+  async function startRemote(
+    command: string,
+    options: { pseudoTerminal?: boolean } = {},
+  ): Promise<SshCommandSession> {
+    const child = spawn(
+      "ssh",
+      [
+        ...baseSshArgs(target, controlId),
+        ...(options.pseudoTerminal ? ["-tt"] : []),
+        `${target.user}@${target.host}`,
+        command,
+      ],
+      { stdio: ["pipe", "pipe", "pipe"] },
+    );
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const listeners = new Set<(output: { stream: "stdout" | "stderr"; chunk: string }) => void>();
+    let resolveResult!: (result: SshExecResult) => void;
+    let rejectResult!: (error: unknown) => void;
+    const result = new Promise<SshExecResult>((resolve, reject) => {
+      resolveResult = resolve;
+      rejectResult = reject;
     });
+    const emit = (stream: "stdout" | "stderr", chunk: Buffer) => {
+      const text = chunk.toString();
+      for (const listener of listeners) listener({ stream, chunk: text });
+      if (stream === "stdout") stdout = (stdout + text).slice(-64_000);
+      else stderr = (stderr + text).slice(-16_000);
+    };
+    child.stdout?.on("data", (chunk: Buffer) => emit("stdout", chunk));
+    child.stderr?.on("data", (chunk: Buffer) => emit("stderr", chunk));
+    child.on("error", (error: NodeJS.ErrnoException) => {
+      if (settled) return;
+      settled = true;
+      rejectResult(error.code === "ENOENT" ? sshBinaryMissing() : mapSystemSshStderr(error.message, ""));
+    });
+    child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      resolveResult({ stdout, stderr, code: typeof code === "number" ? code : 1 });
+    });
+
+    return {
+      onOutput(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      write(input) {
+        child.stdin?.write(input);
+      },
+      endInput() {
+        child.stdin?.end();
+      },
+      kill() {
+        child.kill("SIGTERM");
+      },
+      result,
+    };
   }
 
-  return { forward, sftp, exec: execRemote, close };
+  async function execRemote(command: string): Promise<SshExecResult> {
+    return (await startRemote(command)).result;
+  }
+
+  return { forward, sftp, exec: execRemote, start: startRemote, close };
 }
 
 export function systemSftpListCommand(remotePath: string, maxEntries: number) {

@@ -18,12 +18,15 @@ describe("runtime SSH workspace migration", () => {
   });
 
   test("is registered after the identity repair migration", () => {
-    expect(journal.entries.at(-1)).toEqual({
+    const entry = journal.entries.find(({ tag }) => tag === "0030_runtime_ssh_workspace");
+    expect(entry).toEqual({
       idx: 30,
       version: "7",
       when: 1785744000000,
       tag: "0030_runtime_ssh_workspace",
       breakpoints: true,
     });
+    expect(journal.entries.findIndex(({ tag }) => tag === "0030_runtime_ssh_workspace"))
+      .toBeLessThan(journal.entries.findIndex(({ tag }) => tag === "0031_runtime_storage_migrations"));
   });
 });

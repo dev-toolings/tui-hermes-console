@@ -157,3 +157,22 @@ recovery, compte SSH de service, transports Hermes, cycle de vie des identités.
   manquante ; l'epic US-G1-008 reste bloquée.
 - **Preuves :** `P-E2E`, `P-OPS`, `P-SEC`, rapport indépendant daté et inventaire de nettoyage.
 - **État courant :** `BLOQUÉE`.
+
+## US-G1-SSH-010 — Migrer le stockage Docker sans perdre `/opt/data`
+
+> En tant qu’opérateur, je veux migrer un volume nommé vers un bind mount explicite, afin que la
+> Console et Hermes partagent un workspace durable sans dépendre des chemins internes de Docker.
+
+- **Dépendances :** US-G1-SSH-005, US-G1-SSH-006 ; conteneur Hermes reconnu et image épinglée.
+- **Positif :** un préflight sans mutation inventorie tout `/opt/data`, exige une confirmation
+  exacte, survit à un rechargement UI, bloque les nouvelles missions, conserve l’ancien volume/conteneur, compare les manifestes,
+  recrée Hermes sur `/srv/hermes-console/data → /opt/data`, prouve health/capabilities/SFTP/écriture
+  Hermes, puis persiste le mapping par révision CAS.
+- **Négatif :** cible non vide, espace insuffisant, image non pinnée, topologie personnalisée,
+  manifeste divergent, API invalide ou coupure ; aucun succès n’est persisté et le runtime précédent
+  est restauré, sinon l’état `récupération requise` bloque les missions.
+- **Preuves :** `P-INT`, `P-E2E`, journal PostgreSQL, inventaires et manifestes expurgés, montage
+  Docker avant/après, runtime et artefact réels, rollback ou reprise après redémarrage.
+- **État courant :** `VÉRIFIÉE` pour l'implémentation et le cutover P-OPS sur VPS réel, avec rollback
+  automatique réellement déclenché puis retry réussi ; dépendances, mission avec artefact, sauvegarde
+  externe et acceptation reviewer restent ouvertes.

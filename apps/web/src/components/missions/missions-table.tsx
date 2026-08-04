@@ -37,10 +37,12 @@ export function matchesFilter(row: MissionRow, filter?: string) {
 export function MissionsTable({
   rows,
   filter,
+  filterHref,
 }: {
   rows: MissionRow[];
   /** `?filter=` de l'URL — TanStack le valide dans la route et le passe ici. */
   filter?: string;
+  filterHref?: (filter?: string) => string;
 }) {
   const visible = rows.filter((row) => matchesFilter(row, filter));
 
@@ -50,7 +52,11 @@ export function MissionsTable({
         {FILTERS.map((item) => {
           const active = filter === item.value || (!filter && !item.value);
           // La bascule de vue vit dans l'URL : la perdre ici renverrait au kanban.
-          const href = item.value ? `/runs?view=table&filter=${item.value}` : "/runs?view=table";
+          const href = filterHref
+            ? filterHref(item.value)
+            : item.value
+              ? `/runs?view=table&filter=${item.value}`
+              : "/runs?view=table";
           return (
             <Link
               key={item.label}

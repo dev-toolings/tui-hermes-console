@@ -44,15 +44,11 @@ function ConsoleShellFrame({ children }: { children: ReactNode }) {
   const { collapsed, setCollapsed, layout } = useBui();
   const [paletteOpen, setPaletteOpen] = useState(false);
   /**
-   * Rail déplié explicitement pendant qu'on est sur le chat.
-   *
-   * Le chat porte déjà sa propre sidebar de sessions : deux colonnes de
-   * navigation mangeraient le transcript, donc le rail y est replié par
-   * défaut. On le calcule au rendu plutôt que d'écrire dans le store : celui-ci
-   * est persisté globalement, et le forcer imposerait un rail replié sur
-   * TOUTES les pages après un simple passage par le chat.
+   * Le rail reste ouvert par défaut sur les surfaces de chat (`/chat` et ses
+   * sous-routes), sans écraser l'état global des autres pages ni empêcher sa
+   * fermeture manuelle.
    */
-  const [chatRailOpen, setChatRailOpen] = useState(false);
+  const [chatRailOpen, setChatRailOpen] = useState(true);
   const appearance = hermesAppearance.useAppearance();
   const capabilities = readPersonaCapabilities();
   hermesAppearance.useApplyUiScale(appearance.uiScale);

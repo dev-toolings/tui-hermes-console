@@ -22,6 +22,15 @@ const API_ORIGIN_KEY: &str = "CONSOLE_API_ORIGIN";
 /// Par défaut, le sidecar lancé juste à côté.
 const DEFAULT_API_ORIGIN: &str = "http://127.0.0.1:3170";
 
+/// Ces clés définissent la frontière de sécurité du sidecar et ne doivent pas
+/// pouvoir être remplacées par le fichier utilisateur `console.env`.
+const RESERVED_SIDECAR_ENV_KEYS: [&str; 3] =
+    ["NODE_ENV", "CONSOLE_SERVER_HOST", "CONSOLE_SERVER_PORT"];
+
+fn is_reserved_sidecar_env(key: &str) -> bool {
+    RESERVED_SIDECAR_ENV_KEYS.contains(&key)
+}
+
 /// Gabarit écrit au premier lancement, quand aucune configuration n'existe.
 const CONFIG_TEMPLATE: &str = r#"# Configuration de Hermes Console.
 #
@@ -126,10 +135,18 @@ fn spawn_console_server(
         // distinction, que `cfg!(dev)` fournit (posé par tauri-build).
         .env(
             "NODE_ENV",
-            if cfg!(dev) { "development" } else { "production" },
+            if cfg!(dev) {
+                "development"
+            } else {
+                "production"
+            },
         );
 
     for (key, value) in config {
+        if is_reserved_sidecar_env(key) {
+            eprintln!("[tauri] clé réservée ignorée dans console.env : {key}");
+            continue;
+        }
         command = command.env(key, value);
     }
 
@@ -157,6 +174,20 @@ fn spawn_console_server(
     });
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_reserved_sidecar_env;
+
+    #[test]
+    fn packaged_sidecar_security_mode_cannot_be_overridden_by_console_env() {
+        assert!(is_reserved_sidecar_env("NODE_ENV"));
+        assert!(is_reserved_sidecar_env("CONSOLE_SERVER_HOST"));
+        assert!(is_reserved_sidecar_env("CONSOLE_SERVER_PORT"));
+        assert!(!is_reserved_sidecar_env("DATABASE_URL"));
+        assert!(!is_reserved_sidecar_env("CONSOLE_DEV_AUTH_BYPASS"));
+    }
 }
 
 /// Origine de l'API telle que le SPA doit l'appeler.

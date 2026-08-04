@@ -5,6 +5,7 @@ name: hermes-console
 services:
   hermes:
     image: ${HERMES_IMAGE:?HERMES_IMAGE must be an immutable image@sha256:digest}
+    restart: unless-stopped
     user: "65532:65532"
     working_dir: /work
     read_only: true
@@ -21,9 +22,18 @@ services:
     tmpfs:
       - /tmp:size=64m,mode=1777
       - /run:size=16m,mode=755
+    # Hermes consumes API_SERVER_KEY; it does not implement the *_FILE
+    # convention, so load the mounted Compose secret immediately before exec.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        export API_SERVER_KEY="$$(cat /run/secrets/hermes_runtime_token)";
+        exec hermes gateway run
     environment:
       HERMES_WORKDIR: /work
-      HERMES_RUNTIME_TOKEN_FILE: /run/secrets/hermes_runtime_token
+      API_SERVER_ENABLED: "true"
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_PORT: "8642"
     secrets:
       - source: hermes_runtime_token
         target: hermes_runtime_token

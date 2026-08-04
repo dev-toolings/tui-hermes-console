@@ -7,6 +7,7 @@ import {
   CheckIcon,
   CheckCircle2Icon,
   CircleAlertIcon,
+  Code2Icon,
   LoaderCircleIcon,
   RadioTowerIcon,
   ShieldCheckIcon,
@@ -22,10 +23,12 @@ import {
   selectMandatePayload,
   type AuthMandate,
 } from "@/lib/auth-site-context";
-import { useRouter } from "@/lib/router";
+import { requestDevelopmentLogin } from "@/lib/development-login";
+import { Link, useRouter } from "@/lib/router";
 
 type AuthState = {
   authenticated: boolean;
+  developmentLoginAvailable?: boolean;
   setupRequired: boolean;
   user?: { email?: string; name?: string | null } | null;
   siteContext: AuthSiteContext | null;
@@ -79,6 +82,7 @@ export function SetupScreen() {
   const [auth, setAuth] = useState<AuthState | null>(null);
   const [setup, setSetup] = useState<SetupState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [developmentLoginBusy, setDevelopmentLoginBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -86,6 +90,24 @@ export function SetupScreen() {
     setLoading(true);
     setNotice(null);
     setRefreshKey((key) => key + 1);
+  };
+
+  const loginForDevelopment = async () => {
+    setDevelopmentLoginBusy(true);
+    setNotice(null);
+    try {
+      await requestDevelopmentLogin();
+      window.location.assign("/");
+    } catch (reason) {
+      setNotice({
+        tone: "error",
+        message:
+          reason instanceof Error
+            ? reason.message
+            : "La connexion locale de développement a échoué.",
+      });
+      setDevelopmentLoginBusy(false);
+    }
   };
 
   useEffect(() => {
@@ -145,7 +167,15 @@ export function SetupScreen() {
   if (loading) {
     content = <LoadingState />;
   } else if (!auth?.authenticated) {
-    content = <Welcome onGoogle={() => window.location.assign("/api/auth?action=login")} />;
+    content = (
+      <Welcome
+        onGoogle={() => window.location.assign("/api/auth?action=login")}
+        onDevelopment={
+          auth?.developmentLoginAvailable ? () => void loginForDevelopment() : undefined
+        }
+        developmentLoginBusy={developmentLoginBusy}
+      />
+    );
   } else if (siteAccessBlock(auth.siteContext) === "membership") {
     content = <MembershipRequired email={auth.user?.email ?? "Opérateur Google"} />;
   } else if (siteAccessBlock(auth.siteContext) === "selection" && auth.siteContext) {
@@ -462,7 +492,15 @@ function oauthCallbackNotice() {
   return "La connexion Google n’a pas pu être finalisée. Recommencez avec Google.";
 }
 
-function Welcome({ onGoogle }: { onGoogle: () => void }) {
+function Welcome({
+  onGoogle,
+  onDevelopment,
+  developmentLoginBusy = false,
+}: {
+  onGoogle: () => void;
+  onDevelopment?: () => void;
+  developmentLoginBusy?: boolean;
+}) {
   return (
     <section className="flex min-h-0 flex-col bg-[oklch(0.135_0.008_258)] px-6 py-7 sm:px-10 lg:px-16 xl:px-24">
       <BrandMark />
@@ -488,8 +526,28 @@ function Welcome({ onGoogle }: { onGoogle: () => void }) {
               <GoogleGlyph />
               Continuer avec Google
             </button>
+            {onDevelopment ? (
+              <button
+                type="button"
+                onClick={onDevelopment}
+                disabled={developmentLoginBusy}
+                className="inline-flex h-11 items-center gap-2 rounded-[6px] border border-white/16 bg-white/[0.045] px-4 text-[0.8125rem] font-medium text-white/82 transition-colors duration-150 hover:border-white/25 hover:bg-white/[0.075] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.63_0.18_251)] focus-visible:ring-offset-2 focus-visible:ring-offset-[oklch(0.135_0.008_258)]"
+              >
+                {developmentLoginBusy ? (
+                  <LoaderCircleIcon className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <Code2Icon className="size-4" aria-hidden />
+                )}
+                {developmentLoginBusy ? "Connexion locale…" : "Connexion locale · développement"}
+              </button>
+            ) : null}
             <span className="flex items-center gap-2 text-[0.6875rem] text-white/42"><ShieldCheckIcon className="size-3.5 text-[oklch(0.78_0.16_141)]" aria-hidden />Accès limité aux opérateurs autorisés</span>
           </div>
+          {onDevelopment ? (
+            <p className="mt-3 text-[0.6875rem] leading-5 text-white/38">
+              Disponible uniquement sur localhost avec l’identité de développement autorisée par le serveur.
+            </p>
+          ) : null}
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-white/9 pt-5 text-[0.6875rem] text-white/38">
@@ -571,9 +629,12 @@ function RuntimeStep({ email, onComplete }: { email: string; onComplete: () => v
       <form onSubmit={saveRuntime} className="min-h-0 flex-1 overflow-y-auto px-6 pb-8 pt-8 sm:px-10 lg:px-16 lg:pt-12 xl:px-24">
         <div className="mx-auto max-w-[35rem]">
           <StepHeading eyebrow="Runtime Hermes" title="Connectez le moteur qui exécutera vos missions." />
-          <p className="mt-4 text-[0.875rem] leading-6 text-white/59">Cette première configuration reste locale. Le navigateur ne reçoit jamais votre token Hermes.</p>
+          <p className="mt-4 text-[0.875rem] leading-6 text-white/59">Cette première configuration reste locale. Votre token reste masqué par défaut et n’est révélé qu’après une vérification OTP.</p>
+          <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-[0.6875rem] leading-5 text-white/55">
+            Le Dashboard Hermes, sur le port 9119, est la surface de gestion des skills. Après la mise en service, vous pourrez vérifier son statut et le démarrer depuis <Link href="/settings/runtime" className="font-medium text-white underline decoration-white/30 underline-offset-2 hover:decoration-white/70">Paramètres → Runtime</Link>.
+          </p>
           <div className="mt-8 space-y-5">
-            <Field label="URL Hermes" hint="Service API local, pas le dashboard.">
+            <Field label="URL Hermes" hint="Service API local sur 8642 ; le Dashboard de gestion écoute sur 9119.">
               <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} className={inputClass} inputMode="url" required />
             </Field>
             <Field label="Token API" hint="La Console le chiffre avant de l’enregistrer.">

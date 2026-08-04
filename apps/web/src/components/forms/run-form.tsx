@@ -81,7 +81,10 @@ export function RunForm() {
         try {
           const response = await fetch("/api/threads", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "X-Hermes-Toast": "created",
+            },
             body: JSON.stringify({
               agentId,
               message: String(form.get("instruction") ?? ""),

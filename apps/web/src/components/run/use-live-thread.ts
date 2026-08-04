@@ -527,7 +527,10 @@ export function useLiveThread(threadId: string) {
           `/api/threads/${encodeURIComponent(threadId)}/commands`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "X-Hermes-Toast": "0",
+            },
             body: JSON.stringify({ message }),
           },
         );
@@ -613,10 +616,14 @@ export function useLiveThread(threadId: string) {
           {
             method: "POST",
             headers: useMultipart
-              ? { Accept: "text/event-stream" }
+              ? {
+                  Accept: "text/event-stream",
+                  "X-Hermes-Toast": "0",
+                }
               : {
                   "Content-Type": "application/json",
                   Accept: "text/event-stream",
+                  "X-Hermes-Toast": "0",
                 },
             body: useMultipart
               ? (() => {
@@ -764,6 +771,7 @@ export function useLiveThread(threadId: string) {
     if (!run || !ACTIVE_STATUSES.includes(run.status)) return;
     const response = await fetch(`/api/runs/${encodeURIComponent(run.id)}/cancel`, {
       method: "POST",
+      headers: { "X-Hermes-Toast": "0" },
     });
     if (!response.ok) {
       const message = await readApiError(response);
@@ -783,6 +791,7 @@ export function useLiveThread(threadId: string) {
     setError(null);
     const response = await fetch(`/api/runs/${encodeURIComponent(run.id)}/retry`, {
       method: "POST",
+      headers: { "X-Hermes-Toast": "0" },
     });
     if (!response.ok) {
       const message = await readApiError(response);
@@ -806,7 +815,10 @@ export function useLiveThread(threadId: string) {
 
       const response = await fetch(`/api/runs/${encodeURIComponent(run.id)}/approval`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Hermes-Toast": "0",
+        },
         body: JSON.stringify({ choice, approvalRequestId }),
       });
       if (!response.ok) {

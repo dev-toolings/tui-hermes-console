@@ -6,7 +6,7 @@ import type { RuntimeSshHostKeyDto } from "@console/core/types/api";
 import { HermesRuntimeError } from "../hermes-adapter";
 import {
   configuredKnownHostsPath,
-  entriesForHost,
+  entriesForHostKeyType,
   hostLookupKey,
   loadKnownHosts,
 } from "./known-hosts";
@@ -67,7 +67,11 @@ async function acceptSshHostKeyLocked(
   }
 
   const knownHostsPath = configuredKnownHostsPath();
-  const existing = entriesForHost(loadKnownHosts([knownHostsPath]), scanned.lookup);
+  const existing = entriesForHostKeyType(
+    loadKnownHosts([knownHostsPath]),
+    scanned.lookup,
+    scanned.keyType,
+  );
   if (existing.some(({ revoked }) => revoked)) {
     throw new HermesRuntimeError(
       "La clé de cet hôte est révoquée dans known_hosts.",

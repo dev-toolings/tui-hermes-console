@@ -13,6 +13,13 @@ import {
 import { cn } from "../../lib/utils"
 import { Checkbox, PagerButton } from "./boardui"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./select"
+import {
   Table,
   TableBody,
   TableCell,
@@ -31,7 +38,10 @@ type DataTableProps<TData> = {
   onRowSelectionChange?: OnChangeFn<RowSelectionState>
   page: number
   pageSize: number
+  pageSizeOptions?: readonly number[]
   onPageChange: (page: number) => void
+  onPageSizeChange?: (pageSize: number) => void
+  rowsPerPageLabel?: string
   previousLabel: string
   nextLabel: string
   empty?: React.ReactNode
@@ -61,7 +71,7 @@ export function selectColumn<TData>(): ColumnDef<TData, unknown> {
 
 function rowClass(selected: boolean) {
   return cn(
-    "border-b border-border transition-colors last:border-0 hover:bg-transparent data-[state=selected]:bg-transparent",
+    "h-16 border-b border-border transition-colors last:border-0 hover:bg-transparent data-[state=selected]:bg-transparent",
     selected ? "bg-surface-hover" : "hover:bg-surface-hover dark:hover:bg-transparent"
   )
 }
@@ -70,11 +80,14 @@ export function DataTable<TData>({
   columns,
   data,
   getRowId,
-  rowSelection,
+  rowSelection = {},
   onRowSelectionChange,
   page,
   pageSize,
+  pageSizeOptions = [12, 24, 48, 96],
   onPageChange,
+  onPageSizeChange,
+  rowsPerPageLabel = "Lignes par page",
   previousLabel,
   nextLabel,
   empty,
@@ -82,6 +95,7 @@ export function DataTable<TData>({
   toolbar,
   className,
 }: DataTableProps<TData>) {
+  const pageSizeSelectId = React.useId()
   const table = useReactTable({
     data,
     columns,
@@ -106,6 +120,18 @@ export function DataTable<TData>({
   const pages = table.getPageCount()
   const current = page
   const pageNumbers = Array.from({ length: pages }, (_, i) => i + 1).slice(0, 6)
+  const rows = table.getRowModel().rows
+  const placeholderRows = rows.length > 0 ? Math.max(pageSize - rows.length, 0) : 0
+  const selectablePageSizes = Array.from(new Set([pageSize, ...pageSizeOptions])).sort(
+    (a, b) => a - b,
+  )
+
+  const handlePageSizeChange = (value: string) => {
+    const nextPageSize = Number(value)
+    if (!Number.isFinite(nextPageSize) || nextPageSize <= 0 || !onPageSizeChange) return
+    onPageSizeChange(nextPageSize)
+    onPageChange(1)
+  }
 
   return (
     <div className={className}>
@@ -136,27 +162,38 @@ export function DataTable<TData>({
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows.length > 0 ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() ? "selected" : undefined}
-                  className={rowClass(row.getIsSelected())}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell
-                      key={cell.id}
-                      className={cn(
-                        "py-2.5",
-                        cell.column.id === "select" && "pl-4",
-                        cell.column.id === "actions" && "pr-4"
-                      )}
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+            {rows.length > 0 ? (
+              <>
+                {rows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() ? "selected" : undefined}
+                    className={rowClass(row.getIsSelected())}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell
+                        key={cell.id}
+                        className={cn(
+                          "py-2.5",
+                          cell.column.id === "select" && "pl-4",
+                          cell.column.id === "actions" && "pr-4"
+                        )}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+                {Array.from({ length: placeholderRows }, (_, index) => (
+                  <TableRow
+                    key={`placeholder-${index}`}
+                    aria-hidden="true"
+                    className={cn(rowClass(false), "pointer-events-none")}
+                  >
+                    <TableCell colSpan={columns.length} className="py-0" />
+                  </TableRow>
+                ))}
+              </>
             ) : (
               <TableRow className="hover:bg-transparent">
                 <TableCell
@@ -171,10 +208,34 @@ export function DataTable<TData>({
         </Table>
       </div>
 
-      <div className="flex items-center justify-between gap-2 border-t border-border p-3">
-        <PagerButton disabled={current <= 1} onClick={() => onPageChange(current - 1)}>
-          {previousLabel}
-        </PagerButton>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-3">
+        <div className="flex flex-1 items-center gap-3">
+          {onPageSizeChange ? (
+            <div className="flex items-center gap-2">
+              <label
+                htmlFor={pageSizeSelectId}
+                className="whitespace-nowrap text-xs text-muted-foreground"
+              >
+                {rowsPerPageLabel}
+              </label>
+              <Select value={`${pageSize}`} onValueChange={handlePageSizeChange}>
+                <SelectTrigger id={pageSizeSelectId} size="sm" className="w-16 px-2.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent side="top">
+                  {selectablePageSizes.map((size) => (
+                    <SelectItem key={size} value={`${size}`}>
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+          <PagerButton disabled={current <= 1} onClick={() => onPageChange(current - 1)}>
+            {previousLabel}
+          </PagerButton>
+        </div>
         <div className="hidden items-center gap-1 sm:flex">
           {pageNumbers.map((n) => (
             <button
@@ -192,9 +253,11 @@ export function DataTable<TData>({
             </button>
           ))}
         </div>
-        <PagerButton disabled={current >= pages} onClick={() => onPageChange(current + 1)}>
-          {nextLabel}
-        </PagerButton>
+        <div className="flex flex-1 justify-end">
+          <PagerButton disabled={current >= pages} onClick={() => onPageChange(current + 1)}>
+            {nextLabel}
+          </PagerButton>
+        </div>
       </div>
     </div>
   )

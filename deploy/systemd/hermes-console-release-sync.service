@@ -1,0 +1,13 @@
+[Unit]
+Description=Synchronise Hermes releases into Hermes Console PostgreSQL
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/hermes-console
+EnvironmentFile=-/etc/hermes-console/console.env
+ExecStart=/opt/hermes-console/scripts/sync-hermes-releases.sh
+
+[Install]
+WantedBy=multi-user.target

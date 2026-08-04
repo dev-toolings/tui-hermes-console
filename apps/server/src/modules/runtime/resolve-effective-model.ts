@@ -5,6 +5,7 @@ import {
   isHermesReasoningEffort,
   type HermesReasoningEffort,
 } from "@console/core/lib/runtime/reasoning-effort";
+import { resolveAvailableRuntimeModelSelection } from "./available-model-selection";
 import { getRuntimeModelSelection } from "@/modules/runtime/model-settings";
 import type { SiteScope } from "@/modules/auth/service";
 
@@ -54,7 +55,32 @@ export async function resolveEffectiveInference(scope: SiteScope, input: {
   const threadModel = input.threadModel.trim();
   const threadEffort = normalizeEffort(input.threadReasoningEffort);
 
+  let availableSelectionPromise:
+    | Promise<Awaited<ReturnType<typeof resolveAvailableRuntimeModelSelection>> | null>
+    | null = null;
+  const getAvailableSelection = async () => {
+    availableSelectionPromise ??= resolveAvailableRuntimeModelSelection({
+      repairPersisted: true,
+    }).catch(() => null);
+    return availableSelectionPromise;
+  };
+
   if (threadModel && !LEGACY_MODEL_ALIASES.has(threadModel)) {
+    if (input.threadProvider?.trim()) {
+      const available = await getAvailableSelection();
+      const provider = available?.catalog.providers.find(
+        (item) => item.slug === input.threadProvider?.trim(),
+      );
+      const modelStillAvailable =
+        provider?.authenticated === true && provider.models.some((item) => item.id === threadModel);
+      if (available && !modelStillAvailable) {
+        return {
+          provider: available.provider,
+          model: available.model,
+          reasoningEffort: available.reasoningEffort,
+        };
+      }
+    }
     return {
       provider: input.threadProvider?.trim() || consoleProvider,
       model: threadModel,
@@ -75,12 +101,36 @@ export async function resolveEffectiveInference(scope: SiteScope, input: {
 
     const agentModel = agent?.model ?? null;
     if (isConcreteModel(agentModel)) {
+      if (agent?.provider?.trim()) {
+        const available = await getAvailableSelection();
+        const provider = available?.catalog.providers.find(
+          (item) => item.slug === agent.provider?.trim(),
+        );
+        const modelStillAvailable =
+          provider?.authenticated === true && provider.models.some((item) => item.id === agentModel);
+        if (available && !modelStillAvailable) {
+          return {
+            provider: available.provider,
+            model: available.model,
+            reasoningEffort: available.reasoningEffort,
+          };
+        }
+      }
       return {
         provider: agent?.provider?.trim() || input.threadProvider?.trim() || consoleProvider,
         model: agentModel,
         reasoningEffort: threadEffort ?? normalizeEffort(agent?.reasoningEffort) ?? consoleEffort,
       };
     }
+  }
+
+  const available = await getAvailableSelection();
+  if (available) {
+    return {
+      provider: available.provider,
+      model: available.model,
+      reasoningEffort: available.reasoningEffort,
+    };
   }
 
   return {

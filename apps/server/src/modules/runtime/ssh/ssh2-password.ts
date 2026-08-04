@@ -10,7 +10,13 @@ import {
   loadKnownHosts,
   verifyHostKey,
 } from "./known-hosts";
-import type { SftpOps, SshChannel, SshExecResult, SshTarget } from "./types";
+import type {
+  SftpOps,
+  SshChannel,
+  SshCommandSession,
+  SshExecResult,
+  SshTarget,
+} from "./types";
 
 const CONNECT_TIMEOUT_MS = 12_000;
 const KEEPALIVE_MS = 15_000;
@@ -199,31 +205,77 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
     conn?.end();
   }
 
-  async function execRemote(command: string): Promise<SshExecResult> {
+  async function startRemote(
+    command: string,
+    options: { pseudoTerminal?: boolean } = {},
+  ): Promise<SshCommandSession> {
     const conn = await connect();
     return new Promise((resolve, reject) => {
-      conn.exec(command, (error, stream) => {
+      conn.exec(command, { pty: options.pseudoTerminal === true }, (error, stream) => {
         if (error) {
           reject(mapSshError(error));
           return;
         }
         let stdout = "";
         let stderr = "";
+        let exitCode: number | null = null;
+        let settled = false;
+        const listeners = new Set<
+          (output: { stream: "stdout" | "stderr"; chunk: string }) => void
+        >();
+        const emit = (streamName: "stdout" | "stderr", chunk: Buffer) => {
+          const text = chunk.toString();
+          for (const listener of listeners) listener({ stream: streamName, chunk: text });
+          if (streamName === "stdout") stdout = (stdout + text).slice(-64_000);
+          else stderr = (stderr + text).slice(-16_000);
+        };
         stream.on("data", (chunk: Buffer) => {
-          stdout = (stdout + chunk.toString()).slice(-64_000);
+          emit("stdout", chunk);
         });
         stream.stderr.on("data", (chunk: Buffer) => {
-          stderr = (stderr + chunk.toString()).slice(-16_000);
+          emit("stderr", chunk);
         });
-        stream.on("close", (code: number | null) => {
-          resolve({ stdout, stderr, code: typeof code === "number" ? code : 0 });
+        stream.on("exit", (code: number) => {
+          exitCode = code;
         });
-        stream.on("error", (streamError: Error) => reject(mapSshError(streamError)));
+        const result = new Promise<SshExecResult>((resolveResult, rejectResult) => {
+          stream.on("close", () => {
+            if (settled) return;
+            settled = true;
+            resolveResult({ stdout, stderr, code: exitCode ?? 0 });
+          });
+          stream.on("error", (streamError: Error) => {
+            if (settled) return;
+            settled = true;
+            rejectResult(mapSshError(streamError));
+          });
+        });
+        resolve({
+          onOutput(listener) {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+          write(input) {
+            stream.write(input);
+          },
+          endInput() {
+            stream.end();
+          },
+          kill() {
+            stream.signal("TERM");
+            stream.close();
+          },
+          result,
+        });
       });
     });
   }
 
-  return { forward, sftp, exec: execRemote, close };
+  async function execRemote(command: string): Promise<SshExecResult> {
+    return (await startRemote(command)).result;
+  }
+
+  return { forward, sftp, exec: execRemote, start: startRemote, close };
 }
 
 type DirectorySftp = Pick<SFTPWrapper, "mkdir" | "stat">;

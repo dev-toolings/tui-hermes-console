@@ -4,6 +4,8 @@ export type NotificationPreferences = {
   onComplete: boolean;
   onFailed: boolean;
   onApproval: boolean;
+  onHermesUpdate: boolean;
+  autoUpdateHermes: boolean;
   browserNotifications: boolean;
 };
 
@@ -15,6 +17,8 @@ export const DEFAULT_NOTIFICATIONS: NotificationPreferences = {
   onComplete: true,
   onFailed: true,
   onApproval: true,
+  onHermesUpdate: true,
+  autoUpdateHermes: false,
   browserNotifications: false,
 };
 

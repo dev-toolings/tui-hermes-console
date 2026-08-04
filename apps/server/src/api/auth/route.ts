@@ -1,7 +1,7 @@
 import { apiErrorResponse } from "@/modules/api/errors";
 import { assertSameOriginMutation } from "@/modules/api/same-origin";
 import { consoleSetupRequired } from "@/modules/setup/service";
-import { AuthError, assertCsrf, beginGoogleLogin, clearSessionHeaders, completeGoogleLogin, deleteSession, findActiveAssignedMandates, getSession, oidcStateClearingHeader, requireSiteRequestContext, resolveSiteRequirement, selectSessionMandate, selectSessionSite, type SiteRequestContext } from "@/modules/auth/service";
+import { AuthError, assertCsrf, beginGoogleLogin, clearSessionHeaders, completeDevelopmentLogin, completeGoogleLogin, deleteSession, developmentAuthBypassAvailable, findActiveAssignedMandates, getSession, oidcStateClearingHeader, requireSiteRequestContext, resolveSiteRequirement, selectSessionMandate, selectSessionSite, type SiteRequestContext } from "@/modules/auth/service";
 import { siteCapabilitiesForRole } from "@/modules/auth/site-authorization";
 import { z } from "zod";
 import {
@@ -38,12 +38,14 @@ export function authStatusPayload(
   requestContext: SiteRequestContext | null = null,
   mandates: Awaited<ReturnType<typeof findActiveAssignedMandates>> = [],
   mandateSelectionRequired = false,
+  developmentLoginAvailable = false,
 ) {
   const consentRequired = session
     ? !hasCurrentAiDisclosureConsent(session)
     : false;
   return {
     authenticated: session !== null,
+    developmentLoginAvailable,
     setupRequired,
     consentRequired,
     user: session
@@ -141,6 +143,7 @@ export async function GET(request: Request) {
         requestContext,
         mandates,
         mandateSelectionRequired,
+        developmentAuthBypassAvailable(),
       ),
       { headers: { "cache-control": "no-store" } },
     );
@@ -182,6 +185,20 @@ function sessionHeadersForCallback(rawToken: string, session: { csrfToken: strin
 export async function POST(request: Request) {
   try {
     const action = new URL(request.url).searchParams.get("action");
+    if (action === "dev-login") {
+      assertSameOriginMutation(request);
+      const completed = await completeDevelopmentLogin();
+      return Response.json(
+        { authenticated: true, redirectTo: completed.appOrigin },
+        {
+          headers: sessionHeadersForCallback(
+            completed.rawToken,
+            completed.session,
+            oidcStateClearingHeader(),
+          ),
+        },
+      );
+    }
     if (action !== "logout" && action !== "select-site" && action !== "select-mandate") throw new AuthError("Action d'authentification inconnue.", 404, "AUTH_ACTION_NOT_FOUND");
     const session = await getSession(request);
     if (!session) throw new AuthError("Authentification requise.", 401, "AUTH_REQUIRED");

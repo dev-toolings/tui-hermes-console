@@ -25,6 +25,8 @@ export type {
   ConnectorType,
   MessageContent,
   RuntimeHealthStatus,
+  RuntimeCredentialAdapter,
+  RuntimeManagementMode,
   RuntimeSshAuth,
   RuntimeTransport,
   RuntimeWorkspaceStatus,
@@ -38,6 +40,8 @@ import type {
   ConnectorType,
   MessageContent,
   RuntimeHealthStatus,
+  RuntimeCredentialAdapter,
+  RuntimeManagementMode,
   RuntimeSshAuth,
   RuntimeTransport,
   RuntimeWorkspaceStatus,
@@ -159,12 +163,46 @@ export const agents = pgTable(
   ],
 );
 
+export const hermesReleases = pgTable(
+  "hermes_releases",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey(),
+    tagName: text("tag_name").notNull(),
+    name: text("name"),
+    body: text("body").notNull().default(""),
+    htmlUrl: text("html_url").notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
+    sourceCreatedAt: timestamp("source_created_at", { withTimezone: true }).notNull(),
+    sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }).notNull(),
+    prerelease: boolean("prerelease").notNull().default(false),
+    draft: boolean("draft").notNull().default(false),
+    noteCount: integer("note_count").notNull().default(0),
+    featureCount: integer("feature_count").notNull().default(0),
+    improvementCount: integer("improvement_count").notNull().default(0),
+    suppressionCount: integer("suppression_count").notNull().default(0),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("hermes_releases_tag_name_unique").on(table.tagName),
+    index("hermes_releases_published_at_idx").on(table.publishedAt),
+  ],
+);
+
 export const runtimeConfig = pgTable("runtime_config", {
   id: text("id").primaryKey().default("default"),
   name: text("name").notNull().default("Hermes"),
   /** En transport `ssh`, l'URL est celle vue depuis la machine distante. */
   baseUrl: text("base_url").notNull(),
   encryptedToken: text("encrypted_token").notNull(),
+  managementMode: text("management_mode")
+    .notNull()
+    .default("external")
+    .$type<RuntimeManagementMode>(),
+  credentialAdapter: text("credential_adapter")
+    .notNull()
+    .default("manual")
+    .$type<RuntimeCredentialAdapter>(),
+  lastCredentialRotatedAt: timestamp("last_credential_rotated_at", { withTimezone: true }),
   transport: text("transport").notNull().default("direct").$type<RuntimeTransport>(),
   sshHost: text("ssh_host"),
   sshPort: integer("ssh_port").notNull().default(22),
@@ -188,6 +226,165 @@ export const runtimeConfig = pgTable("runtime_config", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const runtimeUpdateOperations = pgTable(
+  "runtime_update_operations",
+  {
+    id: text("id").primaryKey(),
+    runtimeId: text("runtime_id")
+      .notNull()
+      .default("default")
+      .references(() => runtimeConfig.id, { onDelete: "cascade" }),
+    trigger: text("trigger").notNull(),
+    status: text("status").notNull().default("queued"),
+    phase: text("phase").notNull().default("preflight"),
+    progress: integer("progress").notNull().default(0),
+    message: text("message").notNull(),
+    method: text("method").notNull(),
+    expectedRevision: integer("expected_revision"),
+    previousVersion: text("previous_version"),
+    targetVersion: text("target_version"),
+    targetTag: text("target_tag").notNull(),
+    currentVersion: text("current_version"),
+    checkpoint: jsonb("checkpoint"),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("runtime_update_operations_runtime_idx").on(table.runtimeId, table.createdAt),
+    uniqueIndex("runtime_update_operations_active_idx")
+      .on(table.runtimeId)
+      .where(sql`${table.status} IN ('queued', 'running', 'recovery_required')`),
+    check("runtime_update_operations_trigger_check", sql`${table.trigger} IN ('manual', 'automatic')`),
+    check(
+      "runtime_update_operations_status_check",
+      sql`${table.status} IN ('queued', 'running', 'succeeded', 'rolled_back', 'failed', 'recovery_required')`,
+    ),
+    check("runtime_update_operations_progress_check", sql`${table.progress} >= 0 AND ${table.progress} <= 100`),
+  ],
+);
+
+export const runtimeCredentialOperations = pgTable(
+  "runtime_credential_operations",
+  {
+    id: text("id").primaryKey(),
+    runtimeId: text("runtime_id")
+      .notNull()
+      .references(() => runtimeConfig.id, { onDelete: "cascade" }),
+    operation: text("operation").notNull(),
+    adapter: text("adapter").notNull(),
+    status: text("status").notNull(),
+    phase: text("phase").notNull(),
+    expectedRevision: integer("expected_revision").notNull(),
+    candidateEncryptedToken: text("candidate_encrypted_token"),
+    remoteBackupRef: text("remote_backup_ref"),
+    confirmationHash: text("confirmation_hash").notNull(),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("runtime_credential_operations_runtime_idx").on(table.runtimeId, table.createdAt),
+    uniqueIndex("runtime_credential_operations_active_idx")
+      .on(table.runtimeId)
+      .where(sql`${table.status} IN ('planned', 'applying', 'verifying', 'recovery_required')`),
+    check(
+      "runtime_credential_operations_status_check",
+      sql`${table.status} IN ('planned', 'applying', 'verifying', 'succeeded', 'rolled_back', 'failed', 'recovery_required')`,
+    ),
+  ],
+);
+
+/** Challenge éphémère pour révéler API_SERVER_KEY après une vérification OTP. */
+export const runtimeSecretRevealChallenges = pgTable(
+  "runtime_secret_reveal_challenges",
+  {
+    id: text("id").primaryKey(),
+    runtimeId: text("runtime_id").notNull().default("default"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => consoleUsers.id, { onDelete: "cascade" }),
+    /** Le hash de session lie le challenge à ce navigateur authentifié. */
+    sessionHash: text("session_hash").notNull(),
+    secretName: text("secret_name").notNull().default("API_SERVER_KEY"),
+    runtimeVersion: text("runtime_version").notNull(),
+    otpDigest: text("otp_digest").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    lastSentAt: timestamp("last_sent_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("runtime_secret_reveal_challenges_session_idx").on(
+      table.sessionHash,
+      table.runtimeId,
+      table.createdAt,
+    ),
+    index("runtime_secret_reveal_challenges_expiry_idx").on(table.expiresAt),
+    check(
+      "runtime_secret_reveal_challenges_secret_check",
+      sql`${table.secretName} = 'API_SERVER_KEY'`,
+    ),
+    check(
+      "runtime_secret_reveal_challenges_attempts_check",
+      sql`${table.attempts} >= 0 AND ${table.attempts} <= 5`,
+    ),
+  ],
+);
+
+export type RuntimeStorageMigrationStatus =
+  | "planned"
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "rolled_back"
+  | "failed"
+  | "recovery_required";
+
+export const runtimeStorageMigrations = pgTable(
+  "runtime_storage_migrations",
+  {
+    id: text("id").primaryKey(),
+    runtimeId: text("runtime_id")
+      .notNull()
+      .references(() => runtimeConfig.id, { onDelete: "cascade" }),
+    expectedRevision: integer("expected_revision").notNull(),
+    status: text("status").notNull().$type<RuntimeStorageMigrationStatus>(),
+    phase: text("phase").notNull(),
+    progress: integer("progress").notNull().default(0),
+    message: text("message").notNull(),
+    sourceSnapshot: jsonb("source_snapshot").notNull().$type<Record<string, unknown>>(),
+    targetSnapshot: jsonb("target_snapshot").notNull().$type<Record<string, unknown>>(),
+    confirmationHash: text("confirmation_hash").notNull(),
+    sourceManifestSha256: text("source_manifest_sha256"),
+    targetManifestSha256: text("target_manifest_sha256"),
+    rollbackAvailable: boolean("rollback_available").notNull().default(false),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "runtime_storage_migrations_status_check",
+      sql`${table.status} IN ('planned', 'queued', 'running', 'succeeded', 'rolled_back', 'failed', 'recovery_required')`,
+    ),
+    check(
+      "runtime_storage_migrations_progress_check",
+      sql`${table.progress} >= 0 AND ${table.progress} <= 100`,
+    ),
+    index("runtime_storage_migrations_runtime_idx").on(table.runtimeId, table.createdAt),
+  ],
+);
 
 /** Préférences d'inférence globales de la Console, indépendantes des agents. */
 export const runtimeModelSettings = pgTable("runtime_model_settings", {

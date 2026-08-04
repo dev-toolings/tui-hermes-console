@@ -17,6 +17,7 @@ import { describeError, log } from "@/observability/log";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 const AUTH_TRANSACTION_TTL_MS = 1000 * 60 * 10;
+const MAX_ACTIVE_DEVELOPMENT_SESSIONS = 8;
 const SESSION_COOKIE = "hc_session";
 const OIDC_STATE_COOKIE = "hc_oidc_state";
 const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
@@ -105,6 +106,79 @@ export function hasConnectableSiteMembership(
   return googleSubjects.some(
     (subject) => typeof subject === "string" && !subject.startsWith("legacy:"),
   );
+}
+
+export type DevelopmentAuthBypassConfig = {
+  email: string;
+  appOrigin: string;
+};
+
+function isLoopbackHostname(hostname: string) {
+  return ["localhost", "127.0.0.1", "::1", "[::1]"].includes(
+    hostname.trim().toLowerCase(),
+  );
+}
+
+/**
+ * Le bypass ne remplace jamais Google en production : il exige un opt-in
+ * explicite, un serveur lié au loopback et une origine navigateur locale.
+ */
+export function developmentAuthBypassConfig(
+  env: Record<string, string | undefined> = process.env,
+): DevelopmentAuthBypassConfig | null {
+  if (env.CONSOLE_DEV_AUTH_BYPASS !== "1") return null;
+  if (env.NODE_ENV !== "development") {
+    throw new AuthError(
+      "Le bypass d’authentification locale exige NODE_ENV=development.",
+      503,
+      "DEV_AUTH_BYPASS_UNSAFE",
+    );
+  }
+
+  const serverHost = env.CONSOLE_SERVER_HOST?.trim() || "127.0.0.1";
+  const rawOrigin = env.CONSOLE_APP_ORIGIN?.trim();
+  const email = env.CONSOLE_DEV_AUTH_EMAIL?.trim().toLowerCase();
+  let appOrigin: URL;
+  try {
+    appOrigin = new URL(rawOrigin ?? "");
+  } catch {
+    throw new AuthError(
+      "Le bypass local exige une origine Console valide.",
+      503,
+      "DEV_AUTH_BYPASS_UNSAFE",
+    );
+  }
+
+  if (
+    !isLoopbackHostname(serverHost) ||
+    !isLoopbackHostname(appOrigin.hostname) ||
+    appOrigin.protocol !== "http:"
+  ) {
+    throw new AuthError(
+      "Le bypass d’authentification exige un serveur et une origine HTTP strictement locaux.",
+      503,
+      "DEV_AUTH_BYPASS_UNSAFE",
+    );
+  }
+  if (!email || !isGoogleEmailAllowed(email, env.GOOGLE_ALLOWED_EMAILS)) {
+    throw new AuthError(
+      "Le compte du bypass local doit être explicitement autorisé par Google.",
+      503,
+      "DEV_AUTH_BYPASS_UNSAFE",
+    );
+  }
+  return { email, appOrigin: appOrigin.origin };
+}
+
+export function developmentAuthBypassAvailable() {
+  return developmentAuthBypassConfig() !== null;
+}
+
+export function canCreateDevelopmentSession(
+  activeSessions: number,
+  maximum = MAX_ACTIVE_DEVELOPMENT_SESSIONS,
+) {
+  return Number.isSafeInteger(activeSessions) && activeSessions >= 0 && activeSessions < maximum;
 }
 
 /** Une session existante ne doit pas survivre au retrait de son opérateur. */
@@ -669,6 +743,81 @@ export async function completeGoogleLogin(request: Request, code: string, state:
     );
   });
   return { ...created, user: { email, name: claims.name?.trim() || null }, appOrigin: config.appOrigin };
+}
+
+/**
+ * Crée une vraie session produit pour un compte Google déjà provisionné.
+ * Aucun utilisateur ni membership n'est créé par ce raccourci local.
+ */
+export async function completeDevelopmentLogin() {
+  const config = developmentAuthBypassConfig();
+  if (!config) {
+    throw new AuthError(
+      "Le bypass d’authentification locale n’est pas activé.",
+      404,
+      "DEV_AUTH_BYPASS_DISABLED",
+    );
+  }
+  const db = getDatabase();
+  const user = await db.query.consoleUsers.findFirst({
+    where: eq(consoleUsers.email, config.email),
+  });
+  if (!user?.googleSubject || user.googleSubject.startsWith("legacy:")) {
+    throw new AuthError(
+      "Le compte Google local doit avoir été provisionné avant d’utiliser le bypass.",
+      409,
+      "DEV_AUTH_USER_NOT_PROVISIONED",
+    );
+  }
+  const memberships = await listMemberships(db, user.id);
+  if (memberships.length === 0) {
+    throw new AuthError(
+      "Aucun site n’est attribué au compte du bypass local.",
+      403,
+      "SITE_MEMBERSHIP_REQUIRED",
+    );
+  }
+  const created = await db.transaction(async (tx) => {
+    // Sérialise le comptage sans révoquer les sessions OAuth existantes.
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`hermes-console-dev-login:${user.id}`}))`,
+    );
+    const now = new Date();
+    await tx
+      .delete(consoleSessions)
+      .where(
+        and(
+          eq(consoleSessions.userId, user.id),
+          lte(consoleSessions.expiresAt, now),
+        ),
+      );
+    const [active] = await tx
+      .select({ value: count() })
+      .from(consoleSessions)
+      .where(
+        and(
+          eq(consoleSessions.userId, user.id),
+          gt(consoleSessions.expiresAt, now),
+        ),
+      );
+    if (!canCreateDevelopmentSession(Number(active?.value ?? 0))) {
+      throw new AuthError(
+        "Trop de sessions actives pour utiliser le bypass local.",
+        429,
+        "DEV_AUTH_SESSION_LIMIT",
+      );
+    }
+    return createSession(
+      user.id,
+      memberships.length === 1 ? memberships[0]!.id : null,
+      tx,
+    );
+  });
+  return {
+    ...created,
+    user: { email: user.email, name: user.displayName },
+    appOrigin: config.appOrigin,
+  };
 }
 
 export async function getSession(request: Request): Promise<AuthSession | null> {

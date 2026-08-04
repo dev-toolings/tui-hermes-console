@@ -12,8 +12,10 @@ import {
   fetchAgents,
   fetchArtifacts,
   fetchAuditEntries,
+  fetchHermesUpdates,
   fetchRuntime,
   fetchRuntimeProbe,
+  fetchSkills,
   fetchStorage,
   fetchThreads,
 } from "@/lib/api";
@@ -50,6 +52,11 @@ export async function loadAgents() {
 }
 export type AgentsData = Awaited<ReturnType<typeof loadAgents>>;
 
+export async function loadSkills() {
+  return fetchSkills();
+}
+export type SkillsData = Awaited<ReturnType<typeof loadSkills>>;
+
 export async function loadAgent(agentId: string) {
   return { agent: await fetchAgent(agentId) };
 }
@@ -59,6 +66,11 @@ export async function loadArtifacts() {
   return { artifacts: await fetchArtifacts() };
 }
 export type ArtifactsData = Awaited<ReturnType<typeof loadArtifacts>>;
+
+export async function loadHermesUpdates() {
+  return { releases: await fetchHermesUpdates(20) };
+}
+export type HermesUpdatesData = Awaited<ReturnType<typeof loadHermesUpdates>>;
 
 export async function loadRuntime() {
   return { runtime: await fetchRuntime() };

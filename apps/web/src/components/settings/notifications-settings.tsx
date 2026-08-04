@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore, useState } from "react";
-import { BellIcon, BellRingIcon, CheckCircle2Icon } from "lucide-react";
+import { BellIcon, BellRingIcon, CheckCircle2Icon, RefreshCwIcon } from "lucide-react";
 import { Card, CardSurface } from "@/components/ui/boardui";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -48,8 +48,7 @@ export function NotificationsSettings() {
           <div>
             <h3 className="text-[0.8125rem] font-medium">Alertes de mission</h3>
             <p className="mt-0.5 text-[0.6875rem] text-muted-foreground">
-              Préférences locales. Les notifications in-app arrivent en Phase 3 ; ces réglages
-              préparent le comportement.
+              Choisissez les événements de mission qui doivent attirer votre attention.
             </p>
           </div>
 
@@ -71,6 +70,39 @@ export function NotificationsSettings() {
             checked={prefs.onApproval}
             onChange={(checked) => update("onApproval", checked)}
           />
+        </CardSurface>
+      </Card>
+
+      <Card>
+        <CardSurface className="space-y-4">
+          <div className="flex items-start gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-info-soft text-info-700">
+              <RefreshCwIcon className="size-4" aria-hidden="true" />
+            </span>
+            <div>
+              <h3 className="text-[0.8125rem] font-medium">Mises à jour Hermes</h3>
+              <p className="mt-0.5 text-[0.6875rem] text-muted-foreground">
+                La Console vérifie les releases au démarrage puis toutes les 30 minutes.
+              </p>
+            </div>
+          </div>
+
+          <ToggleRow
+            label="Nouvelle version disponible"
+            description="Afficher une notification dans la Console."
+            checked={prefs.onHermesUpdate}
+            onChange={(checked) => update("onHermesUpdate", checked)}
+          />
+          <ToggleRow
+            label="Mettre à jour automatiquement"
+            description="Quand la Console est ouverte et qu’aucune mission n’utilise le runtime."
+            checked={prefs.autoUpdateHermes}
+            onChange={(checked) => update("autoUpdateHermes", checked)}
+          />
+          <p className="text-[0.6875rem] leading-5 text-muted-foreground">
+            Une installation native reçoit un backup complet. Un runtime Docker n’est automatisé
+            que si sa topologie Compose est gérée par la Console.
+          </p>
         </CardSurface>
       </Card>
 

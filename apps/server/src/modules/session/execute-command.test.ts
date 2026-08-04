@@ -59,7 +59,7 @@ describe("executeSessionCommand agent isolation", () => {
     });
     expect(result).toMatchObject({
       handled: true,
-      systemMessage: expect.stringContaining("/runs"),
+      systemMessage: expect.stringContaining("Sessions → Nouvelle mission"),
     });
   });
 });

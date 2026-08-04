@@ -25,6 +25,7 @@ import { describeError, log } from "@/observability/log";
 import {
   assertCsrf,
   AuthError,
+  developmentAuthBypassConfig,
   getSession,
   requireSiteRequestContext,
   type SiteRequestContext,
@@ -270,11 +271,18 @@ if (hasSpa) {
 // `process.exit(1)` muet. `import.meta.main` n'est vrai que si ce fichier est le
 // point d'entrée — il couvre aussi les scripts `scripts/*.ts` qui l'importent.
 if (import.meta.main) {
+  // Configuration invalide = refus de démarrer, avant d'exposer le moindre port.
+  developmentAuthBypassConfig();
   await assertSchemaMigrated();
+  // Une coupure pendant un cutover doit être réconciliée avant que le serveur
+  // puisse accepter une nouvelle mission.
+  await register();
+} else {
+  // Les tests d'intégration importent le fetcher sans démarrer le serveur.
+  void register().catch((error: unknown) => {
+    log.error("[hermes-console] startup reconcile failed", describeError(error));
+  });
 }
-
-// Un run laissé « en cours » par un arrêt brutal ne se terminerait jamais seul.
-void register();
 
 const port = Number(process.env.CONSOLE_SERVER_PORT ?? 3170);
 const hostname = process.env.CONSOLE_SERVER_HOST ?? "127.0.0.1";

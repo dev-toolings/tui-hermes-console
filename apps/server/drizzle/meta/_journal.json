@@ -218,6 +218,41 @@
       "when": 1785744000000,
       "tag": "0030_runtime_ssh_workspace",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1785747600000,
+      "tag": "0031_runtime_storage_migrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1785751200000,
+      "tag": "0032_runtime_credential_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1785780000000,
+      "tag": "0033_runtime_secret_reveal_challenges",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1785783600000,
+      "tag": "0034_hermes_releases",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1785862800000,
+      "tag": "0035_runtime_update_operations",
+      "breakpoints": true
     }
   ]
 }

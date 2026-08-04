@@ -72,10 +72,11 @@ import { NotificationsSettings } from "@/components/settings/notifications-setti
 import { Card, CardSurface, PageShell, SectionHeading } from "@/components/ui/boardui";
 
 import { DashboardScreen } from "@/screens/dashboard";
-import { MissionsScreen } from "@/screens/missions";
 import { AgentsScreen } from "@/screens/agents";
+import { SkillsScreen, SkillsSkeleton } from "@/screens/skills";
 import { ArtifactsScreen } from "@/screens/artifacts";
 import { SupportScreen } from "@/screens/support";
+import { UpdatesScreen } from "@/screens/updates";
 import { SettingsHomeScreen } from "@/screens/settings-home";
 import { SettingsRuntimeScreen } from "@/screens/settings-runtime";
 import { SettingsRetentionScreen } from "@/screens/settings-retention";
@@ -91,10 +92,11 @@ import {
   loadAgents,
   loadArtifacts,
   loadAudit,
+  loadHermesUpdates,
   loadDashboard,
-  loadMissions,
   loadRetention,
   loadRuntime,
+  loadSkills,
   loadSupport,
   loadSessions,
 } from "@/loaders";
@@ -230,7 +232,11 @@ const sessionsRoute = createRoute({
   path: "/sessions",
   validateSearch: (search: Record<string, unknown>) => ({
     source: search.source === "chat" || search.source === "mission" ? search.source : undefined,
+    view: search.view === "list" || search.view === "kanban" ? search.view : undefined,
+    filter: typeof search.filter === "string" ? search.filter.slice(0, 100) : undefined,
     q: typeof search.q === "string" ? search.q.slice(0, 200) : undefined,
+    action: search.action === "update" ? "update" as const : undefined,
+    operation: typeof search.operation === "string" ? search.operation.slice(0, 100) : undefined,
   }),
   loader: loadSessions,
   component: function SessionsRoute() {
@@ -261,29 +267,26 @@ const auditRoute = createRoute({
   errorComponent: ErrorBox,
 });
 
-// ── Missions ────────────────────────────────────────────────────────────────
+// ── Sessions de mission ─────────────────────────────────────────────────────
 const missionsRoute = createRoute({
   getParentRoute: () => consoleLayout,
   path: "/runs",
   validateSearch: (search: Record<string, unknown>) => ({
-    filter: typeof search.filter === "string" ? search.filter : undefined,
-    // Le kanban est la vue par défaut ; le tableau reste accessible par l'URL.
-    view: search.view === "table" ? ("table" as const) : ("kanban" as const),
+    view: search.view === "table" || search.view === "list" ? "list" : "kanban",
+    filter: typeof search.filter === "string" ? search.filter.slice(0, 100) : undefined,
   }),
-  loader: loadMissions,
-  component: function MissionsRoute() {
-    const { filter, view } = missionsRoute.useSearch();
-    return <MissionsScreen data={missionsRoute.useLoaderData()} filter={filter} view={view} />;
+  beforeLoad: ({ search }) => {
+    const params = new URLSearchParams({ source: "mission", view: search.view });
+    if (search.filter) params.set("filter", search.filter);
+    throw redirect({ to: `/sessions?${params.toString()}` as never, replace: true });
   },
-  pendingComponent: Pending,
-  errorComponent: ErrorBox,
 });
 
 const newMissionRoute = createRoute({
   getParentRoute: () => consoleLayout,
   path: "/runs/new",
   component: () => (
-    <PageShell className="max-w-4xl">
+    <PageShell className="mx-auto max-w-4xl">
       <SectionHeading
         title="Confier une mission"
         description="Choisissez un agent, décrivez le résultat attendu et ajoutez les fichiers nécessaires."
@@ -316,11 +319,20 @@ const agentsRoute = createRoute({
   errorComponent: ErrorBox,
 });
 
+const skillsRoute = createRoute({
+  getParentRoute: () => consoleLayout,
+  path: "/skills",
+  loader: loadSkills,
+  component: () => <SkillsScreen data={skillsRoute.useLoaderData()} />,
+  pendingComponent: SkillsSkeleton,
+  errorComponent: ErrorBox,
+});
+
 const newAgentRoute = createRoute({
   getParentRoute: () => consoleLayout,
   path: "/agents/new",
   component: () => (
-    <PageShell className="max-w-4xl">
+    <PageShell className="mx-auto max-w-4xl">
       <SectionHeading
         title="Définir un agent"
         description="La configuration appartient à Hermes Console. Elle sera injectée dans le prompt système lors du lancement."
@@ -360,6 +372,29 @@ const supportRoute = createRoute({
   path: "/support",
   loader: loadSupport,
   component: () => <SupportScreen data={supportRoute.useLoaderData()} />,
+  pendingComponent: Pending,
+  errorComponent: ErrorBox,
+});
+
+const updatesRoute = createRoute({
+  getParentRoute: () => consoleLayout,
+  path: "/updates",
+  validateSearch: (search: Record<string, unknown>) => ({
+    kind:
+      search.kind === "features" ||
+      search.kind === "improvements" ||
+      search.kind === "suppressions"
+        ? (search.kind as
+            | "features"
+            | "improvements"
+            | "suppressions")
+        : "all",
+    q: typeof search.q === "string" ? search.q.slice(0, 200) : undefined,
+  }),
+  loader: loadHermesUpdates,
+  component: () => (
+    <UpdatesScreen data={updatesRoute.useLoaderData()} search={updatesRoute.useSearch()} />
+  ),
   pendingComponent: Pending,
   errorComponent: ErrorBox,
 });
@@ -468,7 +503,14 @@ const settingsHomeRoute = createRoute({
 const settingsRuntimeRoute = createRoute({
   getParentRoute: () => settingsLayout,
   path: "/settings/runtime",
-  component: SettingsRuntimeScreen,
+  validateSearch: (search: Record<string, unknown>) => ({
+    // Absent : l'onglet suit le transport déjà configuré. Présent : l'URL
+    // force l'onglet (lien partagé, retour arrière), même avant le chargement.
+    mode: search.mode === "direct" || search.mode === "ssh" ? search.mode : undefined,
+  }),
+  component: function SettingsRuntimeRoute() {
+    return <SettingsRuntimeScreen search={settingsRuntimeRoute.useSearch()} />;
+  },
 });
 
 const settingsModelsRoute = createRoute({
@@ -551,6 +593,7 @@ export const routeTree = rootRoute.addChildren([
     newMissionRoute,
     missionDetailRoute,
     agentsRoute,
+    skillsRoute,
     newAgentRoute,
     agentDetailRoute,
     artifactsRoute,
@@ -559,6 +602,7 @@ export const routeTree = rootRoute.addChildren([
     ...legacyChatRoutes,
     legacyChatSessionRoute,
     legacyChatSessionSingularRoute,
+    updatesRoute,
     settingsLayout.addChildren([
       settingsHomeRoute,
       settingsRuntimeRoute,

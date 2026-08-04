@@ -4,6 +4,8 @@ import type { SiteRequestContext } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
 import { assertRuntimeWorkspaceReady } from "@/modules/runtime/config";
 import { acquireRunStartLease } from "./active-runtime-guard";
+import { assertNoBlockingStorageMigration } from "@/modules/runtime/ssh/storage-migration";
+import { assertNoBlockingRuntimeUpdate } from "@/modules/runtime/update-operations";
 
 export type RetryRunResult = {
   threadId: string;
@@ -28,6 +30,8 @@ export async function retryRun(context: SiteRequestContext, runId: string): Prom
     );
   }
 
+  await assertNoBlockingStorageMigration();
+  await assertNoBlockingRuntimeUpdate();
   const releaseRunStart = acquireRunStartLease();
   try {
     await assertRuntimeWorkspaceReady();

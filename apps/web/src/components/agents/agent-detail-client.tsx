@@ -51,7 +51,10 @@ export function AgentDetailClient({ agent }: { agent: AgentView }) {
     try {
       const response = await fetch(`/api/agents/${agent.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Hermes-Toast": "updated",
+        },
         body: JSON.stringify({ archive }),
       });
       const body = (await response.json()) as { error?: { message?: string } };
@@ -80,7 +83,10 @@ export function AgentDetailClient({ agent }: { agent: AgentView }) {
     setError(null);
     setPendingAction("delete");
     try {
-      const response = await fetch(`/api/agents/${agent.id}`, { method: "DELETE" });
+      const response = await fetch(`/api/agents/${agent.id}`, {
+        method: "DELETE",
+        headers: { "X-Hermes-Toast": "deleted" },
+      });
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as
           | { error?: { message?: string } }

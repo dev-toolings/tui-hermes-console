@@ -102,6 +102,19 @@ export function entriesForHost(entries: KnownHostEntry[], lookup: string): Known
   );
 }
 
+/**
+ * Host keys are negotiated by algorithm. A server may legitimately publish
+ * ED25519, RSA and ECDSA keys at the same time; compare rotations only within
+ * the algorithm currently being accepted.
+ */
+export function entriesForHostKeyType(
+  entries: KnownHostEntry[],
+  lookup: string,
+  keyType: string,
+): KnownHostEntry[] {
+  return entriesForHost(entries, lookup).filter((entry) => entry.keyType === keyType);
+}
+
 export type HostKeyVerdict =
   | { ok: true }
   | { ok: false; reason: "unknown_host" | "key_mismatch" | "revoked" };

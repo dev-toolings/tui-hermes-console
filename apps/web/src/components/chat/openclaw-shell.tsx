@@ -544,6 +544,7 @@ function OpenClawSessionSidebar({
     try {
       const response = await fetch(`/api/threads/${encodeURIComponent(session.id)}`, {
         method: "DELETE",
+        headers: { "X-Hermes-Toast": "deleted" },
       });
       if (!response.ok) {
         const body = (await response.json()) as { error?: { message?: string } };

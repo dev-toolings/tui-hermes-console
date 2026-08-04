@@ -152,7 +152,10 @@ function ConnectorCard({
               try {
                 const response = await fetch(`/api/connectors/${type}`, {
                   method: "PUT",
-                  headers: { "Content-Type": "application/json" },
+                  headers: {
+                    "Content-Type": "application/json",
+                    "X-Hermes-Toast": connector ? "updated" : "created",
+                  },
                   body: JSON.stringify({
                     email,
                     imapHost,
@@ -182,7 +185,10 @@ function ConnectorCard({
               setTesting(true);
               setMessage(null);
               try {
-                const response = await fetch(`/api/connectors/${type}/test`, { method: "POST" });
+                const response = await fetch(`/api/connectors/${type}/test`, {
+                  method: "POST",
+                  headers: { "X-Hermes-Toast": "0" },
+                });
                 const body = (await response.json()) as { error?: { message?: string } };
                 if (!response.ok) throw new Error(body.error?.message ?? "Test IMAP échoué.");
                 setMessage("Connexion IMAP validée.");
@@ -203,7 +209,10 @@ function ConnectorCard({
               variant="ghost"
               onClick={async () => {
                 if (!window.confirm("Supprimer ce connecteur ?")) return;
-                const response = await fetch(`/api/connectors/${type}`, { method: "DELETE" });
+                const response = await fetch(`/api/connectors/${type}`, {
+                  method: "DELETE",
+                  headers: { "X-Hermes-Toast": "deleted" },
+                });
                 if (!response.ok) {
                   const body = (await response.json()) as { error?: { message?: string } };
                   setMessage(body.error?.message ?? "Suppression impossible.");

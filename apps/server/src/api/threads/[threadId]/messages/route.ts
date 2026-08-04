@@ -15,6 +15,8 @@ import { withCurrentAiDisclosureConsent } from "@/modules/setup/ai-disclosure";
 import type { AuthenticatedRouteContext } from "@/modules/api/route-context";
 import { assertRuntimeWorkspaceReady } from "@/modules/runtime/config";
 import { acquireRunStartLease } from "@/modules/runs/active-runtime-guard";
+import { assertNoBlockingStorageMigration } from "@/modules/runtime/ssh/storage-migration";
+import { assertNoBlockingRuntimeUpdate } from "@/modules/runtime/update-operations";
 
 const messageSchema = z.object({
   message: z.string().trim().min(1).max(100_000),
@@ -48,6 +50,8 @@ export async function POST(
         message = messageSchema.parse(await request.json()).message;
       }
 
+    await assertNoBlockingStorageMigration();
+    await assertNoBlockingRuntimeUpdate();
       const releaseRunStart = acquireRunStartLease();
       try {
         await assertRuntimeWorkspaceReady();

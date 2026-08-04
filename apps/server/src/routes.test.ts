@@ -24,6 +24,7 @@ describe("route authorization inventory", () => {
       "/api/runtime/dashboard",
       "/api/runtime/models",
       "/api/runtime/probe",
+      "/api/runtime/events",
       "/api/runtime/restart",
       "/api/runtime/update",
       "/api/runtime/update/:operationId",

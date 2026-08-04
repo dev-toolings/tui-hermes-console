@@ -88,10 +88,10 @@ export function SupportScreen({ data }: { data: SupportData }) {
             </span>
           </span>
           <Link
-            href="/runs"
+            href="/sessions?source=mission"
             className="text-[0.75rem] font-medium text-primary hover:underline"
           >
-            Voir les missions
+            Voir les sessions
           </Link>
         </CardSurface>
       </Card>

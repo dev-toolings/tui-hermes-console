@@ -28,9 +28,12 @@ export type WorkspaceInspection = {
     type: "bind" | "volume";
     source: string;
     destination: string;
+    name: string | null;
+    driver: string | null;
   } | null;
   containerName: string | null;
   ambiguousDocker: boolean;
+  dockerComposeAvailable: boolean;
   nativeServiceUser: string | null;
 };
 
@@ -58,10 +61,13 @@ export function parseWorkspaceInspection(output: string): WorkspaceInspection {
             type: mountType,
             source: values.mount_source.trim(),
             destination: values.mount_destination.trim(),
+            name: values.mount_name?.trim() || null,
+            driver: values.mount_driver?.trim() || null,
           }
         : null,
     containerName: values.container_name?.trim() || null,
     ambiguousDocker: values.docker_ambiguous === "yes",
+    dockerComposeAvailable: values.docker_compose === "available",
     nativeServiceUser: values.native_service_user?.trim() || null,
   };
 }
@@ -195,6 +201,7 @@ export async function discoverSshWorkspace(
     const candidates = buildWorkspaceCandidates(inspection, states);
     const warnings: string[] = [];
     const blockers: string[] = [];
+    let storageMigration: RuntimeSshWorkspaceDiscoveryDto["storageMigration"];
     if (inspection.mode === "unknown") {
       warnings.push("Hermes n’a pas été identifié comme service natif ou conteneur géré par la Console.");
     }
@@ -202,6 +209,21 @@ export async function discoverSshWorkspace(
       blockers.push(
         "Le volume Docker /opt/data n’expose aucun chemin hôte utilisable en SFTP. Recréez le conteneur avec un bind mount.",
       );
+      const eligible =
+        inspection.containerName === "hermes-console-runtime" &&
+        stored.target.user === "root" &&
+        inspection.dockerMount.driver === "local" &&
+        Boolean(inspection.dockerMount.name) &&
+        inspection.dockerComposeAvailable;
+      storageMigration = {
+        state: eligible ? "available" : "manual_required",
+        reasonCode: eligible
+          ? "SSH_DOCKER_VOLUME_MIGRATION_AVAILABLE"
+          : "SSH_DOCKER_VOLUME_MIGRATION_MANUAL_REQUIRED",
+        defaultTargetRoot: "/srv/hermes-console/data",
+        sourceVolume: inspection.dockerMount.name,
+        sourceBytes: null,
+      };
     }
     if (inspection.ambiguousDocker) {
       blockers.push(
@@ -223,11 +245,18 @@ export async function discoverSshWorkspace(
         hermesHome: inspection.hermesHome,
         terminalCwd: inspection.terminalCwd,
         resolvedTerminalCwd: inspection.resolvedTerminalCwd,
-        dockerMount: inspection.dockerMount,
+        dockerMount: inspection.dockerMount
+          ? {
+              type: inspection.dockerMount.type,
+              source: inspection.dockerMount.source,
+              destination: inspection.dockerMount.destination,
+            }
+          : null,
       },
       candidates,
       warnings,
       blockers,
+      storageMigration,
       checkedAt: new Date().toISOString(),
     };
   });
@@ -333,7 +362,8 @@ function workspaceInspectionCommand(user: string) {
     `  terminal_cwd="$(${docker} exec "$hermes_container" hermes config get terminal.cwd 2>/dev/null | tail -n 1)"`,
     '  [ -n "$terminal_cwd" ] || terminal_cwd="."',
     '  if [ "$terminal_cwd" = "." ]; then resolved_cwd=/opt/data; else resolved_cwd="$terminal_cwd"; fi',
-    `  ${docker} inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{printf "mount_type=%s\\nmount_source=%s\\nmount_destination=%s\\n" .Type .Source .Destination}}{{end}}{{end}}' "$hermes_container" 2>/dev/null`,
+    `  ${docker} inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{printf "mount_type=%s\\nmount_source=%s\\nmount_destination=%s\\nmount_name=%s\\nmount_driver=%s\\n" .Type .Source .Destination .Name .Driver}}{{end}}{{end}}' "$hermes_container" 2>/dev/null`,
+    `  if ${docker} compose version >/dev/null 2>&1; then printf "docker_compose=available\\n"; else printf "docker_compose=missing\\n"; fi`,
     "elif command -v hermes >/dev/null 2>&1; then",
     '  printf "mode=native\\n"',
     '  if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet hermes-gateway.service 2>/dev/null; then printf "native_service_user=%s\\n" "$(id -un)"; fi',

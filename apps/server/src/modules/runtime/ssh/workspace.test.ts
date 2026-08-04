@@ -42,8 +42,17 @@ describe("SSH workspace discovery", () => {
       "mount_type=volume",
       "mount_source=hermes-data",
       "mount_destination=/opt/data",
+      "mount_name=hermes-console-runtime-data",
+      "mount_driver=local",
+      "docker_compose=available",
     ].join("\n"));
     expect(buildWorkspaceCandidates(inspection, {})).toEqual([]);
+    expect(inspection.dockerMount).toMatchObject({
+      type: "volume",
+      name: "hermes-console-runtime-data",
+      driver: "local",
+    });
+    expect(inspection.dockerComposeAvailable).toBe(true);
   });
 
   test("never recommends the remote home root as the exchange folder", () => {

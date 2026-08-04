@@ -29,6 +29,8 @@ const inspection: RuntimeSshInspectionDto = {
     hermesVersion: null,
     hermesMode: "unknown",
     port8642: "closed",
+    dashboard: "closed",
+    dashboardManager: "unknown",
     workdir: "missing",
   },
   warnings: [],
@@ -54,8 +56,18 @@ describe("SSH provisioning plan", () => {
       "workdir",
       "docker",
       "hermes-docker",
+      "dashboard",
       "verify",
     ]);
+    expect(plan.steps.find((step) => step.id === "dashboard")?.commandPreview).toContain(
+      "--network host",
+    );
+    expect(plan.steps.find((step) => step.id === "dashboard")?.commandPreview).toContain(
+      "--host 127.0.0.1",
+    );
+    expect(plan.steps.find((step) => step.id === "hermes-docker")?.commandPreview).toContain(
+      "--label hermes.console.managed=true",
+    );
     expect(JSON.stringify(plan)).not.toContain("super-secret-token");
   });
 

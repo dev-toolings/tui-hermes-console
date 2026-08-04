@@ -29,6 +29,7 @@ import {
   setModelSettingsClient,
   type ModelSettingsDto,
 } from "@/lib/runtime/models-client";
+import { useRuntimeStatus } from "@/components/shell/use-runtime-status";
 import {
   DEFAULT_REASONING_EFFORT,
   HERMES_REASONING_EFFORT_LABELS,
@@ -67,6 +68,7 @@ function selectionFromSettings(body: ModelSettingsDto): {
 }
 
 export function ModelSettings() {
+  const runtimeStatus = useRuntimeStatus();
   const cached = peekModelSettingsClient();
   const initialSelection = cached ? selectionFromSettings(cached) : null;
   const [state, setState] = useState<LoadState>(
@@ -114,7 +116,7 @@ export function ModelSettings() {
 
   useEffect(() => {
     let active = true;
-    void getModelSettingsClient()
+    void getModelSettingsClient({ refresh: true })
       .then((body) => {
         if (!active) return;
         applySelection(body);
@@ -155,7 +157,10 @@ export function ModelSettings() {
     try {
       const response = await fetch("/api/runtime/models", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Hermes-Toast": "updated",
+        },
         body: JSON.stringify({
           provider: selectedProvider,
           model: selectedModel,
@@ -189,6 +194,7 @@ export function ModelSettings() {
     try {
       const response = await fetch("/api/runtime/providers/openai-codex/auth", {
         method: "POST",
+        headers: { "X-Hermes-Toast": "0" },
       });
       const body = (await response.json()) as CodexAuthSession & {
         error?: { message?: string };
@@ -215,7 +221,7 @@ export function ModelSettings() {
     if (!auth?.sessionId) return;
     await fetch(
       `/api/runtime/providers/openai-codex/auth?sessionId=${encodeURIComponent(auth.sessionId)}`,
-      { method: "DELETE" },
+      { method: "DELETE", headers: { "X-Hermes-Toast": "0" } },
     );
     setAuth(null);
   }
@@ -232,7 +238,10 @@ export function ModelSettings() {
         `/api/runtime/providers/${encodeURIComponent(providerSlug)}/credentials`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "X-Hermes-Toast": "0",
+          },
           body: JSON.stringify({ apiKey }),
         },
       );
@@ -308,10 +317,13 @@ export function ModelSettings() {
 
   const providers = state.kind === "ready" ? state.data.catalog.providers : [];
   const activeProvider = providers.find((provider) => provider.slug === selectedProvider);
-  const selectableProviders = providers.filter(
-    (provider) => provider.authenticated && provider.models.length > 0,
+  const connectedProviders = providers.filter(
+    (provider) =>
+      provider.authenticated &&
+      provider.source !== "hermes_runtime" &&
+      provider.authType !== "virtual",
   );
-  const modelCount = selectableProviders.reduce(
+  const modelCount = connectedProviders.reduce(
     (count, provider) => count + provider.models.length,
     0,
   );
@@ -326,9 +338,16 @@ export function ModelSettings() {
               <p className="text-[0.8125rem] font-semibold">Modèle LLM par défaut</p>
               {state.kind === "ready" ? (
                 <>
-                  <Badge tone="info">{selectableProviders.length} providers connectés</Badge>
-                  <Badge>{modelCount} modèles</Badge>
+                  <Badge tone={connectedProviders.length > 0 ? "info" : "warning"}>
+                    {connectedProviders.length} providers authentifiés
+                  </Badge>
+                  <Badge>{modelCount} modèles accessibles</Badge>
                 </>
+              ) : null}
+              {runtimeStatus.runtime?.configured ? (
+                <Badge tone={runtimeStatus.healthy ? "success" : "warning"}>
+                  Runtime · {runtimeStatus.runtime.transport === "ssh" ? "Tunnel SSH" : "Accès direct"}
+                </Badge>
               ) : null}
             </div>
             <p className="mt-1 max-w-[70ch] text-[0.6875rem] leading-5 text-muted-foreground">
@@ -387,7 +406,7 @@ export function ModelSettings() {
                   <SelectTrigger id="llm-provider" className="mt-2">
                     <SelectValue placeholder="Choisir un provider" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-[50dvh]">
                     <SelectGroup>
                       {state.data.catalog.providers.map((provider) => (
                         <SelectItem key={provider.slug} value={provider.slug}>
@@ -404,56 +423,45 @@ export function ModelSettings() {
                 </Select>
               </div>
 
-              <div>
-                <label
-                  htmlFor="llm-model"
-                  className="block text-[0.75rem] font-medium"
-                >
-                  Modèle actif pour les prochains fils
-                </label>
-                <Select
-                  value={selectedModel || undefined}
-                  disabled={
-                    saving ||
-                    !activeProvider?.authenticated ||
-                    !activeProvider.models.length
-                  }
-                  onValueChange={(value) => {
-                    const model = activeProvider?.models.find((item) => item.id === value);
-                    setSelectedModel(value);
-                    setSelectedEffort(
-                      model?.reasoning
-                        ? isHermesReasoningEffort(selectedEffort)
-                          ? selectedEffort
-                          : DEFAULT_REASONING_EFFORT
-                        : "",
-                    );
-                    setSaved(false);
-                  }}
-                >
-                  <SelectTrigger id="llm-model" className="mt-2">
-                    <SelectValue
-                      placeholder={
-                        activeProvider?.authenticated
-                          ? "Aucun modèle retourné par Hermes"
-                          : "Connectez ce provider pour charger ses modèles"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {(activeProvider?.models ?? []).map((model) => (
-                        <SelectItem key={model.id} value={model.id}>
-                          {model.id}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <span className="mt-2 block text-[0.6875rem] text-muted-foreground">
-                  Valeur Hermes actuelle : {state.data.catalog.runtimeDefaultModel}
-                </span>
-              </div>
+              {activeProvider?.authenticated ? (
+                <div>
+                  <label
+                    htmlFor="llm-model"
+                    className="block text-[0.75rem] font-medium"
+                  >
+                    Modèle actif pour les prochains fils
+                  </label>
+                  <Select
+                    value={selectedModel || undefined}
+                    disabled={saving || !activeProvider.models.length}
+                    onValueChange={(value) => {
+                      const model = activeProvider.models.find((item) => item.id === value);
+                      setSelectedModel(value);
+                      setSelectedEffort(
+                        model?.reasoning
+                          ? isHermesReasoningEffort(selectedEffort)
+                            ? selectedEffort
+                            : DEFAULT_REASONING_EFFORT
+                          : "",
+                      );
+                      setSaved(false);
+                    }}
+                  >
+                    <SelectTrigger id="llm-model" className="mt-2">
+                      <SelectValue placeholder="Aucun modèle retourné par Hermes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {activeProvider.models.map((model) => (
+                          <SelectItem key={model.id} value={model.id}>
+                            {model.id}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
 
               {selected?.reasoning ? (
                 <div>

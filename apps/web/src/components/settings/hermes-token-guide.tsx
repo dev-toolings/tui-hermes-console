@@ -168,8 +168,9 @@ API_SERVER_KEY=<votre-clé>`}</Pre>
           <Section title="Côté Console">
             <p>
               Le token est chiffré au repos (AES-256-GCM, clé dérivée de{" "}
-              <Code>APP_ENCRYPTION_KEY</Code>) et n’est jamais réaffiché. Un champ laissé vide
-              conserve la valeur enregistrée — <strong>Enregistrer</strong> ne le redemande pas. La
+              <Code>APP_ENCRYPTION_KEY</Code>) et reste masqué par défaut. Le bouton de révélation
+              demande un code OTP à votre adresse de session. Un champ laissé vide conserve la
+              valeur enregistrée — <strong>Enregistrer</strong> ne le redemande pas. La
               variable d’environnement <Code>HERMES_RUNTIME_TOKEN</Code> ne sert que de repli quand
               aucune connexion n’est stockée en base.
             </p>

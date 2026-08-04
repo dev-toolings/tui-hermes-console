@@ -12,7 +12,7 @@ import { WORK_NAV, activeNavHref, navForCapabilities } from "./nav-config";
 
 /**
  * Les objets de travail sont les premiers repères du rail. Les actions de
- * création restent dans Chat et Missions ; la recherche globale reste dans
+ * création restent dans Chat et Sessions ; la recherche globale reste dans
  * l'en-tête et avec ⌘K, sans contrôle dupliqué ici.
  */
 export function NavMain({

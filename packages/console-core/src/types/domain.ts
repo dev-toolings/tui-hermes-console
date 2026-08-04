@@ -42,6 +42,16 @@ export type RuntimeTransport = "direct" | "ssh";
  *  `password` = ssh2 avec un mot de passe stocké chiffré. */
 export type RuntimeSshAuth = "agent" | "password";
 
+/** Gestion du secret API Hermes côté cible distante. */
+export type RuntimeManagementMode = "external" | "managed";
+
+export type RuntimeCredentialAdapter =
+  | "native_systemd"
+  | "docker"
+  | "compose"
+  | "manual"
+  | "unknown";
+
 /** État du volume d'échange requis par un runtime distant. */
 export type RuntimeWorkspaceStatus =
   | "not_required"

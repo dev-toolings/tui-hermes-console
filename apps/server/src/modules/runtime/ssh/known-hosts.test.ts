@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createHmac, randomBytes } from "node:crypto";
 import {
   configuredKnownHostsPath,
+  entriesForHostKeyType,
   hostLookupKey,
   parseKnownHosts,
   verifyHostKey,
@@ -59,6 +60,19 @@ describe("parseKnownHosts", () => {
 });
 
 describe("verifyHostKey", () => {
+  test("isole une autre clé du même algorithme sans bloquer les algorithmes parallèles", () => {
+    const entries = parseKnownHosts(
+      `srv.example ssh-rsa ${KEY_B}\nsrv.example ssh-ed25519 ${KEY_A}`,
+    );
+
+    expect(entriesForHostKeyType(entries, "srv.example", "ssh-ed25519")).toEqual([
+      expect.objectContaining({ keyType: "ssh-ed25519", keyBase64: KEY_A }),
+    ]);
+    expect(entriesForHostKeyType(entries, "srv.example", "ssh-rsa")).toEqual([
+      expect.objectContaining({ keyType: "ssh-rsa", keyBase64: KEY_B }),
+    ]);
+  });
+
   test("accepte une clé enregistrée en clair", () => {
     const entries = parseKnownHosts(`srv.example ssh-ed25519 ${KEY_A}`);
     expect(verifyHostKey(entries, "srv.example", KEY_A)).toEqual({ ok: true });

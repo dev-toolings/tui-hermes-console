@@ -1,15 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { z } from "zod";
 import { apiErrorResponse } from "@/modules/api/errors";
-import { resolveHermesRuntimeConfig } from "@/modules/runtime/config";
 import { HermesRuntimeError } from "@/modules/runtime/hermes-adapter";
-import { hermesCliExecutable } from "@/modules/runtime/local-management";
+import { resolveAvailableRuntimeModelSelection } from "@/modules/runtime/available-model-selection";
+import {
+  startHermesCommand,
+  type HermesCommandSession,
+} from "@/modules/runtime/local-management";
 
 type AuthStatus = "starting" | "pending" | "connected" | "failed" | "cancelled";
 type AuthSession = {
   id: string;
-  process: ChildProcessWithoutNullStreams;
+  process: HermesCommandSession;
   status: AuthStatus;
   verificationUri: string | null;
   userCode: string | null;
@@ -32,7 +34,6 @@ const authSessions =
 
 export async function POST() {
   try {
-    await assertLocalHermesRuntime();
     cleanupExpiredSessions();
 
     const existing = [...authSessions.values()].find(
@@ -41,17 +42,9 @@ export async function POST() {
     if (existing) return Response.json(toPublicSession(existing));
 
     const id = randomUUID();
-    const child = spawn(
-      hermesCliExecutable(),
+    const child = await startHermesCommand(
       ["auth", "add", "openai-codex", "--no-browser"],
-      {
-        env: {
-          ...process.env,
-          NO_COLOR: "1",
-          PYTHONUNBUFFERED: "1",
-        },
-        stdio: ["pipe", "pipe", "pipe"],
-      },
+      { pseudoTerminal: true },
     );
     const session: AuthSession = {
       id,
@@ -66,8 +59,8 @@ export async function POST() {
     };
     authSessions.set(id, session);
 
-    const onOutput = (chunk: Buffer) => {
-      session.output = stripAnsi(`${session.output}${chunk.toString("utf8")}`).slice(-20_000);
+    const onOutput = (chunk: string) => {
+      session.output = stripAnsi(`${session.output}${chunk}`).slice(-20_000);
       session.verificationUri =
         session.output.match(/https:\/\/auth\.openai\.com\/codex\/device\b/i)?.[0] ??
         session.verificationUri;
@@ -76,26 +69,29 @@ export async function POST() {
         session.userCode;
       if (session.verificationUri && session.userCode) session.status = "pending";
     };
-    child.stdout.on("data", onOutput);
-    child.stderr.on("data", onOutput);
-    child.on("error", (error) => {
-      session.status = "failed";
-      session.error = `Impossible de démarrer Hermes CLI (${error.message}).`;
-    });
-    child.on("exit", (code, signal) => {
-      if (session.status === "cancelled") return;
-      if (code === 0) {
-        session.status = "connected";
-        session.error = null;
-      } else {
+    child.onOutput(({ chunk }) => onOutput(chunk));
+    void child.result
+      .then(async ({ code }) => {
+        if (session.status === "cancelled") return;
+        if (code === 0) {
+          await activateAvailableModelAfterCodexAuth();
+          session.status = "connected";
+          session.error = null;
+        } else {
+          session.status = "failed";
+          session.error =
+            extractSafeError(session.output) ??
+            `Hermes CLI a quitté le flux d’autorisation (code ${code}).`;
+        }
+      })
+      .catch((error: unknown) => {
+        if (session.status === "cancelled") return;
         session.status = "failed";
         session.error =
-          signal === "SIGTERM"
-            ? "Connexion OpenAI annulée."
-            : extractSafeError(session.output) ??
-              `Hermes CLI a quitté le flux d’autorisation (code ${code ?? "inconnu"}).`;
-      }
-    });
+          error instanceof Error
+            ? error.message
+            : "Impossible de suivre l’autorisation Hermes.";
+      });
 
     await new Promise((resolve) => setTimeout(resolve, 250));
     return Response.json(toPublicSession(session), { status: 202 });
@@ -135,7 +131,7 @@ export async function DELETE(request: Request) {
     if (session.status === "starting" || session.status === "pending") {
       session.status = "cancelled";
       session.error = null;
-      session.process.kill("SIGTERM");
+      session.process.kill();
     }
     return Response.json(toPublicSession(session));
   } catch (error) {
@@ -143,17 +139,16 @@ export async function DELETE(request: Request) {
   }
 }
 
-async function assertLocalHermesRuntime() {
-  const config = await resolveHermesRuntimeConfig();
-  // Cf. assertLocalHermesRuntime : en mode tunnel, 127.0.0.1 n'est pas la machine d'Hermes.
-  const hostname =
-    config.transport === "ssh" ? "remote" : new URL(config.baseUrl).hostname;
-  if (!["127.0.0.1", "localhost", "::1"].includes(hostname)) {
-    throw new HermesRuntimeError(
-      "Le runtime Hermes est distant et n’expose pas son API OAuth. Lancez `hermes auth add openai-codex` sur cette machine.",
-      501,
-      "HERMES_REMOTE_OAUTH_UNAVAILABLE",
-    );
+async function activateAvailableModelAfterCodexAuth() {
+  try {
+    await resolveAvailableRuntimeModelSelection({
+      preferredProvider: "openai-codex",
+      repairPersisted: true,
+    });
+  } catch {
+    // L’authentification reste valide même si le catalogue n’est pas encore
+    // disponible pour réparer la sélection globale. Le prochain refresh ou
+    // le resolver de run réessaiera avec le provider authentifié.
   }
 }
 
@@ -163,7 +158,7 @@ function cleanupExpiredSessions() {
     if (session.expiresAt > now) continue;
     if (session.status === "starting" || session.status === "pending") {
       session.status = "cancelled";
-      session.process.kill("SIGTERM");
+      session.process.kill();
     }
     authSessions.delete(id);
   }

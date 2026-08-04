@@ -152,8 +152,9 @@ Parcours : `/agents/new` → `/runs/new` → `/runs/thr_*` → composer (± piè
 
 ## Le spike en bref
 
-Hermes v0.19.0 installé en natif. La bonne surface est le **serveur API `:8642`**
-(`API_SERVER_ENABLED=true`), pas le dashboard `:9119`.
+Hermes v0.19.0 installé en natif. La bonne surface d’exécution est le **serveur API `:8642`**
+(`API_SERVER_ENABLED=true`) ; le Dashboard `:9119` est la surface d’administration des skills,
+de la configuration et des outils. Les deux processus restent supervisés séparément.
 
 ```text
 POST /v1/runs            -> 202 { run_id, status }

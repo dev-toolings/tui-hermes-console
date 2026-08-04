@@ -38,6 +38,9 @@ describeWithCompose("G1-002A managed Hermes Compose boundary", () => {
           image?: string;
           user?: string;
           working_dir?: string;
+          entrypoint?: string[];
+          command?: string[];
+          environment?: Record<string, string | number | boolean>;
           read_only?: boolean;
           security_opt?: string[];
           cap_drop?: string[];
@@ -56,9 +59,17 @@ describeWithCompose("G1-002A managed Hermes Compose boundary", () => {
         image: fixtureDigest,
         user: "65532:65532",
         working_dir: "/work",
+        entrypoint: ["/bin/sh", "-c"],
         read_only: true,
         pids_limit: 256,
       });
+      expect(hermes?.command?.join(" ")).toContain("/run/secrets/hermes_runtime_token");
+      expect(hermes?.environment).toMatchObject({
+        API_SERVER_ENABLED: "true",
+        API_SERVER_HOST: "0.0.0.0",
+        API_SERVER_PORT: "8642",
+      });
+      expect(JSON.stringify(hermes)).not.toContain("synthetic-token");
       expect(Number(hermes?.cpus)).toBe(2);
       expect(["1G", "1073741824", 1073741824]).toContain(hermes?.mem_limit ?? "");
       expect(hermes?.security_opt).toContain("no-new-privileges:true");

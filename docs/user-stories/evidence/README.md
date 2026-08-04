@@ -6,6 +6,10 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 
 ## Rapports disponibles
 
+- [02-08-2026 — migration du stockage Docker Hermes](2026-08-02-gate-1-ssh-storage-migration.md) :
+  cutover réel du volume `/opt/data` vers `/srv/hermes-console/data`, manifestes identiques,
+  sauvegarde vérifiable, sondes Hermes/SFTP et rollback automatique réellement déclenché ; reviewer,
+  mission avec artefact et sauvegarde externe restent ouverts.
 - [02-08-2026 — connectivité Hermes native, Docker locale et Docker VPS](2026-08-02-gate-1-hermes-runtime-connectivity.md) :
   Console en arrière-plan, probes réels `/health` + `/v1/capabilities` et tunnel créé par le module
   SSH du projet ; SFTP, compte non-root, confinement et acceptation Gate restent ouverts.

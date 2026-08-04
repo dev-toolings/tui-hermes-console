@@ -101,6 +101,9 @@ export async function inspectSshTarget(
   }
   if (values.workdir === "missing") warnings.push("Le workdir distant sera créé pendant le provisioning.");
   if (values.hermes === "unreachable") warnings.push("Hermes n’est pas encore joignable sur l’URL distante.");
+  if (values.dashboard !== "listening") {
+    warnings.push("Le Dashboard Hermes n’est pas disponible sur le port 9119 et sera préparé si le mode Docker est utilisé.");
+  }
 
   return {
     target: { host: target.host, port: target.port, user: target.user },
@@ -138,6 +141,21 @@ export async function inspectSshTarget(
       hermesVersion: values.hermes_version || null,
       hermesMode: values.hermes_mode === "docker" ? "docker" : values.hermes_mode === "native" ? "native" : "unknown",
       port8642: values.port8642 === "listening" ? "listening" : values.port8642 === "closed" ? "closed" : "unknown",
+      dashboard:
+        values.dashboard === "listening"
+          ? "listening"
+          : values.dashboard === "closed"
+            ? "closed"
+            : "unknown",
+      dashboardManager:
+        values.dashboard_manager === "systemd-user" ||
+        values.dashboard_manager === "systemd-system" ||
+        values.dashboard_manager === "docker" ||
+        values.dashboard_manager === "docker-s6" ||
+        values.dashboard_manager === "s6" ||
+        values.dashboard_manager === "cli"
+          ? values.dashboard_manager
+          : "unknown",
       workdir:
         values.workdir === "ready"
           ? "ready"
@@ -216,8 +234,15 @@ export function buildSshProvisionPlan(
         id: "hermes-docker",
         label: "Déployer Hermes Docker",
         description: "Lancer Hermes sur loopback :8642 avec redémarrage automatique.",
-        commandPreview: `docker run --name ${DOCKER_NAME} -p 127.0.0.1:8642:8642 -v ${remoteWorkdir}:/opt/data ${DOCKER_IMAGE}`,
+        commandPreview: `docker run --name ${DOCKER_NAME} --label hermes.console.managed=true --env-file ${remoteWorkdir}/runtime.env -p 127.0.0.1:8642:8642 -v ${remoteWorkdir}:/opt/data ${DOCKER_IMAGE} gateway run`,
         destructive: Boolean(inspection?.remote.hermes === "healthy"),
+      },
+      {
+        id: "dashboard",
+        label: "Préparer le Dashboard Hermes",
+        description: "Démarrer un service Dashboard persistant sur loopback :9119, sans remplacer Hermes API.",
+        commandPreview: `docker run --name hermes-console-dashboard --restart unless-stopped --network host -v ${remoteWorkdir}:/opt/data ${DOCKER_IMAGE} dashboard --host 127.0.0.1 --port 9119 --no-open`,
+        destructive: false,
       },
     );
   }
@@ -310,10 +335,6 @@ async function provisionSshRuntimeOnChannel(
     const existingContainer = await channel.exec(
       `${sudoPrefix(input.target.user)} docker inspect ${shellQuote(DOCKER_NAME)} >/dev/null 2>&1`,
     );
-    if (existingContainer.code === 0 && !token) {
-      throw new Error("Un token Hermes explicite est requis pour réparer un conteneur existant.");
-    }
-    const tokenLine = token ? `TOKEN=${shellQuote(token)}` : "TOKEN=$(openssl rand -hex 32)";
     activatedHostWorkdir = `${remoteWorkdir.replace(/\/+$/, "")}/workspace`;
     activatedHermesWorkdir = "/opt/data/workspace";
     await runRemote(
@@ -324,17 +345,26 @@ async function provisionSshRuntimeOnChannel(
       channel,
       [
         "set -eu",
-        tokenLine,
         `if ${sudoPrefix(input.target.user)} docker inspect ${shellQuote(DOCKER_NAME)} >/dev/null 2>&1; then`,
+        `  TOKEN="$(${sudoPrefix(input.target.user)}docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' ${shellQuote(DOCKER_NAME)} | sed -n 's/^API_SERVER_KEY=//p' | head -1)"`,
+        `  test -n "$TOKEN" || { echo 'API_SERVER_KEY absent du conteneur existant' >&2; exit 1; }`,
         `  ${sudoPrefix(input.target.user)} docker start ${shellQuote(DOCKER_NAME)} >/dev/null 2>&1 || true`,
         "else",
+        token ? `  TOKEN=${shellQuote(token)}` : "  TOKEN=$(openssl rand -hex 32)",
+        `  ENVFILE=${shellQuote(`${remoteWorkdir.replace(/\/+$/, "")}/runtime.env`)}`,
+        `  printf 'API_SERVER_ENABLED=true\\nAPI_SERVER_HOST=0.0.0.0\\nAPI_SERVER_PORT=8642\\nAPI_SERVER_KEY=%s\\n' "$TOKEN" > "$ENVFILE.tmp"`,
+        `  chmod 600 "$ENVFILE.tmp" && mv -f -- "$ENVFILE.tmp" "$ENVFILE"`,
         `  ${sudoPrefix(input.target.user)} docker pull ${shellQuote(DOCKER_IMAGE)}`,
-        `  ${sudoPrefix(input.target.user)} docker run -d --name ${shellQuote(DOCKER_NAME)} --restart unless-stopped --user "$(id -u):$(id -g)" -v ${shellQuote(`${remoteWorkdir}:/opt/data`)} -p 127.0.0.1:8642:8642 -e API_SERVER_ENABLED=true -e API_SERVER_HOST=0.0.0.0 -e API_SERVER_PORT=8642 -e API_SERVER_KEY="$TOKEN" ${shellQuote(DOCKER_IMAGE)} gateway run >/dev/null`,
+        `  ${sudoPrefix(input.target.user)} docker run -d --name ${shellQuote(DOCKER_NAME)} --label hermes.console.managed=true --restart unless-stopped --user "$(id -u):$(id -g)" -v ${shellQuote(`${remoteWorkdir}:/opt/data`)} -p 127.0.0.1:8642:8642 --env-file "$ENVFILE" ${shellQuote(DOCKER_IMAGE)} gateway run >/dev/null`,
         "fi",
         "printf 'hermes_token=%s\\n' \"$TOKEN\"",
       ].join("\n"),
     );
     token = parseMarker(dockerResult.stdout, "hermes_token") || token;
+
+    update({ step: "dashboard", progress: 64, message: "Préparation du Dashboard Hermes…" });
+    await ensureDockerDashboard(channel, input.target.user, remoteWorkdir);
+    await verifyRemoteDashboard(channel);
   }
 
   if (!token) throw new Error("Le token Hermes n’a pas pu être déterminé.");
@@ -404,9 +434,74 @@ function inspectionCommand(baseUrl: string, workdir: string, user: string) {
     'printf "hermes_mode=%s\\n" "$hermes_mode"',
     'if ss -lnt 2>/dev/null | grep -Eq ":8642[[:space:]]"; then port8642=listening; else port8642=closed; fi',
     'printf "port8642=%s\\n" "$port8642"',
+    'if ss -lnt 2>/dev/null | grep -Eq ":9119[[:space:]]"; then dashboard=listening; else dashboard=closed; fi',
+    'printf "dashboard=%s\\n" "$dashboard"',
+    `if ${sudo ? `${sudo} ` : ""}docker inspect hermes-console-dashboard >/dev/null 2>&1; then dashboard_manager=docker; elif ${sudo ? `${sudo} ` : ""}docker inspect hermes-console-runtime >/dev/null 2>&1 && ${sudo ? `${sudo} ` : ""}docker exec hermes-console-runtime test -d /run/service/dashboard >/dev/null 2>&1; then dashboard_manager=docker-s6; elif systemctl --user cat hermes-dashboard.service >/dev/null 2>&1; then dashboard_manager=systemd-user; elif ${sudo ? `${sudo} ` : ""}systemctl cat hermes-dashboard.service >/dev/null 2>&1; then dashboard_manager=systemd-system; elif command -v s6-svstat >/dev/null 2>&1 && s6-svstat /run/service/dashboard >/dev/null 2>&1; then dashboard_manager=s6; elif command -v hermes >/dev/null 2>&1; then dashboard_manager=cli; else dashboard_manager=unknown; fi`,
+    'printf "dashboard_manager=%s\\n" "$dashboard_manager"',
     `if [ -d ${shellQuote(workdir)} ]; then if [ -w ${shellQuote(workdir)} ]; then workdir=ready; else workdir=not_writable; fi; else workdir=missing; fi`,
     'printf "workdir=%s\\n" "$workdir"',
   ].join("; ");
+}
+
+async function ensureDockerDashboard(
+  channel: SshChannel,
+  user: string,
+  remoteWorkdir: string,
+) {
+  const sudo = sudoPrefix(user);
+  const existingCompanion = await channel.exec(
+    `${sudo ? `${sudo} ` : ""}docker inspect hermes-console-dashboard >/dev/null 2>&1`,
+  );
+  if (existingCompanion.code === 0) {
+    const companionShape = await channel.exec(
+      `${sudo ? `${sudo} ` : ""}docker inspect -f '{{.HostConfig.NetworkMode}} {{json .Config.Cmd}}' hermes-console-dashboard`,
+    );
+    if (
+      companionShape.code !== 0 ||
+      !companionShape.stdout.includes("host") ||
+      !companionShape.stdout.includes("127.0.0.1")
+    ) {
+      await runRemote(
+        channel,
+        `${sudo ? `${sudo} ` : ""}docker rm -f hermes-console-dashboard >/dev/null`,
+      );
+    } else {
+      await runRemote(
+        channel,
+        `${sudo ? `${sudo} ` : ""}docker start hermes-console-dashboard >/dev/null 2>&1 || true`,
+      );
+      return;
+    }
+  }
+
+  const existingRuntimeService = await channel.exec(
+    `${sudo ? `${sudo} ` : ""}docker inspect hermes-console-runtime >/dev/null 2>&1 && ${sudo ? `${sudo} ` : ""}docker exec hermes-console-runtime test -d /run/service/dashboard >/dev/null 2>&1 && ${sudo ? `${sudo} ` : ""}docker port hermes-console-runtime 9119/tcp 2>/dev/null | grep -q '127.0.0.1:9119'`,
+  );
+  if (existingRuntimeService.code === 0) {
+    await runRemote(
+      channel,
+      `${sudo ? `${sudo} ` : ""}docker exec hermes-console-runtime /command/s6-svc -u /run/service/dashboard`,
+    );
+    return;
+  }
+
+  await runRemote(
+    channel,
+    [
+      "set -eu",
+      `${sudo ? `${sudo} ` : ""}docker pull ${shellQuote(DOCKER_IMAGE)}`,
+      `${sudo ? `${sudo} ` : ""}docker run -d --name hermes-console-dashboard --restart unless-stopped --network host --user "$(id -u):$(id -g)" -v ${shellQuote(`${remoteWorkdir}:/opt/data`)} ${shellQuote(DOCKER_IMAGE)} dashboard --host 127.0.0.1 --port 9119 --no-open >/dev/null`,
+    ].join("; "),
+  );
+}
+
+async function verifyRemoteDashboard(channel: SshChannel) {
+  const result = await channel.exec(
+    "set -eu; if curl --connect-timeout 2 --max-time 8 -fsS http://127.0.0.1:9119/api/status >/dev/null 2>&1 || [ \"$(curl --connect-timeout 2 --max-time 8 -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9119/api/status)\" = 401 ]; then exit 0; fi; echo 'Le Dashboard Hermes ne répond pas sur 127.0.0.1:9119.' >&2; exit 1",
+  );
+  if (result.code !== 0) {
+    throw new Error((result.stderr || result.stdout || "Le Dashboard Hermes n’a pas démarré.").trim());
+  }
 }
 
 function parseKeyValueOutput(output: string) {

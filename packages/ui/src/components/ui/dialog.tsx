@@ -13,11 +13,12 @@ type DialogProps = {
   children?: React.ReactNode
   footer?: React.ReactNode
   className?: string
+  showClose?: boolean
 }
 
 const EXIT_MS = 150
 
-export function Dialog({ open, onClose, title, description, children, footer, className }: DialogProps) {
+export function Dialog({ open, onClose, title, description, children, footer, className, showClose = true }: DialogProps) {
   const [render, setRender] = React.useState(open)
   const [shown, setShown] = React.useState(false)
 
@@ -75,18 +76,20 @@ export function Dialog({ open, onClose, title, description, children, footer, cl
               {title && <h2 className="text-base font-semibold text-foreground">{title}</h2>}
               {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close dialog"
-              className="-mt-1 -mr-1.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
-            >
-              <XIcon className="size-4" />
-            </button>
+            {showClose ? (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close dialog"
+                className="-mt-1 -mr-1.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+              >
+                <XIcon className="size-4" />
+              </button>
+            ) : null}
           </div>
         )}
 
-        {children && <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 text-sm text-foreground/80">{children}</div>}
+        {children && <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-4 text-sm text-foreground/80">{children}</div>}
 
         {footer && <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">{footer}</div>}
       </div>

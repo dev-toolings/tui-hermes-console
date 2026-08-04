@@ -1,8 +1,59 @@
 import { describe, expect, test } from "bun:test";
 import {
   createHermesAgentRun,
+  listHermesSkills,
   normalizeHermesModelOptions,
 } from "./hermes-adapter";
+
+describe("listHermesSkills", () => {
+  test("normalizes the Hermes list envelope and preserves categories", async () => {
+    const previousFetch = globalThis.fetch;
+    let requestedUrl = "";
+    let requestedHeaders: HeadersInit | undefined;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      requestedUrl = String(input);
+      requestedHeaders = init?.headers;
+      return Response.json({
+        object: "list",
+        data: [
+          { name: "github", description: "GitHub workflow skill", category: "github" },
+          { name: "general", description: "", category: null },
+        ],
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      await expect(
+        listHermesSkills({ baseUrl: "http://127.0.0.1:8642", token: "test-token" }),
+      ).resolves.toEqual([
+        { name: "github", description: "GitHub workflow skill", category: "github", enabled: true },
+        { name: "general", description: "", category: null, enabled: true },
+      ]);
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+
+    expect(requestedUrl).toBe("http://127.0.0.1:8642/v1/skills");
+    expect(new Headers(requestedHeaders).get("authorization")).toBe("Bearer test-token");
+  });
+
+  test("rejects an unexpected Hermes payload with a stable error", async () => {
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      Response.json({ object: "list", data: [{ name: 42 }] })) as unknown as typeof fetch;
+
+    try {
+      const error = await listHermesSkills({ baseUrl: "http://127.0.0.1:8642", token: "test-token" })
+        .catch((reason: unknown) => reason);
+      expect(error).toMatchObject({
+        code: "HERMES_SKILLS_INVALID",
+        status: 502,
+      });
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+  });
+});
 
 describe("normalizeHermesModelOptions", () => {
   test("returns every Hermes provider, including disconnected subscription providers", () => {
@@ -108,6 +159,44 @@ describe("normalizeHermesModelOptions", () => {
       .toBe(true);
     expect(catalog.providers.find((provider) => provider.slug === "openai-codex")?.acceptsApiKey)
       .toBe(false);
+  });
+
+  test("preserves the active runtime model when Hermes omits its virtual provider row", () => {
+    const catalog = normalizeHermesModelOptions({
+      provider: "auto",
+      model: "anthropic/claude-opus-4.6",
+      providers: [
+        {
+          slug: "anthropic",
+          name: "Anthropic",
+          authenticated: false,
+          auth_type: "api_key",
+          warning: "paste ANTHROPIC_API_KEY to activate",
+          models: [],
+        },
+        {
+          slug: "moa",
+          name: "Mixture of Agents",
+          authenticated: true,
+          auth_type: "virtual",
+          models: ["default"],
+        },
+      ],
+    });
+
+    expect(catalog.currentProvider).toBe("auto");
+    expect(catalog.runtimeDefaultModel).toBe("anthropic/claude-opus-4.6");
+    expect(catalog.providers[0]).toEqual({
+      slug: "auto",
+      name: "Routage automatique Hermes",
+      isCurrent: true,
+      authenticated: false,
+      acceptsApiKey: false,
+      authType: "runtime",
+      warning: "paste ANTHROPIC_API_KEY to activate",
+      source: "hermes_runtime",
+      models: [{ id: "anthropic/claude-opus-4.6", fast: false, reasoning: false }],
+    });
   });
 });
 

@@ -126,6 +126,7 @@ export type RuntimeSshConnectInput = {
   token?: string;
   name?: string;
   expectedRevision?: number | null;
+  credentialMode?: "manual" | "import";
   ssh: SshConnectionInput;
 };
 
@@ -209,6 +210,9 @@ export async function getRuntimePublic(): Promise<RuntimePublicDto> {
       baseUrl: row.baseUrl,
       name: row.name,
       tokenConfigured: true,
+      managementMode: row.managementMode,
+      credentialAdapter: row.credentialAdapter,
+      lastCredentialRotatedAt: row.lastCredentialRotatedAt?.toISOString() ?? null,
       encryptionReady: hasEncryptionKey(),
       sshHost: row.sshHost,
       sshPort: row.sshPort,
@@ -231,6 +235,9 @@ export async function getRuntimePublic(): Promise<RuntimePublicDto> {
   const envToken = Boolean(process.env.HERMES_RUNTIME_TOKEN);
   const envDefaults = {
     transport: "direct" as const,
+    managementMode: "external" as const,
+    credentialAdapter: "manual" as const,
+    lastCredentialRotatedAt: null,
     sshHost: null,
     sshPort: 22,
     sshUser: null,
@@ -300,6 +307,57 @@ export async function resolveHermesRuntimeConfig(): Promise<ResolvedRuntimeConfi
   return { baseUrl, remoteBaseUrl: baseUrl, token, transport: "direct", source: "env" };
 }
 
+export type RuntimeRevealSecret = {
+  token: string;
+  variableName: "API_SERVER_KEY" | "HERMES_RUNTIME_TOKEN";
+  source: "database" | "hermes_remote_env" | "console_env";
+};
+
+/**
+ * Lit le secret effectif uniquement après que le service de révélation a
+ * validé le challenge. Cette fonction ne doit jamais être appelée par un DTO
+ * public ou un endpoint de configuration générique.
+ */
+export async function readRuntimeSecretForReveal(): Promise<RuntimeRevealSecret> {
+  const row = await getRuntimeRow();
+  if (row) {
+    if (row.transport === "ssh") {
+      return {
+        token: await importRemoteHermesToken(sshTargetFromRow(row)),
+        variableName: "API_SERVER_KEY",
+        source: "hermes_remote_env",
+      };
+    }
+    return {
+      token: validateRuntimeRevealToken(decryptSecret(row.encryptedToken)),
+      variableName: "API_SERVER_KEY",
+      source: "database",
+    };
+  }
+
+  const fallback = process.env.HERMES_RUNTIME_TOKEN?.trim();
+  if (fallback) {
+    return {
+      token: validateRuntimeRevealToken(fallback),
+      variableName: "HERMES_RUNTIME_TOKEN",
+      source: "console_env",
+    };
+  }
+  const apiServerKey = process.env.API_SERVER_KEY?.trim();
+  if (apiServerKey) {
+    return {
+      token: validateRuntimeRevealToken(apiServerKey),
+      variableName: "API_SERVER_KEY",
+      source: "console_env",
+    };
+  }
+  throw new HermesRuntimeError(
+    "Aucun secret API_SERVER_KEY ou HERMES_RUNTIME_TOKEN n’est disponible côté serveur.",
+    503,
+    "RUNTIME_SECRET_UNAVAILABLE",
+  );
+}
+
 export async function saveRuntimeConfig(
   input: RuntimeConnectionInput,
   mutationLease?: RuntimeMutationLease,
@@ -345,6 +403,9 @@ async function saveRuntimeConfigUnlocked(
     baseUrl,
     encryptedToken,
     transport: "direct" as const,
+    managementMode: "external" as const,
+    credentialAdapter: "manual" as const,
+    lastCredentialRotatedAt: existing?.lastCredentialRotatedAt ?? null,
     sshHost: null,
     sshPort: 22,
     sshUser: null,
@@ -453,8 +514,27 @@ async function connectAndSaveSshRuntimeUnlocked(input: RuntimeSshConnectInput) {
   }
 
   const sameIdentity = sameSshConnectionIdentity(existing, input);
-  const token = input.token?.trim() ||
-    (sameIdentity && existing ? decryptSecret(existing.encryptedToken) : "");
+  const suppliedToken = input.token?.trim() || undefined;
+  const storedToken =
+    sameIdentity && existing ? decryptSecret(existing.encryptedToken) : "";
+  const auth = input.ssh.auth ?? "agent";
+  const suppliedPassword = input.ssh.password?.trim() || undefined;
+  const storedPassword =
+    sameIdentity && auth === "password" && existing?.encryptedSshPassword
+      ? decryptSecret(existing.encryptedSshPassword)
+      : undefined;
+  const password = suppliedPassword || storedPassword;
+  const target: SshTarget = {
+    host: input.ssh.host.trim(),
+    port: input.ssh.port ?? 22,
+    user: input.ssh.user.trim(),
+    auth,
+    password,
+  };
+  const token =
+    suppliedToken ||
+    storedToken ||
+    (input.credentialMode === "import" ? await importRemoteHermesToken(target) : "");
   if (!token) {
     throw new HermesRuntimeError(
       "Saisissez le token Hermes pour cette nouvelle cible.",
@@ -463,11 +543,6 @@ async function connectAndSaveSshRuntimeUnlocked(input: RuntimeSshConnectInput) {
     );
   }
 
-  const auth = input.ssh.auth ?? "agent";
-  const password = input.ssh.password?.trim() ||
-    (sameIdentity && auth === "password" && existing?.encryptedSshPassword
-      ? decryptSecret(existing.encryptedSshPassword)
-      : undefined);
   if (auth === "password" && !password) {
     throw new HermesRuntimeError(
       "Saisissez le mot de passe SSH pour cette nouvelle cible.",
@@ -476,13 +551,6 @@ async function connectAndSaveSshRuntimeUnlocked(input: RuntimeSshConnectInput) {
     );
   }
 
-  const target: SshTarget = {
-    host: input.ssh.host.trim(),
-    port: input.ssh.port ?? 22,
-    user: input.ssh.user.trim(),
-    auth,
-    password,
-  };
   const verified = await withEphemeralSshChannel(target, async (channel) => {
     const baseUrl = await channel.forward(endpoint.host, endpoint.port);
     return testHermesRuntimeAgainst({ baseUrl, token });
@@ -490,20 +558,38 @@ async function connectAndSaveSshRuntimeUnlocked(input: RuntimeSshConnectInput) {
   const version = healthVersion(verified.health);
 
   const now = new Date();
+  const requestedName = input.name?.trim() || undefined;
+  const configurationChanged =
+    !sameIdentity ||
+    (suppliedToken !== undefined && suppliedToken !== storedToken) ||
+    (suppliedPassword !== undefined && suppliedPassword !== storedPassword) ||
+    (requestedName !== undefined && requestedName !== existing?.name);
   const workspaceStatus: RuntimeWorkspaceStatus = sameIdentity
     ? existing?.workspaceStatus ?? "required"
     : "required";
   const values = {
-    name: input.name?.trim() || existing?.name || "Hermes",
+    name: requestedName || existing?.name || "Hermes",
     baseUrl: remoteBaseUrl,
-    encryptedToken: encryptSecret(token),
+    encryptedToken:
+      sameIdentity && existing && token === storedToken
+        ? existing.encryptedToken
+        : encryptSecret(token),
     transport: "ssh" as const,
     sshHost: target.host,
     sshPort: target.port,
     sshUser: target.user,
     sshAuth: target.auth,
     encryptedSshPassword:
-      target.auth === "password" && password ? encryptSecret(password) : null,
+      target.auth !== "password" || !password
+        ? null
+        : sameIdentity &&
+            existing?.encryptedSshPassword &&
+            password === storedPassword
+          ? existing.encryptedSshPassword
+          : encryptSecret(password),
+    managementMode: "external" as const,
+    credentialAdapter: "manual" as const,
+    lastCredentialRotatedAt: existing?.lastCredentialRotatedAt ?? null,
     remoteWorkdir: sameIdentity ? existing?.remoteWorkdir ?? null : null,
     remoteHermesWorkdir: sameIdentity
       ? existing?.remoteHermesWorkdir ?? null
@@ -520,7 +606,12 @@ async function connectAndSaveSshRuntimeUnlocked(input: RuntimeSshConnectInput) {
     if (observedRevision !== null) {
       const [updated] = await tx
         .update(runtimeConfig)
-        .set({ ...values, configRevision: observedRevision + 1 })
+        .set({
+          ...values,
+          ...(configurationChanged
+            ? { configRevision: observedRevision + 1 }
+            : {}),
+        })
         .where(
           and(
             eq(runtimeConfig.id, RUNTIME_ID),
@@ -542,16 +633,18 @@ async function connectAndSaveSshRuntimeUnlocked(input: RuntimeSshConnectInput) {
         .returning({ id: runtimeConfig.id });
       if (!inserted) throw runtimeConfigurationChanged();
     }
-    await tx
-      .update(consoleSetup)
-      .set({
-        step: "agent",
-        completedAt: null,
-        runtimeVerifiedAt: null,
-        runtimeConfigVersion: null,
-        updatedAt: now,
-      })
-      .where(eq(consoleSetup.step, "completed"));
+    if (configurationChanged) {
+      await tx
+        .update(consoleSetup)
+        .set({
+          step: "agent",
+          completedAt: null,
+          runtimeVerifiedAt: null,
+          runtimeConfigVersion: null,
+          updatedAt: now,
+        })
+        .where(eq(consoleSetup.step, "completed"));
+    }
   });
 
   return {
@@ -685,6 +778,9 @@ export type StoredSshRuntime = {
   remoteWorkdir: string | null;
   remoteHermesWorkdir: string | null;
   workspaceStatus: RuntimeWorkspaceStatus;
+  managementMode: "external" | "managed";
+  credentialAdapter: "native_systemd" | "docker" | "compose" | "manual" | "unknown";
+  lastCredentialRotatedAt: Date | null;
 };
 
 export async function getStoredSshRuntime(
@@ -712,6 +808,9 @@ export async function getStoredSshRuntime(
     remoteWorkdir: row.remoteWorkdir,
     remoteHermesWorkdir: row.remoteHermesWorkdir,
     workspaceStatus: row.workspaceStatus,
+    managementMode: row.managementMode,
+    credentialAdapter: row.credentialAdapter,
+    lastCredentialRotatedAt: row.lastCredentialRotatedAt,
   };
 }
 
@@ -788,6 +887,44 @@ export async function getRemoteWorkspace(): Promise<{
 
 function normalizeBaseUrl(value: string) {
   return value.trim().replace(/\/+$/, "");
+}
+
+async function importRemoteHermesToken(target: SshTarget) {
+  const result = await withEphemeralSshChannel(target, (channel) =>
+    channel.exec([
+      "set -eu",
+      "if docker inspect hermes-console-runtime >/dev/null 2>&1; then",
+      "  docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' hermes-console-runtime | sed -n 's/^API_SERVER_KEY=//p' | head -1",
+      "else",
+      "  sed -n 's/^[[:space:]]*API_SERVER_KEY[[:space:]]*=[[:space:]]*//p' \"${HOME:-}/.hermes/.env\" | head -1 | tr -d '\"'",
+      "fi",
+    ].join("\n")),
+  );
+  const token = result.stdout.trim();
+  if (
+    result.code !== 0 ||
+    !token ||
+    token.length > 2_000 ||
+    /[\u0000-\u001f\u007f]/.test(token)
+  ) {
+    throw new HermesRuntimeError(
+      "Impossible d’importer automatiquement API_SERVER_KEY depuis cette cible. Saisissez le token Hermes manuellement.",
+      400,
+      "RUNTIME_TOKEN_IMPORT_FAILED",
+    );
+  }
+  return token;
+}
+
+function validateRuntimeRevealToken(value: string) {
+  if (!value || value.length > 2_000 || /[\u0000-\u001f\u007f]/.test(value)) {
+    throw new HermesRuntimeError(
+      "Le secret API_SERVER_KEY détecté est vide ou invalide.",
+      502,
+      "RUNTIME_SECRET_INVALID",
+    );
+  }
+  return value;
 }
 
 function healthVersion(health: unknown) {

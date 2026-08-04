@@ -35,7 +35,10 @@ export function AgentCardActions({
     try {
       const response = await fetch(`/api/agents/${agentId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Hermes-Toast": "updated",
+        },
         body: JSON.stringify({ archive }),
       });
       if (response.ok) router.refresh();
@@ -47,7 +50,10 @@ export function AgentCardActions({
   async function deletePermanently() {
     setPending(true);
     try {
-      const response = await fetch(`/api/agents/${agentId}`, { method: "DELETE" });
+      const response = await fetch(`/api/agents/${agentId}`, {
+        method: "DELETE",
+        headers: { "X-Hermes-Toast": "deleted" },
+      });
       if (response.ok) router.refresh();
     } finally {
       setPending(false);

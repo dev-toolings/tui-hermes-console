@@ -20,18 +20,21 @@ flowchart TD
         web -->|"HTTP / proxy"| server
     end
 
-    server -->|"direct ou tunnel SSH"| hermes["Hermes API :8642<br/>natif ou Docker"]
+    server -->|"API :8642 · direct ou tunnel SSH"| hermes["Hermes API<br/>natif ou Docker"]
+    server -->|"Dashboard :9119 · loopback/tunnel"| dashboard["Hermes Dashboard<br/>systemd, Docker ou s6"]
 ```
 
-Légende : le navigateur parle à Vite ; Vite proxifie `/api` vers Bun ; Bun parle à Hermes,
-directement ou à travers un forward SSH. PostgreSQL est utilisé par `apps/server` pour les
-comptes, sites, agents, missions et sessions.
+Légende : le navigateur parle à Vite ; Vite proxifie `/api` vers Bun ; Bun parle à l’API Hermes
+directement ou à travers un forward SSH. Le Dashboard est une seconde surface Hermes, utilisée
+pour administrer les skills et les réglages : il écoute sur `:9119`, sans remplacer l’API `:8642`.
+PostgreSQL est utilisé par `apps/server` pour les comptes, sites, agents, missions et sessions.
 
 | Composant | Adresse de développement | Rôle |
 |---|---:|---|
 | Web Vite (`apps/web`) | `http://127.0.0.1:1420/` | interface et HMR |
 | API Bun (`apps/server`) | `http://127.0.0.1:3170/` | API, auth, orchestration |
 | Hermes local natif | `http://127.0.0.1:8642` | runtime sélectionné |
+| Hermes Dashboard local | `http://127.0.0.1:9119` | gestion des skills et réglages |
 | Hermes Docker local | `http://127.0.0.1:18642` | port hôte conseillé pour éviter `:8642` |
 
 Ne pas utiliser `localhost` et `127.0.0.1` en alternance pour le parcours OAuth : ce sont deux
@@ -150,6 +153,38 @@ Pour un lancement persistant, utiliser un service systemd adapté à l’utilisa
 `HERMES_HOME`. Le service doit conserver `PATH` contenant le chemin du launcher Hermes. C’est
 important pour le bouton OAuth OpenAI Codex, qui lance la CLI depuis `apps/server`.
 
+Créer aussi le service persistant du Dashboard, avec le même utilisateur et le même environnement
+Hermes :
+
+```bash
+mkdir -p "$HOME/.config/systemd/user"
+HERMES_BIN="$(command -v hermes)"
+cat > "$HOME/.config/systemd/user/hermes-dashboard.service" <<EOF
+[Unit]
+Description=Hermes Dashboard
+After=network-online.target
+
+[Service]
+ExecStart=$HERMES_BIN dashboard --host 127.0.0.1 --port 9119 --no-open
+Restart=on-failure
+RestartSec=2
+Environment=HERMES_HOME=$HOME/.hermes
+
+[Install]
+WantedBy=default.target
+EOF
+systemctl --user daemon-reload
+systemctl --user enable --now hermes-dashboard.service
+loginctl enable-linger "$USER" 2>/dev/null || true
+```
+
+Vérifier les deux surfaces :
+
+```bash
+curl --fail --silent --show-error http://127.0.0.1:9119/api/status
+systemctl --user status hermes-dashboard.service
+```
+
 Vérifier la cible :
 
 ```bash
@@ -190,18 +225,26 @@ docker run -d \
   -e API_SERVER_PORT=8642 \
   -e API_SERVER_KEY="$HERMES_API_KEY" \
   nousresearch/hermes-agent gateway run
+docker run -d \
+  --name hermes-console-dashboard-local \
+  --restart unless-stopped \
+  --network host \
+  -v "$HOME/.hermes-console-docker:/opt/data" \
+  nousresearch/hermes-agent dashboard --host 127.0.0.1 --port 9119 --no-open
 unset HERMES_API_KEY
 ```
 
 Le bind `0.0.0.0` est nécessaire à l’intérieur du conteneur ; le bind publié sur l’hôte reste
 `127.0.0.1`. Pour une installation reproductible, remplacer `:latest` par un digest d’image
-validé par l’équipe.
+validé par l’équipe. Le Dashboard est un conteneur compagnon distinct : son `restart unless-stopped`
+le rend persistant sans donner à Hermes le socket Docker.
 
 Vérifier :
 
 ```bash
 docker ps --filter name=hermes-console-runtime-local
 curl --fail --silent --show-error http://127.0.0.1:18642/health
+curl --fail --silent --show-error http://127.0.0.1:9119/api/status
 ```
 
 Dans la Console, configurer :
@@ -250,6 +293,10 @@ systemctl --user enable --now hermes-gateway.service
 systemctl --user status hermes-gateway.service
 ss -lntp | grep ':8642'
 ```
+
+Installer également `hermes-dashboard.service` avec le même utilisateur, comme dans le scénario
+local natif, puis vérifier `systemctl --user status hermes-dashboard.service` et `ss -lntp | grep
+':9119'`. Le tunnel SSH de la Console forwarde séparément `127.0.0.1:8642` et `127.0.0.1:9119`.
 
 Le VPS doit autoriser le forwarding SSH (`AllowTcpForwarding yes`). Le port Hermes ne doit pas
 être publié sur `0.0.0.0`.
@@ -309,6 +356,79 @@ HERMES_SSH_USER='<user>' \
 bun run runtime:probe
 ```
 
+### Migration d'un volume Docker vers un bind mount
+
+Ne configurez jamais la Console avec un chemin sous
+`/var/lib/docker/volumes/.../_data`. Ce répertoire appartient à l’implémentation interne de Docker ;
+il n’est ni une interface stable ni un déploiement déclaratif. La cible prise en charge est :
+
+~~~text
+╔════════════ Console locale ════════════╗
+║ ┌────────────────────────────────────┐ ║
+║ │ Runtime, journal et workspace      │ ║
+║ └─────────────────┬──────────────────┘ ║
+╚═══════════════════│════════════════════╝
+                    │ SSH · SFTP · progression SSE
+                    ▼
+╔════════════════════ VPS ═══════════════════════════════════╗
+║ ┌──────────────────────────────┐  bind mount RW            ║
+║ │ /srv/hermes-console/data     │──────────────────────┐    ║
+║ │ └─ workspace                 │                      ▼    ║
+║ └──────────────────────────────┘       ┌─────────────────┐ ║
+║                                        │ /opt/data       │ ║
+║ ┌──────────────────────────────┐       │ conteneur Hermes│ ║
+║ │ volume + conteneur rollback  │◀──────│ :8642 loopback  │ ║
+║ └──────────────────────────────┘ garde └─────────────────┘ ║
+╚════════════════════════════════════════════════════════════╝
+~~~
+
+Légende : SSH pilote Docker et SFTP prouve le chemin hôte ; le bind mount expose les mêmes octets à
+Hermes. Composants : Console Hono, journal PostgreSQL, stockage durable du VPS, runtime Hermes et
+copie de rollback.
+
+Après `Rechercher sur le VPS`, la carte `Migrer le stockage Docker` apparaît pour un volume nommé.
+La Console automatise uniquement une topologie reconnue et bornée : utilisateur SSH `root`,
+conteneur unique `hermes-console-runtime`, volume local monté uniquement sur `/opt/data`, image
+Hermes épinglée par digest, réseau bridge, publication `127.0.0.1:8642`, politique
+`unless-stopped`, Docker Compose disponible, chemins cibles absents ou vides et espace disque
+suffisant. Toute personnalisation sort de ce périmètre et affiche le guide manuel au lieu de tenter
+une mutation approximative.
+
+Le bouton `Préparer la migration` reste en lecture seule. Il inventorie la source, vérifie Hermes,
+affiche la taille, le nombre de fichiers, le digest, les chemins, les avertissements et la phrase de
+confirmation. Le plan et le job actifs sont journalisés : recharger la route SSH reprend la
+confirmation ou le flux de progression au lieu de perdre l’opération. Après confirmation, la Console :
+
+1. bloque le démarrage de nouvelles missions et reprend l’opération au redémarrage si nécessaire ;
+2. crée `/srv/hermes-console/data`, `/srv/hermes-console/backups/<migration>` et
+   `/opt/hermes-console-runtime` avec des permissions root-only ;
+3. arrête Hermes, archive tout `/opt/data`, copie avec conservation des propriétaires, modes et
+   dates, puis compare les manifestes SHA-256 source et cible ;
+4. renomme l’ancien conteneur sans supprimer son volume et démarre le nouveau déploiement Compose
+   avec le même digest et la même clé `API_SERVER_KEY` ;
+5. attend jusqu'à 60 secondes le démarrage borné du gateway, puis vérifie le bind mount, `/health`,
+   `/v1/capabilities`, le tunnel, SFTP et une écriture depuis Hermes ;
+6. persiste seulement alors le workspace hôte `/srv/hermes-console/data/workspace` correspondant à
+   `/opt/data/workspace` dans Hermes.
+
+En cas d’échec après l’arrêt, le nouveau conteneur est retiré, l’ancien retrouve son nom et redémarre
+sur le volume nommé. Un état distant ambigu devient `récupération requise` et les missions restent
+bloquées. Le volume, le conteneur renommé et l’archive ne doivent être supprimés qu’après une mission
+réelle, un artefact relu par SFTP et une sauvegarde externe validée.
+
+Pour une installation personnalisée, appliquez le même ordre manuellement : préflight sans écriture,
+arrêt, archive, copie avec métadonnées, comparaison des manifestes, conservation de l’ancien
+conteneur, recréation avec `--mount type=bind,src=/srv/hermes-console/data,dst=/opt/data`, puis preuves
+Hermes et SFTP. Si une étape échoue, redémarrez immédiatement l’ancien conteneur ; ne supprimez ni le
+volume source ni l’archive. La Console pourra ensuite vérifier et activer les deux chemins depuis la
+même route.
+
+Le fichier géré `/opt/hermes-console-runtime/compose.yml` référence un digest immuable et charge
+`runtime.env` en mode `0600`. Une mise à jour future consiste à sauvegarder, remplacer uniquement le
+digest, exécuter `docker compose up -d`, refaire toutes les sondes, puis conserver temporairement
+l’ancien digest et le stockage de rollback. La migration de stockage ne tourne pas automatiquement
+la clé API ; cette rotation reste une opération de sécurité séparée.
+
 ## 4. Local + Hermes Docker sur un VPS
 
 ### Déployer Hermes sur le VPS
@@ -330,6 +450,12 @@ docker run -d \
   -e API_SERVER_PORT=8642 \
   -e API_SERVER_KEY="$HERMES_API_KEY" \
   nousresearch/hermes-agent gateway run
+docker run -d \
+  --name hermes-console-dashboard \
+  --restart unless-stopped \
+  --network host \
+  -v "$HOME/.hermes-console-docker:/opt/data" \
+  nousresearch/hermes-agent dashboard --host 127.0.0.1 --port 9119 --no-open
 unset HERMES_API_KEY
 ```
 
@@ -338,6 +464,8 @@ Vérifier sur le VPS :
 ```bash
 docker inspect -f '{{.State.Status}} {{.HostConfig.RestartPolicy.Name}}' hermes-console-runtime
 curl --fail --silent --show-error http://127.0.0.1:8642/health
+docker inspect -f '{{.State.Status}} {{.HostConfig.RestartPolicy.Name}}' hermes-console-dashboard
+curl --fail --silent --show-error http://127.0.0.1:9119/api/status
 ```
 
 ### Configurer la Console
@@ -355,6 +483,17 @@ Workdir distant : chemin monté dans /opt/data ou le workdir configuré
 
 Ne pas mettre `http://<ip-du-vps>:8642` dans la Base URL si le service est lié à loopback. Le
 tunnel doit joindre `127.0.0.1:8642` depuis le VPS.
+
+Le provisioning Docker de la Console prépare également `hermes-console-dashboard` sur
+`127.0.0.1:9119` avec `restart unless-stopped` et un bind loopback. Dans `Paramètres → Runtime`, la carte Dashboard
+permet ensuite de vérifier, démarrer ou redémarrer uniquement cette surface ; Hermes API et les
+missions ne sont pas redémarrés. Dans `Skills`, le bouton switch devient disponible lorsque la
+sonde Dashboard est opérationnelle. Les changements de skills prennent effet à la prochaine
+session Hermes.
+
+Pour la topologie Compose gérée, ne publiez pas un Dashboard lié à `0.0.0.0` sans provider
+d’authentification Hermes. Utilisez un provider Basic/OAuth déclaré dans la configuration Hermes,
+ou gardez le Dashboard sur loopback et gérez-le depuis un hôte qui peut ouvrir le tunnel SSH.
 
 ## Vérification commune
 

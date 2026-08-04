@@ -3,12 +3,14 @@ import { apiErrorResponse } from "@/modules/api/errors";
 import { requireActiveAgent, resolveActiveAgentRef } from "@/modules/agents/repository";
 import { createThreadWithRun, listThreads } from "@/modules/runs/repository";
 import { startRun } from "@/modules/runs/runner";
-import { getRuntimeModelSelection } from "@/modules/runtime/model-settings";
+import { resolveAvailableRuntimeModelSelection } from "@/modules/runtime/available-model-selection";
 import type { ThreadSource } from "@/db/schema";
 import { withCurrentAiDisclosureConsent } from "@/modules/setup/ai-disclosure";
 import type { AuthenticatedRouteContext } from "@/modules/api/route-context";
 import { assertRuntimeWorkspaceReady } from "@/modules/runtime/config";
 import { acquireRunStartLease } from "@/modules/runs/active-runtime-guard";
+import { assertNoBlockingStorageMigration } from "@/modules/runtime/ssh/storage-migration";
+import { assertNoBlockingRuntimeUpdate } from "@/modules/runtime/update-operations";
 
 const FREE_CHAT_INSTRUCTIONS = `Tu es un assistant conversationnel. Réponds directement à la demande.
 
@@ -56,6 +58,8 @@ export async function POST(
   try {
     return await dependencies.withConsent(request, async () => {
       const input = createThreadSchema.parse(await request.json());
+    await assertNoBlockingStorageMigration();
+    await assertNoBlockingRuntimeUpdate();
       const releaseRunStart = acquireRunStartLease();
       try {
         await assertRuntimeWorkspaceReady();
@@ -79,7 +83,9 @@ export async function POST(
               message: input.message,
             }
           : await (async () => {
-              const selection = await getRuntimeModelSelection();
+              const selection = await resolveAvailableRuntimeModelSelection({
+                repairPersisted: true,
+              });
               return {
                 source: "chat" as const,
                 agentId: null,

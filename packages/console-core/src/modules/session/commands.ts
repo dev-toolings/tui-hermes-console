@@ -22,7 +22,7 @@ const COMMAND_HELP = `Commandes session :
 Appeler un agent :
 • @<slug> <instruction> — crée une mission avec cet agent (la session de chat n'est jamais modifiée)
 
-Agents (missions /runs uniquement) :
+Agents (sessions de mission uniquement) :
 • /agent show — agent actif
 • /agent create Nom | instructions…
 • /agent edit name=… | instructions=… | model=… | description=…
