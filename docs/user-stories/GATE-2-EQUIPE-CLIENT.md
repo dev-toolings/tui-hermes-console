@@ -11,8 +11,8 @@
 > - **INC-04 :** l'application front `apps/console` a été supprimée le 02-08-2026 et remplacée par
 >   `apps/web`. Tout volet `UI` de ces preuves porte sur une application qui n'existe plus. Les volets
 >   backend et DB ne sont pas remis en cause.
-> - **INC-05 :** la suite de tests n'est pas déterministe au 04-08-2026 (4 puis 2 échecs sur deux
->   exécutions du même commit). Aucun passage à `VÉRIFIÉE` n'est recevable tant qu'elle est instable.
+> - **INC-05 :** la suite avait une course de démarrage PostgreSQL Docker. Les sondes attendent
+>   maintenant une requête SQL réelle ; deux full runs du 04-08 passent à 590/593, 0 échec.
 >
 > Ces stories restent donc au mieux `IMPLÉMENTÉE`, et aucune ne peut être promue sans rejeu.
 

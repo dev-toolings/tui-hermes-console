@@ -11,6 +11,7 @@ const targetSchema = z.object({
 });
 
 export const provisionInputSchema = z.object({
+  provisioner: targetSchema,
   target: targetSchema,
   mode: z.enum(["docker", "native"]),
   remoteBaseUrl: z.string().trim().url().max(500),
@@ -22,6 +23,7 @@ export const provisionInputSchema = z.object({
 export function parseProvisionInput(value: unknown): RuntimeSshProvisionInput {
   const parsed = provisionInputSchema.parse(value);
   return {
+    provisioner: parsed.provisioner,
     target: parsed.target,
     mode: parsed.mode as RuntimeProvisionMode,
     remoteBaseUrl: parsed.remoteBaseUrl,

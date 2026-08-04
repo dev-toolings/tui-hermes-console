@@ -7,6 +7,8 @@
  * clignotement « squelette puis contenu » d'un fetch dans useEffect.
  */
 import {
+  fetchAchievements,
+  fetchAchievementsScanStatus,
   fetchActivity,
   fetchAgent,
   fetchAgents,
@@ -56,6 +58,15 @@ export async function loadSkills() {
   return fetchSkills();
 }
 export type SkillsData = Awaited<ReturnType<typeof loadSkills>>;
+
+export async function loadAchievements() {
+  const [achievements, scanStatus] = await Promise.all([
+    fetchAchievements(),
+    fetchAchievementsScanStatus(),
+  ]);
+  return { achievements, scanStatus };
+}
+export type AchievementsData = Awaited<ReturnType<typeof loadAchievements>>;
 
 export async function loadAgent(agentId: string) {
   return { agent: await fetchAgent(agentId) };

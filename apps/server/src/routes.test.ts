@@ -32,8 +32,6 @@ describe("route authorization inventory", () => {
       "/api/runtime/credentials",
       "/api/runtime/credentials/plan",
       "/api/runtime/credentials/:operationId",
-      "/api/runtime/secret-reveal/challenge",
-      "/api/runtime/secret-reveal/verify",
       "/api/runtime/ssh-hosts",
       "/api/runtime/test",
       "/api/runtime/ssh/connect",

@@ -10,6 +10,7 @@ import { OwnershipRepositoryError } from "@/modules/ownership/repository";
 import { DataLifecycleError } from "@/modules/retention/service";
 import { LifecycleExportError } from "@/modules/retention/export";
 import { ArtifactIntegrityError } from "@/modules/artifacts/integrity";
+import { HermesPolicyError } from "@/modules/policy/hermes-approval";
 import { describeError, log } from "@/observability/log";
 
 /**
@@ -92,6 +93,13 @@ export function apiErrorResponse(
   }
 
   if (error instanceof HermesRuntimeError) {
+    return Response.json(
+      { error: { code: error.code, message: error.message } },
+      { status: error.status },
+    );
+  }
+
+  if (error instanceof HermesPolicyError) {
     return Response.json(
       { error: { code: error.code, message: error.message } },
       { status: error.status },

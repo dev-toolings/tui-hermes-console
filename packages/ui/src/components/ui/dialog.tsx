@@ -21,6 +21,8 @@ const EXIT_MS = 150
 export function Dialog({ open, onClose, title, description, children, footer, className, showClose = true }: DialogProps) {
   const [render, setRender] = React.useState(open)
   const [shown, setShown] = React.useState(false)
+  const titleId = React.useId()
+  const descriptionId = React.useId()
 
   // enter / exit lifecycle: mount → next frame fade/scale in; on close, fade out then unmount.
   React.useEffect(() => {
@@ -63,6 +65,8 @@ export function Dialog({ open, onClose, title, description, children, footer, cl
       <div
         role="dialog"
         aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
+        aria-describedby={description ? descriptionId : undefined}
         onClick={(e) => e.stopPropagation()}
         className={cn(
           "flex max-h-[calc(100dvh-4rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-border bg-card shadow-[var(--shadow-elevated)] transition duration-150 ease-out",
@@ -73,8 +77,8 @@ export function Dialog({ open, onClose, title, description, children, footer, cl
         {(title || description) && (
           <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
             <div className="min-w-0">
-              {title && <h2 className="text-base font-semibold text-foreground">{title}</h2>}
-              {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
+              {title && <h2 id={titleId} className="text-base font-semibold text-foreground">{title}</h2>}
+              {description && <p id={descriptionId} className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
             </div>
             {showClose ? (
               <button

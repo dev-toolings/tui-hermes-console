@@ -46,7 +46,7 @@ function applyMigrations() {
 
 async function waitForPostgres() {
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    if (spawnSync("docker", ["exec", containerName, "pg_isready", "-U", "postgres"], { stdio: "ignore" }).status === 0) return;
+    if (spawnSync("docker", ["exec", containerName, "psql", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-Atqc", "SELECT 1;"], { stdio: "ignore" }).status === 0) return;
     await Bun.sleep(250);
   }
   throw new Error("PostgreSQL éphémère indisponible.");

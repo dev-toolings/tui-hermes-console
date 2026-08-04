@@ -46,6 +46,52 @@ export type HermesSkillDto = {
   enabled: boolean;
 };
 
+export type HermesAchievementState = "unlocked" | "discovered" | "secret";
+
+/** Un badge du plugin Dashboard `hermes-achievements`, tel que proxyé par la Console. */
+export type HermesAchievementDto = {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  icon: string | null;
+  state: HermesAchievementState;
+  unlocked: boolean;
+  discovered: boolean;
+  unlockedAt: number | null;
+  progress: number | null;
+  progressPct: number | null;
+  /** Tier le plus haut atteint, ex. « Gold ». */
+  tier: string | null;
+  nextTier: string | null;
+  nextThreshold: number | null;
+  criteria: string | null;
+};
+
+export type HermesAchievementsScanState = "idle" | "running" | "failed" | "pending";
+
+export type HermesAchievementsScanStatusDto = {
+  state: HermesAchievementsScanState;
+  startedAt: number | null;
+  finishedAt: number | null;
+  lastError: string | null;
+  lastDurationMs: number | null;
+  runCount: number;
+  snapshotStale: boolean;
+  snapshotGeneratedAt: number | null;
+};
+
+export type HermesAchievementsDto = {
+  achievements: HermesAchievementDto[];
+  unlockedCount: number;
+  discoveredCount: number;
+  secretCount: number;
+  totalCount: number;
+  error: string | null;
+  isStale: boolean;
+  scanStatus: HermesAchievementsScanStatusDto;
+};
+
 /** `GET /api/files` — jamais le chemin de stockage, seulement de quoi l'afficher. */
 export type ArtifactDto = {
   id: string;
@@ -316,6 +362,9 @@ export type RuntimeSshPlanStep = {
 
 export type RuntimeSshPlanDto = {
   mode: RuntimeProvisionMode;
+  /** Identité privilégiée utilisée uniquement pour préparer l'hôte. */
+  provisioner: { host: string; port: number; user: string };
+  /** Identité non privilégiée persistée pour tunnel, SFTP et missions. */
   target: { host: string; port: number; user: string };
   remoteBaseUrl: string;
   remoteWorkdir: string;

@@ -41,6 +41,7 @@ attribuée quand une frontière de sécurité est concernée.
 | `VÉRIFIÉE` | tous les tests exigés passent | vers `ACCEPTÉE` |
 | `ACCEPTÉE` | reviewer habilité et rapport daté | état terminal positif |
 | `BLOQUÉE` | obstacle et propriétaire documentés | retour vers `PRÊTE` ou `EN_COURS` |
+| `GELÉE` | périmètre explicitement suspendu par décision produit ; aucun travail ni critère de Gate exigé | retour vers `PRÊTE` si le périmètre est rouvert |
 | `REJETÉE` | besoin invalidé ou test décisif échoué | état terminal négatif |
 
 `Livré`, `présent dans le code` ou `validé statiquement` ne sont pas des synonymes de `ACCEPTÉE`.

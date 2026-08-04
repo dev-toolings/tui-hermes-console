@@ -4,6 +4,8 @@ import { APPROVAL_CHOICES } from "@console/core/lib/thread-snapshot-mutations";
 import type { SiteRequestContext, SiteScope } from "@/modules/auth/service";
 import type { AppendAuditEntryInput } from "@/modules/audit/service";
 import type { RunCancelTarget } from "./repository";
+import { enforceHermesApproval, HermesPolicyError, policyAuthorityFromKeys } from "@/modules/policy/hermes-approval";
+import { generateDecisionKeyPair } from "@/modules/policy/decision-envelope";
 
 /**
  * Contrat d'autorisation — Hermes valide `choice`, pas un booléen.
@@ -98,6 +100,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
   };
+  const policyKeys = generateDecisionKeyPair();
   return {
     audits,
     remoteCalls,
@@ -118,7 +121,12 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     },
     resolveRuntime: async () => runtime,
     respondRemote: async (input: unknown) => { remoteCalls.push(input); },
-    isActive: () => true,
+    enforce: (input: Parameters<typeof enforceHermesApproval>[0]) =>
+      enforceHermesApproval(input, {
+        authority: policyAuthorityFromKeys(policyKeys),
+        now: () => Date.parse("2026-01-01T00:00:00.000Z"),
+      }),
+    isReconciled: () => true,
     resume: () => undefined,
     audit: async (input: AppendAuditEntryInput) => {
       audits.push(input);
@@ -190,6 +198,23 @@ describe("respondRunApproval G1-004B claim and truthful audit", () => {
     });
   });
 
+  test("force la reconnexion si la réconciliation a déjà un flux actif", async () => {
+    const resumeCalls: unknown[][] = [];
+    const deps = dependencies({
+      resume: (...args: unknown[]) => { resumeCalls.push(args); },
+    });
+
+    await (await import("./respond-approval")).respondRunApproval(
+      context,
+      run.id,
+      { choice: "once", approvalRequestId: "approval_1" },
+      deps,
+    );
+
+    expect(resumeCalls).toHaveLength(1);
+    expect(resumeCalls[0]?.[4]).toEqual({ force: true });
+  });
+
   test("records deny as denied after the remote decision", async () => {
     const deps = dependencies();
     await (await import("./respond-approval")).respondRunApproval(
@@ -205,6 +230,10 @@ describe("respondRunApproval G1-004B claim and truthful audit", () => {
       reasonCode: "RUN_APPROVAL_DENIED",
       beforeState: { status: "running", choice: "deny", approved: false },
       afterState: { status: "running", choice: "deny", approved: false },
+    });
+    expect(deps.audits.at(-1)?.beforeState).toEqual(deps.audits.at(-1)?.afterState);
+    expect(deps.audits.at(-1)?.afterState).toMatchObject({
+      policyDecision: { actionKind: "hermes.run.approval" },
     });
   });
 
@@ -227,6 +256,30 @@ describe("respondRunApproval G1-004B claim and truthful audit", () => {
     expect(deps.audits.some((entry) =>
       entry.decision === "allowed" && entry.reasonCode !== "RUN_APPROVAL_INTENT"
     )).toBe(false);
+  });
+
+  test("fails closed before Hermes when the policy is denied", async () => {
+    const deps = dependencies({
+      enforce: async () => {
+        throw new HermesPolicyError("HERMES_POLICY_DENIED", "policy denied", 403);
+      },
+    });
+
+    await expect(
+      (await import("./respond-approval")).respondRunApproval(
+        context,
+        run.id,
+        { choice: "once", approvalRequestId: "approval_1" },
+        deps,
+      ),
+    ).rejects.toMatchObject({ code: "HERMES_POLICY_DENIED", status: 403 });
+    expect(deps.remoteCalls).toHaveLength(0);
+    expect(deps.releases).toEqual([run.id]);
+    expect(deps.persistedReleases).toEqual([run.id]);
+    expect(deps.audits.at(-1)).toMatchObject({
+      decision: "denied",
+      reasonCode: "RUN_APPROVAL_POLICY_FAILED",
+    });
   });
 
   test("keeps the durable claim when the remote result is ambiguous", async () => {

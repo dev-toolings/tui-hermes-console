@@ -29,7 +29,7 @@ export function SettingsSecurityScreen({ data }: { data: RuntimeData }) {
           <SecurityRow
             icon={KeyRoundIcon}
             title="Token runtime (API_SERVER_KEY)"
-            description="Chiffré AES-256-GCM au repos. Masqué par défaut ; révélation ponctuelle protégée par OTP."
+            description="Chiffré AES-256-GCM au repos. Masqué par défaut, modifiable uniquement par un opérateur autorisé."
             badge={
               <Badge tone={runtime.tokenConfigured ? "success" : "warning"}>
                 {runtime.tokenConfigured ? "Configuré" : "Manquant"}

@@ -21,6 +21,7 @@ describe("persona navigation", () => {
       "/sessions",
       "/artifacts",
       "/overview",
+      "/roadmap",
       "/updates",
       "/support",
     ]);
@@ -38,11 +39,12 @@ describe("persona navigation", () => {
     ]);
     expect(navForCapabilities(ALL_NAV, capabilities).map((item) => item.href)).toEqual([
       "/chat",
+      "/sessions",
       "/agents",
       "/skills",
-      "/sessions",
       "/artifacts",
       "/overview",
+      "/roadmap",
       "/updates",
       "/support",
     ]);
@@ -58,11 +60,12 @@ describe("persona navigation", () => {
     ]);
     expect(navForCapabilities(ALL_NAV, capabilities).map((item) => item.href)).toEqual([
       "/chat",
+      "/sessions",
       "/agents",
       "/skills",
-      "/sessions",
       "/artifacts",
       "/overview",
+      "/roadmap",
       "/updates",
       "/audit",
       "/support",

@@ -48,7 +48,7 @@ describeWithDocker("audit ledger migration on PostgreSQL", () => {
       "POSTGRES_HOST_AUTH_METHOD=trust", POSTGRES_IMAGE,
     ]);
     for (let attempt = 0; attempt < 60; attempt += 1) {
-      if (spawnSync("docker", ["exec", containerName, "pg_isready", "-U", "postgres"], { stdio: "ignore" }).status === 0) {
+      if (spawnSync("docker", ["exec", containerName, "psql", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-Atqc", "SELECT 1;"], { stdio: "ignore" }).status === 0) {
         hostPort = docker(["port", containerName, "5432/tcp"]).split(":").at(-1) ?? "";
         return;
       }

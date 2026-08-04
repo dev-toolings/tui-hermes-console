@@ -11,6 +11,7 @@ import {
   HistoryIcon,
   LayoutDashboardIcon,
   MessageSquareIcon,
+  MilestoneIcon,
   ScrollTextIcon,
   SettingsIcon,
   SparklesIcon,
@@ -24,26 +25,94 @@ export type NavItem = {
   icon: LucideIcon;
   badge?: string;
   requiredCapability?: string;
+  section?: string;
 };
 
 export const DEFAULT_CONSOLE_PATH = "/chat";
 
 export const WORK_NAV = [
-  { label: "Chat", href: "/chat", icon: MessageSquareIcon, requiredCapability: "thread.read" },
-  { label: "Agents", href: "/agents", icon: BotIcon, requiredCapability: "agent.read" },
-  { label: "Skills", href: "/skills", icon: SparklesIcon, requiredCapability: "agent.read" },
-  { label: "Sessions", href: "/sessions", icon: HistoryIcon, requiredCapability: "thread.read" },
-  { label: "Artefacts", href: "/artifacts", icon: FileBoxIcon, requiredCapability: "artifact.read" },
-  { label: "Aperçu", href: "/overview", icon: LayoutDashboardIcon, requiredCapability: "run.read" },
+  {
+    label: "Chat",
+    href: "/chat",
+    icon: MessageSquareIcon,
+    requiredCapability: "thread.read",
+    section: "Conversations",
+  },
+  {
+    label: "Sessions",
+    href: "/sessions",
+    icon: HistoryIcon,
+    requiredCapability: "thread.read",
+    section: "Conversations",
+  },
+  {
+    label: "Agents",
+    href: "/agents",
+    icon: BotIcon,
+    requiredCapability: "agent.read",
+    section: "Agents",
+  },
+  {
+    label: "Skills",
+    href: "/skills",
+    icon: SparklesIcon,
+    requiredCapability: "agent.read",
+    section: "Agents",
+  },
+  {
+    label: "Artefacts",
+    href: "/artifacts",
+    icon: FileBoxIcon,
+    requiredCapability: "artifact.read",
+    section: "Travail",
+  },
+  {
+    label: "Aperçu",
+    href: "/overview",
+    icon: LayoutDashboardIcon,
+    requiredCapability: "run.read",
+    section: "Administration",
+  },
 ] satisfies NavItem[];
 
 export const CONTROL_NAV: NavItem[] = [];
 
 export const FOOTER_NAV = [
-  { label: "Settings", href: "/settings", icon: SettingsIcon, requiredCapability: "installation.admin" },
-  { label: "Mises à jour", href: "/updates", icon: RocketIcon, requiredCapability: "run.read" },
-  { label: "Journal", href: "/audit", icon: ScrollTextIcon, requiredCapability: "audit.read" },
-  { label: "Aide", href: "/support", icon: CircleHelpIcon, requiredCapability: "run.read" },
+  {
+    label: "Settings",
+    href: "/settings",
+    icon: SettingsIcon,
+    requiredCapability: "installation.admin",
+    section: "Administration",
+  },
+  {
+    label: "Roadmap",
+    href: "/roadmap",
+    icon: MilestoneIcon,
+    requiredCapability: "run.read",
+    section: "Administration",
+  },
+  {
+    label: "Mises à jour",
+    href: "/updates",
+    icon: RocketIcon,
+    requiredCapability: "run.read",
+    section: "Administration",
+  },
+  {
+    label: "Journal",
+    href: "/audit",
+    icon: ScrollTextIcon,
+    requiredCapability: "audit.read",
+    section: "Administration",
+  },
+  {
+    label: "Aide",
+    href: "/support",
+    icon: CircleHelpIcon,
+    requiredCapability: "run.read",
+    section: "Administration",
+  },
 ] satisfies NavItem[];
 
 /** Toutes les destinations, pour la palette ⌘K. */
@@ -160,11 +229,19 @@ export function pageMeta(pathname: string): PageMeta {
       parent: { label: "Paramètres", href: "/settings" },
     };
   }
+  if (pathname === "/roadmap") return { title: "Roadmap", crumb: "Roadmap" };
   if (pathname === "/updates") return { title: "Mises à jour Hermes", crumb: "Mises à jour" };
   if (pathname === "/settings/retention") {
     return {
       title: "Conservation",
       crumb: "Conservation",
+      parent: { label: "Paramètres", href: "/settings" },
+    };
+  }
+  if (pathname === "/settings/achievements") {
+    return {
+      title: "Badges",
+      crumb: "Badges",
       parent: { label: "Paramètres", href: "/settings" },
     };
   }

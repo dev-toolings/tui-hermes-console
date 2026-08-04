@@ -3,8 +3,9 @@
 - **Établi le :** 04-08-2026
 - **Méthode :** confrontation des états déclarés dans `TRACEABILITY.md` et les documents de gate au
   code réellement présent, à l'historique git et à l'exécution des tests.
-- **Base factuelle :** `bun test` sur le commit `ab8af6c`, `bun run typecheck`, `git log`, inventaire
-  des routes et modules.
+- **Base factuelle initiale :** `bun test` sur le commit `ab8af6c`, `bun run typecheck`, `git log`,
+  inventaire des routes et modules.
+- **Actualisation :** correctifs et parcours d'update rejoués le 04-08-2026 sur le worktree courant.
 
 Ce registre n'est pas une preuve au sens de `CONVENTIONS.md`. C'est un constat d'écart. Chaque entrée
 nomme l'incohérence, la démontre par une citation vérifiable, et dit ce qui est gelé en conséquence.
@@ -13,15 +14,23 @@ nomme l'incohérence, la démontre par une citation vérifiable, et dit ce qui e
 
 | Contrôle | Résultat |
 |---|---|
-| `bun run typecheck` | passe sur `@console/core`, `server`, `web` |
-| `bun test` (exécution 1) | 593 tests, 586 pass, 3 skip, **4 fail** |
-| `bun test` (exécution 2, même commit) | 593 tests, 588 pass, 3 skip, **2 fail** |
+| Typechecks ciblés | `core`, `server` et `web` verts sur leurs commandes dédiées ; le typecheck agrégé conserve une erreur web préexistante d'import type-only dans `apps/web/src/components/shell/nav-main.tsx` |
+| `bun run proof:g1-005c` | 3 tests, 0 fail, 53 expect |
+| Régression du rejeu runtime | 600 tests passés, 3 skips explicites, **0 fail** |
 
-Les deux exécutions ont été lancées à la suite, sur le même commit et la même base PostgreSQL.
+Les preuves de régression et de runtime sont datées du rejeu du 04-08-2026 ; les skips restent
+explicitement environnementaux et ne sont pas comptés comme des succès.
+
+## Décision de périmètre — SFTP gelé
+
+Le transfert SFTP n'est pas retenu pour cette phase produit. `US-G1-SSH-006`, `US-G1-SSH-007` et
+`US-G1-SSH-009` passent à l'état `GELÉE` : aucun développement, rejeu, preuve ou critère Gate 1 ne
+doit leur être attribué. Le tunnel SSH, la confiance d'hôte et la rotation d'identité restent des
+éléments actifs du sous-périmètre SSH.
 
 ---
 
-## INC-01 — La preuve `G1-005C` échoue et le contrôle fail-closed est ignoré
+## INC-01 — La preuve `G1-005C` échouait et le contrôle fail-closed était ignoré — CORRIGÉE
 
 **Constat.** `proof:g1-005c` (`bun test apps/server/src/db/production-migration.test.ts`) échoue sur
 deux tests :
@@ -42,38 +51,38 @@ déclenché comme spécifié, et il a été laissé rouge.
 `MUTABLE_APPLICATION_TABLES` (`apps/server/src/db/production-migration.ts:7`) ni dans
 `PROTECTED_APPLICATION_TABLES` (`:36`).
 
-**Écart documentaire.** `US-G1-005` était déclarée `IMPLÉMENTÉE` sur la foi d'une preuve datée du
-01-08-2026, alors que le code l'a invalidée depuis.
+**Décision.** Les deux tables sont des tables applicatives mutables : `hermes_releases` est écrite
+par la synchronisation des releases et `runtime_update_operations` par le workflow d'update. Elles
+ne sont pas le ledger append-only et ont été ajoutées à `MUTABLE_APPLICATION_TABLES`.
 
-**Action prise.** `US-G1-005` passe à `BLOQUÉE` dans `GATE-1-CONTRAT-EXPLOITATION.md` et
-`TRACEABILITY.md`. La correction elle-même (classer les deux tables) est une décision de sécurité :
-elle exige de trancher si ces tables sont mutables ou protégées, ce qui n'est pas un arbitrage de
-documentation.
+**Résultat.** `bun run proof:g1-005c` repasse avec 3 tests, 0 échec et 53 assertions. La frontière
+owner/runtime est donc restaurée pour ces tables ; P-SEC/P-E2E, revue indépendante et dépendance
+US-G1-004 restent des réserves de Gate 1, pas l'INC-01.
 
 ---
 
-## INC-02 — Deux fonctionnalités livrées sans aucune story
+## INC-02 — Une fonctionnalité livrée sans story — PARTIELLEMENT RÉSOLUE
 
-Aucun document de story ne mentionne ces fonctionnalités, ni en français ni en anglais. Elles sont
-pourtant complètes : back, front, migrations, tests.
+Le constat initial portait sur `updates` et `skills`, toutes deux complètes côté back, front,
+migrations et tests. `updates` est maintenant couverte par `US-G1-002D` et une preuve locale/Proxmox
+réelle ; `skills` reste sans story.
 
 | Fonctionnalité | Artefacts constatés |
 |---|---|
-| `updates` | `apps/server/src/modules/updates/{hermes-releases.ts,github-hermes-releases.ts}`, routes `/api/runtime/update`, `/api/runtime/update/[operationId]`, `/api/runtime/update/[operationId]/events`, `/api/updates/hermes`, migrations `0034`/`0035`, entrée de navigation `/updates`, script `apps/server/scripts/sync-hermes-releases.ts` |
+| `updates` | `apps/server/src/modules/updates/{hermes-releases.ts,github-hermes-releases.ts}`, routes `/api/runtime/update`, `/api/runtime/update/[operationId]`, `/api/runtime/update/[operationId]/events`, `/api/updates/hermes`, migrations `0034`/`0035`, entrée de navigation `/updates`, script `apps/server/scripts/sync-hermes-releases.ts` — désormais couverte par `US-G1-002D` et sa preuve du 04-08-2026 |
 | `skills` | `apps/server/src/api/skills/route.ts`, `apps/server/src/api/skills/toggle/route.ts`, `apps/server/src/modules/runtime/hermes-skills-admin.ts` (+ test), écran `apps/web/src/screens/skills.tsx`, entrée de navigation `/skills` |
 
 **Pourquoi c'est grave ici.** Le dépôt applique une méthode où aucune capacité n'est acceptable sans
-story, scénarios positif et négatif, et preuve datée. Ces deux fonctionnalités échappent entièrement
-au dispositif. `updates` est de surcroît la cause directe d'INC-01 : elle a introduit deux tables qui
-ont fait tomber une frontière de sécurité prouvée.
+story, scénarios positif et négatif, et preuve datée. `skills` échappe encore au dispositif. `updates`
+reste la cause directe d'INC-01 : elle a introduit deux tables qui ont fait tomber une frontière de
+sécurité prouvée, frontière désormais corrigée.
 
-**Gel.** Tant qu'aucune story ne les couvre, ces deux fonctionnalités ne peuvent être invoquées dans
-aucune preuve ni dans aucune revue de gate. Elles ne sont pas retirées du code, mais elles sont hors
-périmètre d'acceptation.
+**Gel.** `skills` ne peut pas être invoquée dans une preuve ni une revue de gate tant qu'une story ne
+la couvre pas. `updates` peut être examinée pour sa partie technique, mais reste `IMPLÉMENTÉE` et non
+`VÉRIFIÉE` jusqu'à la revue indépendante et au P-E2E Gate 1.
 
-**Décision requise.** Écrire les stories manquantes, ou décider explicitement que ces fonctionnalités
-sont hors méthode et le tracer. Les identifiants de story ne sont pas inventés ici : c'est un choix
-de périmètre produit.
+**Décision requise.** Le propriétaire produit doit écrire la story `skills` ou la déclarer
+explicitement hors méthode. `US-G1-002D` est le rattachement retenu pour `updates`.
 
 ---
 
@@ -121,17 +130,15 @@ Les états backend/DB de ces stories ne sont pas remis en cause par ce constat.
 
 ---
 
-## INC-05 — La suite de tests n'est pas déterministe
+## INC-05 — La suite de tests n'était pas déterministe — CORRIGÉE
 
-Deux exécutions consécutives de `bun test`, même commit `ab8af6c`, même base : **4 échecs** puis
-**2 échecs**. Seuls les deux échecs de `production-migration.test.ts` (INC-01) sont reproductibles.
+Les échecs variables venaient des intégrations PostgreSQL Docker qui considéraient `pg_isready` vert
+pendant le serveur temporaire d'initialisation, juste avant son arrêt et le démarrage final. Les
+premiers `psql` tombaient alors sur une socket absente.
 
-Deux tests ont donc changé de résultat sans que le code change. Tant que ce n'est pas élucidé, la
-suite ne peut pas servir de critère d'acceptation : `VÉRIFIÉE` exige que « tous les tests exigés
-passent », ce qui suppose un résultat stable.
-
-La première exécution ayant été tronquée à la capture, l'identité des deux tests instables n'est pas
-établie. C'est la première chose à instrumenter.
+Les sondes des intégrations concernées attendent maintenant une vraie requête `psql SELECT 1`.
+Deux exécutions complètes consécutives du worktree courant passent : **590 pass, 3 skip, 0 fail**
+sur 593 tests. INC-05 est corrigée ; les trois skips restent explicitement hors environnement local.
 
 ---
 
@@ -156,16 +163,14 @@ archivé.
   restants sont des noms d'exemple dans des blocs de code, pas des citations.
 - Gate 0 et Gate 3 sont cohérentes : toutes leurs stories sont `PROPOSÉE` et aucun code correspondant
   n'existe. Aucune revendication excessive n'a été trouvée de ce côté.
-- `bun run typecheck` passe sur les trois workspaces. Il n'y a pas de dette de typage masquée.
-- Aucune correction de code n'a été appliquée. Ce document constate, il ne répare pas.
+- Les typechecks ciblés `core`, `server` et `web` ont été rejoués ; le typecheck agrégé conserve
+  l'erreur web import type-only déjà signalée dans la vérité terrain ci-dessus.
+- Les corrections appliquées sont documentées ici et dans les preuves datées ; ce registre conserve
+  les constats historiques pour expliquer les changements d'état.
 
 ## Suites proposées, par ordre de coût croissant
 
-1. Classer `hermes_releases` et `runtime_update_operations`, rejouer `proof:g1-005c`, rendre
-   `US-G1-005` à son état antérieur. Décision de sécurité, pas de documentation.
-2. Identifier les deux tests instables d'INC-05 en capturant une sortie complète sur plusieurs
-   exécutions.
-3. Trancher le sort des fonctionnalités `updates` et `skills` : stories à écrire, ou hors méthode
-   assumé et tracé.
-4. Rejouer `G1-007A` avec le harness courant.
-5. Décider si le volet UI de Gate 2 doit être re-prouvé sur `apps/web`.
+1. Faire la revue indépendante et le P-E2E Gate 1 de `US-G1-002`/`US-G1-002D`.
+2. Trancher le sort de `skills` : story à écrire, ou hors méthode assumé et tracé.
+3. Rejouer `G1-007A` avec le harness courant.
+4. Décider si le volet UI de Gate 2 doit être re-prouvé sur `apps/web`.

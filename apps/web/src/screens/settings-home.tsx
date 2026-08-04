@@ -8,6 +8,7 @@ import {
   PaletteIcon,
   ServerIcon,
   ShieldIcon,
+  TrophyIcon,
 } from "lucide-react";
 import { Badge, Card, CardSurface, SectionHeading } from "@/components/ui/boardui";
 import { SettingsContent } from "@/components/settings/settings-content";
@@ -69,6 +70,14 @@ const SECTIONS = [
     description: "Compte administrateur, secrets runtime et périmètre d’exécution.",
     status: "Partiel",
     tone: "warning" as const,
+  },
+  {
+    href: "/settings/achievements",
+    icon: TrophyIcon,
+    title: "Badges",
+    description: "Profil d’utilisation de l’agent, calculé depuis l’historique Hermes.",
+    status: "Lecture seule",
+    tone: "neutral" as const,
   },
 ];
 

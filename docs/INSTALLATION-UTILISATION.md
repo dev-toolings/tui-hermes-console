@@ -321,10 +321,12 @@ la connexion et le dossier de travail :
 5. choisir un dossier proposé, ou vérifier manuellement les chemins vus par le VPS et par Hermes ;
 6. confirmer l’activation après les tests d’écriture SFTP et dans le contexte réel d’Hermes.
 
-La section `Installation ou réparation` reste optionnelle. Le provisioning Docker utilise une image
-épinglée par digest. Le provisioning natif automatique reste bloqué tant qu’une release officielle
-avec checksum vérifiable n’est pas intégrée ; une installation native existante peut néanmoins être
-connectée, détectée et utilisée par le parcours principal.
+La section `Installation ou réparation` reste optionnelle et sépare le compte admin temporaire du
+compte service persisté. Deux modes sont disponibles : Docker tire l’image officielle `:latest`,
+résout son digest puis exécute cette révision ; system-wide télécharge l’installateur officiel depuis
+`main`, l’exécute sans `--commit`, enregistre le commit obtenu et installe la release sous
+`/opt/hermes-console/releases`. `hermes-gateway.service` s’exécute avec `User=hermes-console`. Les
+deux modes écoutent sur loopback et ne sont pas lancés simultanément.
 
 Pour un compte SSH non root, le wizard exige un `sudo` non interactif. Le mode clé/agent
 utilise le binaire `ssh`, `~/.ssh/config`, `ssh-agent` et `ProxyJump` sans importer de clé privée.

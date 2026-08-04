@@ -28,6 +28,12 @@ export function RuntimeLifecycle({
   const managedLocally =
     runtime?.transport !== "ssh" && isLocalRuntimeUrl(runtime?.baseUrl);
 
+  React.useEffect(() => {
+    if (runtime?.configured) return;
+    const resetTimer = window.setTimeout(() => setState({ kind: "idle" }), 0);
+    return () => window.clearTimeout(resetTimer);
+  }, [runtime?.configured, runtime?.configRevision]);
+
   async function restart() {
     setState({ kind: "restarting" });
     try {

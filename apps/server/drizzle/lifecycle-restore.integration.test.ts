@@ -76,7 +76,7 @@ async function waitForPostgres() {
     const output = `${logs.stdout ?? ""}\n${logs.stderr ?? ""}`;
     const ready = spawnSync(
       "docker",
-      ["exec", containerName, "pg_isready", "-U", "postgres"],
+      ["exec", containerName, "psql", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-Atqc", "SELECT 1;"],
       { stdio: "ignore" },
     ).status === 0;
     if (output.includes(marker) && ready) return;

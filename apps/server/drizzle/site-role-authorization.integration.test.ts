@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { generateDecisionKeyPair } from "@/modules/policy/decision-envelope";
 
 const POSTGRES_IMAGE =
   "postgres:17.6-alpine@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94";
@@ -80,7 +81,7 @@ async function waitForFinalPostgres() {
     const output = `${logs.stdout ?? ""}\n${logs.stderr ?? ""}`;
     const ready = spawnSync(
       "docker",
-      ["exec", containerName, "pg_isready", "-U", "postgres"],
+      ["exec", containerName, "psql", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-Atqc", "SELECT 1;"],
       { stdio: "ignore" },
     ).status === 0;
     if (output.includes(initCompleteMarker) && ready) return;
@@ -183,6 +184,11 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
 
     process.env.DATABASE_URL = `postgres://postgres@127.0.0.1:${port}/site_roles`;
     process.env.APP_ENCRYPTION_KEY = "p-int-site-role-authorization";
+    const policyKeys = generateDecisionKeyPair();
+    process.env.HERMES_POLICY_PRIVATE_KEY_B64URL = policyKeys.privateKey
+      .export({ format: "der", type: "pkcs8" })
+      .toString("base64url");
+    process.env.HERMES_POLICY_PUBLIC_KEY_B64URL = policyKeys.publicKey;
     process.env.HERMES_CONSOLE_ARTIFACTS_DIR = artifactRoot;
     process.env.GOOGLE_ALLOWED_EMAILS = Object.keys(sessions)
       .map((role) => `${role}@example.com`)
@@ -310,6 +316,8 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
     delete databaseGlobal.hermesConsoleDb;
     delete process.env.DATABASE_URL;
     delete process.env.APP_ENCRYPTION_KEY;
+    delete process.env.HERMES_POLICY_PRIVATE_KEY_B64URL;
+    delete process.env.HERMES_POLICY_PUBLIC_KEY_B64URL;
     delete process.env.HERMES_CONSOLE_ARTIFACTS_DIR;
     delete process.env.GOOGLE_ALLOWED_EMAILS;
     await rm(artifactRoot, { recursive: true, force: true });

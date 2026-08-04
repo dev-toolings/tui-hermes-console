@@ -29,6 +29,8 @@ import * as runApproval from "@/api/runs/[runId]/approval/route";
 import * as runCancel from "@/api/runs/[runId]/cancel/route";
 import * as runRetry from "@/api/runs/[runId]/retry/route";
 import * as runtime from "@/api/runtime/route";
+import * as runtimeAchievements from "@/api/runtime/achievements/route";
+import * as runtimeAchievementsScanStatus from "@/api/runtime/achievements/scan-status/route";
 import * as runtimeDashboard from "@/api/runtime/dashboard/route";
 import * as runtimeModels from "@/api/runtime/models/route";
 import * as runtimeProbe from "@/api/runtime/probe/route";
@@ -42,8 +44,6 @@ import * as runtimeUpdateOperationEvents from "@/api/runtime/update/[operationId
 import * as runtimeCredentials from "@/api/runtime/credentials/route";
 import * as runtimeCredentialPlan from "@/api/runtime/credentials/plan/route";
 import * as runtimeCredentialOperation from "@/api/runtime/credentials/[operationId]/route";
-import * as runtimeSecretRevealChallenge from "@/api/runtime/secret-reveal/challenge/route";
-import * as runtimeSecretRevealVerify from "@/api/runtime/secret-reveal/verify/route";
 import * as sshHosts from "@/api/runtime/ssh-hosts/route";
 import * as runtimeTest from "@/api/runtime/test/route";
 import * as runtimeSshConnect from "@/api/runtime/ssh/connect/route";
@@ -272,6 +272,16 @@ export const ROUTES: RouteDefinition[] = [
   },
 
   { path: "/api/runtime", module: runtime, access: installationAccess },
+  {
+    path: "/api/runtime/achievements",
+    module: runtimeAchievements,
+    access: siteAccess({ GET: "agent.read" }),
+  },
+  {
+    path: "/api/runtime/achievements/scan-status",
+    module: runtimeAchievementsScanStatus,
+    access: siteAccess({ GET: "agent.read" }),
+  },
   { path: "/api/runtime/dashboard", module: runtimeDashboard, access: installationAccess },
   { path: "/api/runtime/models", module: runtimeModels, access: installationAccess },
   { path: "/api/runtime/probe", module: runtimeProbe, access: installationAccess },
@@ -283,8 +293,6 @@ export const ROUTES: RouteDefinition[] = [
   { path: "/api/runtime/credentials", module: runtimeCredentials, access: installationAccess },
   { path: "/api/runtime/credentials/plan", module: runtimeCredentialPlan, access: installationAccess },
   { path: "/api/runtime/credentials/:operationId", module: runtimeCredentialOperation, access: installationAccess },
-  { path: "/api/runtime/secret-reveal/challenge", module: runtimeSecretRevealChallenge, access: installationAccess },
-  { path: "/api/runtime/secret-reveal/verify", module: runtimeSecretRevealVerify, access: installationAccess },
   { path: "/api/runtime/ssh-hosts", module: sshHosts, access: installationAccess },
   { path: "/api/runtime/test", module: runtimeTest, access: installationAccess },
   { path: "/api/runtime/ssh/connect", module: runtimeSshConnect, access: installationAccess },

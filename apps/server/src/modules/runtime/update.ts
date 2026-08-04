@@ -13,6 +13,11 @@ import {
 import { HermesRuntimeError } from "./hermes-adapter";
 import { withEphemeralSshChannel } from "./ssh";
 import type { SshCommandSession } from "./ssh/types";
+import {
+  parseRemoteUpdateManagerResult,
+  remoteUpdateManagerInspectCommand,
+  remoteUpdateManagerUpdateCommand,
+} from "./ssh/remote-update-manager";
 import { withRuntimeMutationLease } from "@/modules/runs/active-runtime-guard";
 import { getHermesReleases } from "@/modules/updates/hermes-releases";
 
@@ -30,6 +35,7 @@ type Installation = {
   composeDir?: string;
   composeService?: string;
   imageRef?: string;
+  remoteManager?: true;
 };
 
 export type RuntimeUpdateProgress = (update: {
@@ -119,6 +125,51 @@ async function inspectInstallation(runtime: RuntimePublicDto): Promise<Installat
       supported: false,
       reason: "Ce runtime distant n’a pas de canal SSH administrable par la Console.",
     };
+  }
+  if (runtime.transport === "ssh") {
+    const managedResult = await runOnRuntimeHost(
+      runtime,
+      remoteUpdateManagerInspectCommand(),
+      20_000,
+    );
+    if (managedResult.code === 0) {
+      const managedValues = parseKeyValues(managedResult.stdout);
+      if (managedValues.get("managed") !== "true") {
+        return {
+          method: "external",
+          supported: false,
+          reason: "Le gestionnaire distant n’a pas confirmé une installation Hermes gérée.",
+        };
+      }
+      if (managedValues.get("mode") === "native") {
+        return {
+          method: "native",
+          supported: true,
+          reason: null,
+          remoteManager: true,
+        };
+      }
+      if (managedValues.get("mode") === "docker") {
+        return {
+          method: "docker-compose",
+          supported: true,
+          reason: null,
+          remoteManager: true,
+        };
+      }
+      return {
+        method: "unknown",
+        supported: false,
+        reason: "Le gestionnaire distant a retourné une topologie Hermes inconnue.",
+      };
+    }
+    if (runtime.managementMode === "managed") {
+      return {
+        method: "unknown",
+        supported: false,
+        reason: "Le gestionnaire de mise à jour distante est absent ou refuse cette topologie gérée.",
+      };
+    }
   }
   const result = await runOnRuntimeHost(runtime, INSPECT_SCRIPT, 20_000);
   if (result.code !== 0) {
@@ -215,7 +266,39 @@ export async function applyRuntimeUpdate(onProgress?: RuntimeUpdateProgress): Pr
     }
 
     let dockerCheckpoint: DockerCheckpoint | null = null;
-    if (installation.method === "native") {
+    let didApply = true;
+    if (installation.remoteManager) {
+      await onProgress?.({ phase: "backup", progress: 20, message: "Préparation du point de restauration distant…" });
+      await onProgress?.({ phase: "apply", progress: 45, message: "Mise à jour de l’installation Hermes gérée…" });
+      const result = await runOnRuntimeHost(
+        runtime,
+        remoteUpdateManagerUpdateCommand(),
+        COMMAND_TIMEOUT_MS,
+      );
+      const managerResult = parseRemoteUpdateManagerResult(result);
+      if (managerResult.status === "rolled_back") {
+        throw new HermesRuntimeError(
+          "La mise à jour distante a échoué, puis la version précédente a été restaurée.",
+          502,
+          "HERMES_UPDATE_ROLLED_BACK",
+        );
+      }
+      if (managerResult.status === "recovery_required") {
+        throw new HermesRuntimeError(
+          "La mise à jour distante et son rollback ont échoué. Une intervention est requise.",
+          500,
+          "HERMES_UPDATE_RECOVERY_REQUIRED",
+        );
+      }
+      if (managerResult.status === "failed") {
+        throw new HermesRuntimeError(
+          `La mise à jour distante Hermes a échoué : ${commandFailure(result)}.`,
+          502,
+          "HERMES_UPDATE_FAILED",
+        );
+      }
+      didApply = managerResult.status === "updated";
+    } else if (installation.method === "native") {
       await onProgress?.({ phase: "backup", progress: 20, message: "Création du backup Hermes système…" });
       await onProgress?.({ phase: "apply", progress: 45, message: "Installation de la nouvelle version Hermes…" });
       const result = await runOnRuntimeHost(
@@ -282,7 +365,7 @@ export async function applyRuntimeUpdate(onProgress?: RuntimeUpdateProgress): Pr
       if (dockerCheckpoint) await cleanupDockerCheckpoint(runtime, dockerCheckpoint);
       await onProgress?.({ phase: "complete", progress: 100, message: "Hermes est à jour et le runtime est sain." });
       return {
-        updated: true,
+        updated: didApply,
         rolledBack: false,
         previousVersion: before.currentVersion,
         currentVersion: recovered.detectedVersion ?? plan.currentVersion,

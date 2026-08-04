@@ -61,7 +61,7 @@ export function SettingsRuntimeScreen({ search }: { search: { mode?: "direct" | 
       <SettingsContent>
         <SectionHeading
           title="Runtime Hermes"
-          description="Une même Console peut joindre Hermes sur la machine locale, un réseau privé ou un VPS. Les secrets restent masqués par défaut et leur révélation exige un OTP."
+          description="Une même Console peut joindre Hermes sur la machine locale, un réseau privé ou un VPS. Les secrets restent masqués par défaut et ne sont modifiables que par un opérateur autorisé."
           action={runtimeBadge(runtime, search.mode)}
         />
         <Card>

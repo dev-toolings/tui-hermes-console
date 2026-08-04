@@ -13,11 +13,15 @@ import {
   getRunCancelTarget,
   releaseRunApprovalClaim,
 } from "./repository";
-import { isRunActive, resumeAgentRun } from "./runner";
+import { isRunReconciled, resumeAgentRun } from "./runner";
 import type { SiteRequestContext } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
 import { assertSiteAction, denySiteAction } from "@/modules/auth/site-authorization";
 import { appendAuditEntry } from "@/modules/audit/service";
+import {
+  enforceHermesApproval,
+  type HermesApprovalPolicyResult,
+} from "@/modules/policy/hermes-approval";
 import {
   claimApprovalRequestForScope,
   releaseApprovalRequestForScope,
@@ -40,7 +44,7 @@ export type RespondApprovalResult = {
 type ApprovalDependencies = {
   resolveRuntime: typeof resolveHermesRuntimeConfig;
   respondRemote: typeof respondHermesApproval;
-  isActive: typeof isRunActive;
+  isReconciled?: typeof isRunReconciled;
   resume: typeof resumeAgentRun;
   lookup?: typeof getRunCancelTarget;
   claim?: typeof claimRunApproval;
@@ -50,6 +54,7 @@ type ApprovalDependencies = {
   claimPersisted?: typeof claimApprovalRequestForScope;
   releasePersisted?: typeof releaseApprovalRequestForScope;
   resolvePersisted?: typeof resolveApprovalRequestForScope;
+  enforce?: typeof enforceHermesApproval;
 };
 
 function canReleaseApprovalClaim(error: unknown, remoteAttempted: boolean) {
@@ -71,7 +76,7 @@ export async function respondRunApproval(
   dependencies: ApprovalDependencies = {
     resolveRuntime: resolveHermesRuntimeConfig,
     respondRemote: respondHermesApproval,
-    isActive: isRunActive,
+    isReconciled: isRunReconciled,
     resume: resumeAgentRun,
   },
 ): Promise<RespondApprovalResult> {
@@ -168,18 +173,32 @@ export async function respondRunApproval(
     throw error;
   }
 
-  let runtime: Awaited<ReturnType<typeof dependencies.resolveRuntime>>;
+  let runtime!: Awaited<ReturnType<typeof dependencies.resolveRuntime>>;
   let remoteAttempted = false;
+  let policyDecision: HermesApprovalPolicyResult["decision"] | null = null;
   try {
     runtime = await dependencies.resolveRuntime();
-    remoteAttempted = true;
-    await dependencies.respondRemote({
+    const policyResult = await (dependencies.enforce ?? enforceHermesApproval)({
+      context,
+      runId,
       hermesRunId: claimed.hermesResponseId!,
+      approvalRequestId,
+      approvalNonce: persistedClaim.nonce,
+      runtimeBaseUrl: runtime.baseUrl,
       choice,
       approved,
-      baseUrl: runtime.baseUrl,
-      token: runtime.token,
+      effect: async () => {
+        remoteAttempted = true;
+        return dependencies.respondRemote({
+          hermesRunId: claimed.hermesResponseId!,
+          choice,
+          approved,
+          baseUrl: runtime.baseUrl,
+          token: runtime.token,
+        });
+      },
     });
+    policyDecision = policyResult.decision;
   } catch (error) {
     const releaseClaim = canReleaseApprovalClaim(error, remoteAttempted);
     if (releaseClaim) {
@@ -201,7 +220,12 @@ export async function respondRunApproval(
       resourceType: "run",
       resourceId: runId,
       decision: "denied",
-      reasonCode: releaseClaim ? "RUN_APPROVAL_REMOTE_FAILED" : "RUN_APPROVAL_REMOTE_UNKNOWN",
+      reasonCode:
+        !remoteAttempted && error instanceof Error && error.name === "HermesPolicyError"
+          ? "RUN_APPROVAL_POLICY_FAILED"
+          : releaseClaim
+            ? "RUN_APPROVAL_REMOTE_FAILED"
+            : "RUN_APPROVAL_REMOTE_UNKNOWN",
       beforeState: releaseClaim
         ? { status: "awaiting_approval", choice }
         : { status: "running", choice },
@@ -222,6 +246,24 @@ export async function respondRunApproval(
     choice === "deny" ? "deny" : "once",
   );
 
+  const policyProof = policyDecision
+    ? {
+        decisionId: policyDecision.decisionId,
+        keyId: policyDecision.keyId,
+        actionKind: policyDecision.actionKind,
+        scopeId: policyDecision.scopeId,
+        payloadSha256: policyDecision.payloadSha256,
+        nonce: policyDecision.nonce,
+        approverUserId: policyDecision.approverUserId,
+        approverRole: policyDecision.approverRole,
+        issuedAtMs: policyDecision.issuedAtMs,
+        expiresAtMs: policyDecision.expiresAtMs,
+        publicKey: policyDecision.publicKey,
+        signature: policyDecision.signature,
+      }
+    : null;
+  const deniedState = { status: "running", choice, approved: false, policyDecision: policyProof };
+
   await audit({
     eventId: randomUUID(),
     actorSiteId: context.siteId,
@@ -238,10 +280,10 @@ export async function respondRunApproval(
     reasonCode: approved ? "RUN_APPROVAL_ALLOWED" : "RUN_APPROVAL_DENIED",
     beforeState: approved
       ? { status: "running", approvalClaimed: true }
-      : { status: "running", choice, approved: false },
+      : deniedState,
     afterState: approved
-      ? { status: "running", approvalClaimed: false, choice, approved }
-      : { status: "running", choice, approved: false },
+      ? { status: "running", approvalClaimed: false, choice, approved, policyDecision: policyProof }
+      : deniedState,
     correlationId: context.correlationId,
     occurredAt: new Date(),
   });
@@ -250,9 +292,13 @@ export async function respondRunApproval(
   // Une demande d'autorisation attend un humain : le flux SSE a pu tomber
   // entre-temps (tunnel, veille, socket fermée) sans que la mission échoue.
   // Répondre ne sert à rien si plus personne n'écoute Hermes — on se rebranche.
-  if (!dependencies.isActive(runId)) {
-    dependencies.resume(context, runId, claimed.hermesResponseId!, runtime);
-  }
+  dependencies.resume(
+    context,
+    runId,
+    claimed.hermesResponseId!,
+    runtime,
+    { force: dependencies.isReconciled?.(runId) ?? false },
+  );
 
   return { runId, choice, approved, status: "running" };
 }

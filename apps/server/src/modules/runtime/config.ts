@@ -17,6 +17,7 @@ import {
   type HermesCapabilities,
 } from "./hermes-adapter";
 import {
+  closeChannel,
   ensureTunnel,
   getChannel,
   withEphemeralSshChannel,
@@ -127,6 +128,8 @@ export type RuntimeSshConnectInput = {
   name?: string;
   expectedRevision?: number | null;
   credentialMode?: "manual" | "import";
+  managementMode?: "external" | "managed";
+  credentialAdapter?: "native_systemd" | "docker" | "compose" | "manual" | "unknown";
   ssh: SshConnectionInput;
 };
 
@@ -307,63 +310,36 @@ export async function resolveHermesRuntimeConfig(): Promise<ResolvedRuntimeConfi
   return { baseUrl, remoteBaseUrl: baseUrl, token, transport: "direct", source: "env" };
 }
 
-export type RuntimeRevealSecret = {
-  token: string;
-  variableName: "API_SERVER_KEY" | "HERMES_RUNTIME_TOKEN";
-  source: "database" | "hermes_remote_env" | "console_env";
-};
-
-/**
- * Lit le secret effectif uniquement après que le service de révélation a
- * validé le challenge. Cette fonction ne doit jamais être appelée par un DTO
- * public ou un endpoint de configuration générique.
- */
-export async function readRuntimeSecretForReveal(): Promise<RuntimeRevealSecret> {
-  const row = await getRuntimeRow();
-  if (row) {
-    if (row.transport === "ssh") {
-      return {
-        token: await importRemoteHermesToken(sshTargetFromRow(row)),
-        variableName: "API_SERVER_KEY",
-        source: "hermes_remote_env",
-      };
-    }
-    return {
-      token: validateRuntimeRevealToken(decryptSecret(row.encryptedToken)),
-      variableName: "API_SERVER_KEY",
-      source: "database",
-    };
-  }
-
-  const fallback = process.env.HERMES_RUNTIME_TOKEN?.trim();
-  if (fallback) {
-    return {
-      token: validateRuntimeRevealToken(fallback),
-      variableName: "HERMES_RUNTIME_TOKEN",
-      source: "console_env",
-    };
-  }
-  const apiServerKey = process.env.API_SERVER_KEY?.trim();
-  if (apiServerKey) {
-    return {
-      token: validateRuntimeRevealToken(apiServerKey),
-      variableName: "API_SERVER_KEY",
-      source: "console_env",
-    };
-  }
-  throw new HermesRuntimeError(
-    "Aucun secret API_SERVER_KEY ou HERMES_RUNTIME_TOKEN n’est disponible côté serveur.",
-    503,
-    "RUNTIME_SECRET_UNAVAILABLE",
-  );
-}
-
 export async function saveRuntimeConfig(
   input: RuntimeConnectionInput,
   mutationLease?: RuntimeMutationLease,
 ): Promise<RuntimePublicDto> {
   return withRuntimeMutationLease(
     () => saveRuntimeConfigUnlocked(input),
+    mutationLease,
+  );
+}
+
+export async function deleteRuntimeConfig(
+  mutationLease?: RuntimeMutationLease,
+): Promise<RuntimePublicDto> {
+  return withRuntimeMutationLease(
+    async () => {
+      const existing = await getRuntimeRow();
+      if (!existing) {
+        throw new HermesRuntimeError(
+          "La configuration runtime est fournie par l’environnement et ne peut pas être supprimée depuis la webapp.",
+          409,
+          "RUNTIME_CONFIGURATION_ENVIRONMENT",
+        );
+      }
+
+      await getDatabase()
+        .delete(runtimeConfig)
+        .where(eq(runtimeConfig.id, RUNTIME_ID));
+      closeChannel();
+      return getRuntimePublic();
+    },
     mutationLease,
   );
 }
@@ -563,7 +539,11 @@ async function connectAndSaveSshRuntimeUnlocked(input: RuntimeSshConnectInput) {
     !sameIdentity ||
     (suppliedToken !== undefined && suppliedToken !== storedToken) ||
     (suppliedPassword !== undefined && suppliedPassword !== storedPassword) ||
-    (requestedName !== undefined && requestedName !== existing?.name);
+    (requestedName !== undefined && requestedName !== existing?.name) ||
+    (input.managementMode !== undefined &&
+      input.managementMode !== existing?.managementMode) ||
+    (input.credentialAdapter !== undefined &&
+      input.credentialAdapter !== existing?.credentialAdapter);
   const workspaceStatus: RuntimeWorkspaceStatus = sameIdentity
     ? existing?.workspaceStatus ?? "required"
     : "required";
@@ -587,8 +567,8 @@ async function connectAndSaveSshRuntimeUnlocked(input: RuntimeSshConnectInput) {
             password === storedPassword
           ? existing.encryptedSshPassword
           : encryptSecret(password),
-    managementMode: "external" as const,
-    credentialAdapter: "manual" as const,
+    managementMode: input.managementMode ?? ("external" as const),
+    credentialAdapter: input.credentialAdapter ?? ("manual" as const),
     lastCredentialRotatedAt: existing?.lastCredentialRotatedAt ?? null,
     remoteWorkdir: sameIdentity ? existing?.remoteWorkdir ?? null : null,
     remoteHermesWorkdir: sameIdentity
@@ -914,17 +894,6 @@ async function importRemoteHermesToken(target: SshTarget) {
     );
   }
   return token;
-}
-
-function validateRuntimeRevealToken(value: string) {
-  if (!value || value.length > 2_000 || /[\u0000-\u001f\u007f]/.test(value)) {
-    throw new HermesRuntimeError(
-      "Le secret API_SERVER_KEY détecté est vide ou invalide.",
-      502,
-      "RUNTIME_SECRET_INVALID",
-    );
-  }
-  return value;
 }
 
 function healthVersion(health: unknown) {

@@ -10,6 +10,7 @@ import {
   HermesRuntimeError,
   createHermesAgentRun,
   ensureHermesSession,
+  getHermesRun,
   iterateHermesAgentEvents,
   listHermesSessionMessages,
   stopHermesAgentRun,
@@ -46,6 +47,7 @@ import { describeError, log } from "@/observability/log";
 
 type ActiveRun = {
   siteId: string;
+  source: "fresh" | "reconciled";
   controller: AbortController;
   hermesRunId: string | null;
   runtime: ResolvedRuntimeConfig | null;
@@ -69,7 +71,7 @@ export function startRun(scope: SiteScope, runId: string) {
       // executeRun persiste toujours son erreur. Éviter une rejection orpheline.
     })
     .finally(() => activeRuns.delete(runId));
-  activeRuns.set(runId, { siteId: scope.siteId, controller, hermesRunId: null, runtime: null, promise });
+  activeRuns.set(runId, { siteId: scope.siteId, source: "fresh", controller, hermesRunId: null, runtime: null, promise });
 }
 
 /**
@@ -81,16 +83,36 @@ export function resumeAgentRun(
   runId: string,
   hermesRunId: string,
   runtime: ResolvedRuntimeConfig,
+  options: { force?: boolean } = {},
 ) {
   assertRuntimeMutationIdle();
-  if (activeRuns.has(runId)) return;
+  const previous = activeRuns.get(runId);
+  if (previous) {
+    if (!options.force) return;
+    // A boot reconciliation may still be listening to the pre-decision stream
+    // when the human answers. Reconnect that local reader without stopping the
+    // remote Hermes run; its abort reason must not become a user cancellation.
+    previous.controller.abort("reconnect");
+    activeRuns.delete(runId);
+  }
   const controller = new AbortController();
+  const active: ActiveRun = {
+    siteId: scope.siteId,
+    source: "reconciled",
+    controller,
+    hermesRunId,
+    runtime,
+    promise: Promise.resolve(),
+  };
   const promise = resumeAgentStream(scope, runId, hermesRunId, runtime, controller)
     .catch(() => {
       // erreur déjà persistée
     })
-    .finally(() => activeRuns.delete(runId));
-  activeRuns.set(runId, { siteId: scope.siteId, controller, hermesRunId, runtime, promise });
+    .finally(() => {
+      if (activeRuns.get(runId) === active) activeRuns.delete(runId);
+    });
+  active.promise = promise;
+  activeRuns.set(runId, active);
 }
 
 export function cancelActiveRun(scope: SiteScope, runId: string) {
@@ -117,6 +139,10 @@ export function cancelActiveRun(scope: SiteScope, runId: string) {
 
 export function isRunActive(runId: string) {
   return activeRuns.has(runId);
+}
+
+export function isRunReconciled(runId: string) {
+  return activeRuns.get(runId)?.source === "reconciled";
 }
 
 async function executeRun(scope: SiteScope, runId: string, controller: AbortController) {
@@ -200,7 +226,15 @@ async function executeAgentRun(scope: SiteScope, runId: string, controller: Abor
       await backfillToolOutputs(scope, runId, context.threadId, context.hermesConversation, runtime);
     }
   } catch (error) {
-    await handleAgentRunError(runId, context, normalizer, controller, error);
+    await handleAgentRunError(
+      runId,
+      context,
+      normalizer,
+      controller,
+      error,
+      activeRuns.get(runId)?.runtime ?? null,
+      activeRuns.get(runId)?.hermesRunId ?? null,
+    );
   }
 }
 
@@ -239,7 +273,7 @@ async function resumeAgentStream(
     });
     await consumeAgentStream(scope, runId, context.threadId, stream.body, normalizer, controller);
   } catch (error) {
-    await handleAgentRunError(runId, context, normalizer, controller, error);
+    await handleAgentRunError(runId, context, normalizer, controller, error, runtime, hermesRunId);
   }
 }
 
@@ -384,6 +418,8 @@ async function handleAgentRunError(
   normalizer: HermesEventNormalizer,
   controller: AbortController,
   error: unknown,
+  runtime: ResolvedRuntimeConfig | null,
+  hermesRunId: string | null,
 ) {
   if (!context) return;
 
@@ -394,6 +430,40 @@ async function handleAgentRunError(
     ]);
     await persistEventsBestEffort(context, context.threadId, runId, events);
     await failRun(context, runId, "", "cancelled");
+    return;
+  }
+
+  // Hermes may close the historical SSE endpoint with 404 immediately after
+  // the run reaches a terminal state. The canonical run endpoint is the
+  // source of truth; do not turn that transport race into a false Console
+  // failure after an approval response.
+  if (
+    runtime &&
+    hermesRunId &&
+    error instanceof HermesRuntimeError &&
+    error.status === 404
+  ) {
+    try {
+      const hermes = await readHermesAfterStreamFailure(runtime, hermesRunId);
+      if (hermes?.status === "completed") {
+        await completeRun(context, runId, hermes.output ?? "", hermes.usage);
+        return;
+      }
+      if (hermes?.status === "failed") {
+        await failRun(context, runId, hermes.output ?? "Erreur Hermes.");
+        return;
+      }
+      if (hermes?.status === "cancelled") {
+        await failRun(context, runId, "", "cancelled");
+        return;
+      }
+    } catch {
+      // Fall through to the existing awaiting/error handling when the
+      // canonical status cannot be read either.
+    }
+  }
+
+  if (controller.signal.aborted && controller.signal.reason === "reconnect") {
     return;
   }
 
@@ -426,6 +496,28 @@ async function handleAgentRunError(
     event,
   ]);
   await failRun(context, runId, message);
+}
+
+async function readHermesAfterStreamFailure(
+  runtime: ResolvedRuntimeConfig,
+  hermesRunId: string,
+) {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      const hermes = await getHermesRun(runtime, hermesRunId);
+      if (hermes.status === "completed" || hermes.status === "failed" || hermes.status === "cancelled") {
+        return hermes;
+      }
+      lastError = null;
+    } catch (error) {
+      lastError = error;
+      if (!(error instanceof HermesRuntimeError && error.status === 404)) throw error;
+    }
+    await Bun.sleep(250);
+  }
+  if (lastError) throw lastError;
+  return null;
 }
 
 async function executeResponsesRun(scope: SiteScope, runId: string, controller: AbortController) {

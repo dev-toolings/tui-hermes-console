@@ -3,6 +3,7 @@ import { assertSameOriginMutation } from "@/modules/api/same-origin";
 import {
   buildSshProvisionPlan,
   createProvisionJob,
+  inspectSeparatedSshTargets,
   inspectSshTarget,
   provisionSshRuntime,
   type RuntimeSshProvisionInput,
@@ -38,7 +39,8 @@ export async function POST(request: Request) {
       );
     }
     provisioningLock = true;
-    const inspection = await inspectSshTarget(input.target, input.remoteBaseUrl, input.remoteWorkdir);
+    const inspection = await inspectSshTarget(input.provisioner, input.remoteBaseUrl, input.remoteWorkdir);
+    await inspectSeparatedSshTargets(input.provisioner, input.target);
     const plan = buildSshProvisionPlan(input, inspection);
     if (plan.blockers.length > 0) {
       provisioningLock = false;

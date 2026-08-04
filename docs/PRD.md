@@ -5,10 +5,11 @@
 **Statut :** vérité produit auditée — technical preview, non prête pour une offre B2B autonome
 **Produit :** application self-hosted d’exploitation de missions exécutées par Hermes Agent
 **Périmètre actuel :** une installation, plusieurs sites isolés techniquement, plusieurs comptes Google allowlistés ; rôles et ownership sont implémentés localement mais restent non acceptés avant P-E2E/revue
-**Runtime de référence :** Hermes Agent v0.19.0, API server sur le port 8642. Toute image upstream
-réellement tirée doit être vérifiée par digest et par version avant promotion ; la preuve locale
-G1-002B du 01-08-2026 observe `v0.19.1` et reste bloquée tant qu’une décision produit n’a pas
-révisé cette référence.
+**Runtime de référence :** canal officiel Hermes Agent `latest` / branche `main`, API server sur le
+port 8642. Docker résout `:latest` en digest avant l’exécution ; system-wide suit `main` sans
+`--commit`. Le digest, le commit et le hash d’installateur observés sont enregistrés après résolution
+pour l’audit et le rollback, sans devenir des pins d’entrée. La revue indépendante et le parcours
+P-E2E restent ouverts.
 
 > Ce document décrit l’arbre de travail réel au 31-07-2026, y compris les changements non encore
 > publiés. Les capacités sont classées en quatre états : **livré**, **validé statiquement**,
@@ -574,10 +575,12 @@ sépare owner/runtime, refuse les altérations directes et chemins de contournem
 Cette preuve reste P-INT locale ; propriétaire DB, revue indépendante, G1-004, P-SEC/P-E2E et Gate 1
 restent ouverts.
 
-Preuve préparatoire G1-002C : `bun run proof:g1-002c` compare les profils 65532:/work,
-10000:/opt/data et bootstrap root sur l’image Hermes digestée. Le profil upstream peut être
-techniquement sondé mais le JSON garde `promotionAllowed=false`, le verdict global
-`BLOCKED`/`DECISION_REQUIRED` et une sortie non nulle ; US-G1-002 et Gate 1 restent ouvertes.
+Preuve G1-002C/P-OPS : `bun run proof:g1-002c` classe les profils target-contract,
+production-reference et root-bootstrap depuis les statuts et UID/GID/workdir effectifs ; la config OCI
+reste diagnostique. L’automate distingue `BLOCKED`, décision absente, assertion divergente, sélection
+non déployable et `READY`. La campagne épinglée du 04-08-2026 reste historique. Le contrat courant
+résout `latest`/`main` à chaque déploiement et doit enregistrer la révision effectivement exécutée.
+US-G1-002 est implémentée ; sa revalidation P-OPS, sa revue indépendante et Gate 1 restent ouvertes.
 
 Warnings connus :
 

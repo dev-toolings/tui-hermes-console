@@ -76,11 +76,13 @@ import { AgentsScreen } from "@/screens/agents";
 import { SkillsScreen, SkillsSkeleton } from "@/screens/skills";
 import { ArtifactsScreen } from "@/screens/artifacts";
 import { SupportScreen } from "@/screens/support";
+import { RoadmapScreen } from "@/screens/roadmap";
 import { UpdatesScreen } from "@/screens/updates";
 import { SettingsHomeScreen } from "@/screens/settings-home";
 import { SettingsRuntimeScreen } from "@/screens/settings-runtime";
 import { SettingsRetentionScreen } from "@/screens/settings-retention";
 import { SettingsSecurityScreen } from "@/screens/settings-security";
+import { SettingsAchievementsScreen } from "@/screens/settings-achievements";
 import { SetupScreen } from "@/screens/setup";
 import { NotFoundScreen } from "@/screens/not-found";
 import { SessionsScreen } from "@/screens/sessions";
@@ -94,6 +96,7 @@ import {
   loadAudit,
   loadHermesUpdates,
   loadDashboard,
+  loadAchievements,
   loadRetention,
   loadRuntime,
   loadSkills,
@@ -376,6 +379,12 @@ const supportRoute = createRoute({
   errorComponent: ErrorBox,
 });
 
+const roadmapRoute = createRoute({
+  getParentRoute: () => consoleLayout,
+  path: "/roadmap",
+  component: RoadmapScreen,
+});
+
 const updatesRoute = createRoute({
   getParentRoute: () => consoleLayout,
   path: "/updates",
@@ -581,6 +590,17 @@ const settingsSecurityRoute = createRoute({
   errorComponent: ErrorBox,
 });
 
+const settingsAchievementsRoute = createRoute({
+  getParentRoute: () => settingsLayout,
+  path: "/settings/achievements",
+  loader: loadAchievements,
+  component: () => (
+    <SettingsAchievementsScreen data={settingsAchievementsRoute.useLoaderData()} />
+  ),
+  pendingComponent: Pending,
+  errorComponent: ErrorBox,
+});
+
 export const routeTree = rootRoute.addChildren([
   setupRoute,
   installationGuideRoute,
@@ -598,6 +618,7 @@ export const routeTree = rootRoute.addChildren([
     agentDetailRoute,
     artifactsRoute,
     supportRoute,
+    roadmapRoute,
     chatLayout.addChildren([chatHomeRoute, chatNewRoute, chatSessionRoute]),
     ...legacyChatRoutes,
     legacyChatSessionRoute,
@@ -612,6 +633,7 @@ export const routeTree = rootRoute.addChildren([
       settingsNotificationsRoute,
       settingsRetentionRoute,
       settingsSecurityRoute,
+      settingsAchievementsRoute,
     ]),
   ]),
 ]);

@@ -29,24 +29,60 @@ export function RuntimeDashboardLifecycle({
   const [busy, setBusy] = React.useState<Action | "refresh" | null>(null);
   const [confirming, setConfirming] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const refreshRequestRef = React.useRef(0);
   const { runMutation } = useRuntimeMutation();
 
   const refresh = React.useCallback(async () => {
+    const requestId = ++refreshRequestRef.current;
+    setLoading(true);
     setBusy("refresh");
     setError(null);
     try {
-      setDashboard(await fetchHermesDashboard());
+      const nextDashboard = await fetchHermesDashboard();
+      if (requestId === refreshRequestRef.current) setDashboard(nextDashboard);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Sonde Dashboard impossible.");
+      if (requestId === refreshRequestRef.current) {
+        setError(reason instanceof Error ? reason.message : "Sonde Dashboard impossible.");
+      }
     } finally {
-      setLoading(false);
-      setBusy(null);
+      if (requestId === refreshRequestRef.current) {
+        setLoading(false);
+        setBusy(null);
+      }
     }
   }, []);
 
   React.useEffect(() => {
-    queueMicrotask(() => void refresh());
-  }, [refresh, runtime?.configRevision, runtime?.transport, runtime?.baseUrl]);
+    if (!runtime?.configured) {
+      refreshRequestRef.current += 1;
+      const resetTimer = window.setTimeout(() => {
+        setDashboard(null);
+        setLoading(false);
+        setBusy(null);
+        setConfirming(false);
+        setError(null);
+      }, 0);
+      return () => window.clearTimeout(resetTimer);
+    }
+    const refreshTimer = window.setTimeout(() => void refresh(), 0);
+    return () => window.clearTimeout(refreshTimer);
+  }, [refresh, runtime?.configured, runtime?.configRevision, runtime?.transport, runtime?.baseUrl]);
+
+  if (!runtime?.configured) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <p className="text-[0.8125rem] font-semibold">Dashboard Hermes</p>
+          <p className="mt-1 max-w-[70ch] text-[0.6875rem] leading-5 text-muted-foreground">
+            Nécessaire pour modifier les skills, la configuration et les outils Hermes.
+          </p>
+        </div>
+        <p role="status" className="text-[0.6875rem] leading-5 text-muted-foreground">
+          Enregistrez d’abord une connexion au runtime pour sonder ou piloter son Dashboard.
+        </p>
+      </div>
+    );
+  }
 
   async function run(action: Action) {
     if (action === "restart" && !confirming) {

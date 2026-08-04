@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import type { RuntimePublicDto } from "@console/core/types/api";
 import {
   ArrowRightIcon,
   Building2Icon,
@@ -15,6 +16,9 @@ import {
 import { z } from "zod";
 import setupOperationBoard from "@/assets/setup-operation-board.png";
 import { Button } from "@/components/ui/boardui";
+import { Dialog } from "@/components/ui/dialog";
+import { HermesTokenGuide } from "@/components/settings/hermes-token-guide";
+import { canReuseDirectRuntimeToken } from "@/lib/runtime-secret-reuse";
 import {
   selectSitePayload,
   siteAccessBlock,
@@ -200,7 +204,7 @@ export function SetupScreen() {
         onComplete={refresh}
       />
     );
-  } else if (setup?.step === "agent") {
+  } else if (setup?.step === "agent" && setup.runtime?.configured === true) {
     content = (
       <AgentStep
         email={auth.user?.email ?? "Opérateur Google"}
@@ -561,9 +565,37 @@ function Welcome({
 function RuntimeStep({ email, onComplete }: { email: string; onComplete: () => void }) {
   const [baseUrl, setBaseUrl] = useState("http://127.0.0.1:8642");
   const [token, setToken] = useState("");
+  const [runtime, setRuntime] = useState<RuntimePublicDto | null>(null);
   const [busy, setBusy] = useState<"test" | "save" | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const tested = notice?.tone === "success";
+  const tokenReusable = canReuseDirectRuntimeToken(runtime, baseUrl);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/runtime", { cache: "no-store" })
+      .then(async (response) => {
+        const body = (await response.json()) as {
+          runtime?: RuntimePublicDto;
+          error?: { message?: string };
+        };
+        if (!response.ok || !body.runtime) {
+          throw new Error(body.error?.message ?? "La configuration Hermes est indisponible.");
+        }
+        return body.runtime;
+      })
+      .then((nextRuntime) => {
+        if (cancelled) return;
+        setRuntime(nextRuntime);
+        if (nextRuntime.transport === "direct" && nextRuntime.baseUrl) {
+          setBaseUrl(nextRuntime.baseUrl);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const payload = () => ({
     baseUrl: baseUrl.trim(),
@@ -572,8 +604,11 @@ function RuntimeStep({ email, onComplete }: { email: string; onComplete: () => v
   });
 
   const testRuntime = async () => {
-    if (!token.trim()) {
-      setNotice({ tone: "error", message: "Saisissez le token Hermes (API_SERVER_KEY) avant de lancer le test." });
+    if (!token.trim() && !tokenReusable) {
+      setNotice({
+        tone: "error",
+        message: "Saisissez le token Hermes (API_SERVER_KEY) avant de lancer le test.",
+      });
       return;
     }
     setBusy("test");
@@ -626,19 +661,37 @@ function RuntimeStep({ email, onComplete }: { email: string; onComplete: () => v
   return (
     <section className="flex min-h-0 flex-col">
       <StepTop step={1} email={email} />
-      <form onSubmit={saveRuntime} className="min-h-0 flex-1 overflow-y-auto px-6 pb-8 pt-8 sm:px-10 lg:px-16 lg:pt-12 xl:px-24">
+      <form onSubmit={saveRuntime} className="min-h-0 flex-1 overflow-hidden px-6 pb-8 pt-8 sm:px-10 lg:px-16 lg:pt-12 xl:px-24">
         <div className="mx-auto max-w-[35rem]">
           <StepHeading eyebrow="Runtime Hermes" title="Connectez le moteur qui exécutera vos missions." />
-          <p className="mt-4 text-[0.875rem] leading-6 text-white/59">Cette première configuration reste locale. Votre token reste masqué par défaut et n’est révélé qu’après une vérification OTP.</p>
+          <p className="mt-4 text-[0.875rem] leading-6 text-white/59">Cette première configuration reste locale. Votre token est chiffré par la Console avant enregistrement.</p>
           <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-[0.6875rem] leading-5 text-white/55">
-            Le Dashboard Hermes, sur le port 9119, est la surface de gestion des skills. Après la mise en service, vous pourrez vérifier son statut et le démarrer depuis <Link href="/settings/runtime" className="font-medium text-white underline decoration-white/30 underline-offset-2 hover:decoration-white/70">Paramètres → Runtime</Link>.
+            Le Dashboard Hermes, sur le port 9119, est la surface de gestion des skills. Après la mise en service, vous pourrez vérifier son statut et le démarrer depuis <Link href="/settings/runtime" className="font-medium text-white hover:text-white/80">Paramètres → Runtime</Link>.
           </p>
           <div className="mt-8 space-y-5">
             <Field label="URL Hermes" hint="Service API local sur 8642 ; le Dashboard de gestion écoute sur 9119.">
               <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} className={inputClass} inputMode="url" required />
             </Field>
-            <Field label="Token API" hint="La Console le chiffre avant de l’enregistrer.">
-              <input value={token} onChange={(event) => { setToken(event.target.value); setNotice(null); }} className={inputClass} type="password" autoComplete="off" required />
+            <Field
+              label="Token API"
+              htmlFor="setup-runtime-token"
+              action={<HermesTokenGuide />}
+              hint={
+                tokenReusable
+                  ? "Déjà enregistré pour cette adresse. Laissez vide pour le conserver."
+                  : "La Console le chiffre avant de l’enregistrer."
+              }
+            >
+              <input
+                id="setup-runtime-token"
+                type="password"
+                autoComplete="new-password"
+                value={token}
+                onChange={(event) => { setToken(event.target.value); setNotice(null); }}
+                placeholder={tokenReusable ? "Inchangé si vide" : "Requis pour cette adresse"}
+                disabled={busy !== null}
+                className={inputClass}
+              />
             </Field>
           </div>
           {notice ? <InlineNotice notice={notice} /> : null}
@@ -673,6 +726,7 @@ function AgentStep({
   const [busy, setBusy] = useState<"create" | "skip" | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [consentChecked, setConsentChecked] = useState(consentCurrent);
+  const [disclosureOpen, setDisclosureOpen] = useState(false);
   const {
     register,
     handleSubmit,
@@ -746,7 +800,7 @@ function AgentStep({
   return (
     <section className="flex min-h-0 flex-col">
       <StepTop step={2} email={email} />
-      <form onSubmit={handleSubmit(createAgent)} noValidate className="min-h-0 flex-1 overflow-y-auto px-6 pb-8 pt-8 sm:px-10 lg:px-16 lg:pt-12 xl:px-24">
+      <form onSubmit={handleSubmit(createAgent)} noValidate className="min-h-0 flex-1 overflow-hidden px-6 pb-8 pt-8 sm:px-10 lg:px-16 lg:pt-12 xl:px-24">
         <div className="mx-auto max-w-[35rem]">
           <StepHeading eyebrow="Premier agent" title="Définissez l’identité qui recevra vos premières missions." />
           <p className="mt-4 text-[0.875rem] leading-6 text-white/59">Vous pourrez la préciser, la dupliquer ou créer d’autres agents après cette première mise en service.</p>
@@ -761,11 +815,13 @@ function AgentStep({
               <textarea {...register("instructions")} aria-invalid={Boolean(errors.instructions)} rows={5} placeholder="Décrivez son périmètre, ses règles et la forme attendue de ses résultats." className={`${fieldInputClass(Boolean(errors.instructions))} h-auto min-h-32 resize-y py-3`} />
             </Field>
           </div>
-          <AiDisclosurePanel
+          <AiDisclosureModal
             disclosure={disclosure}
             accepted={consentCurrent}
             checked={consentChecked}
             onCheckedChange={setConsentChecked}
+            open={disclosureOpen}
+            onOpenChange={setDisclosureOpen}
           />
           {notice ? <InlineNotice notice={notice} /> : null}
           <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-white/9 pt-5">
@@ -813,6 +869,7 @@ function ConsentStep({
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
+  const [disclosureOpen, setDisclosureOpen] = useState(false);
 
   const accept = async () => {
     if (!checked) return;
@@ -834,7 +891,7 @@ function ConsentStep({
   return (
     <section className="flex min-h-0 flex-col">
       <StepTop step={2} email={email} />
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-8 pt-8 sm:px-10 lg:px-16 lg:pt-12 xl:px-24">
+      <div className="min-h-0 flex-1 overflow-hidden px-6 pb-8 pt-8 sm:px-10 lg:px-16 lg:pt-12 xl:px-24">
         <div className="mx-auto max-w-[35rem]">
           <StepHeading
             eyebrow="Notice IA mise à jour"
@@ -843,12 +900,13 @@ function ConsentStep({
           <p className="mt-4 text-[0.875rem] leading-6 text-white/59">
             Votre installation est prête. Cette version de la notice doit être acceptée par chaque utilisateur autorisé avant toute nouvelle mission.
           </p>
-          <AiDisclosurePanel
+          <AiDisclosureModal
             disclosure={disclosure}
             accepted={false}
             checked={checked}
             onCheckedChange={setChecked}
-            focusHeading
+            open={disclosureOpen}
+            onOpenChange={setDisclosureOpen}
           />
           {notice ? <InlineNotice notice={notice} /> : null}
           <div className="mt-8 flex justify-end border-t border-white/9 pt-5">
@@ -868,6 +926,88 @@ function ConsentStep({
         </div>
       </div>
     </section>
+  );
+}
+
+function AiDisclosureModal({
+  disclosure,
+  accepted,
+  checked,
+  onCheckedChange,
+  open,
+  onOpenChange,
+}: {
+  disclosure: AiDisclosure;
+  accepted: boolean;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <>
+      <div className="mt-6 flex items-center justify-between gap-4 rounded-[12px] border border-white/11 bg-white/[0.035] px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded-[9px] bg-[oklch(0.62_0.19_251/0.16)] text-[oklch(0.76_0.13_251)]">
+            <ShieldCheckIcon className="size-4" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[0.75rem] font-medium text-white/91">Utilisation de l’intelligence artificielle</p>
+            <p className="mt-0.5 text-[0.6875rem] text-white/45">
+              {accepted ? "Version actuelle acceptée pour votre compte." : "Lisez la notice avant d’ouvrir la Console."}
+            </p>
+          </div>
+        </div>
+        <Button type="button" variant="secondary" onClick={() => onOpenChange(true)} className="shrink-0 !rounded-[10px]">
+          <ShieldCheckIcon className="size-4" aria-hidden />
+          {accepted ? "Voir la notice IA" : "Lire la notice IA"}
+        </Button>
+      </div>
+
+      <Dialog
+        open={open}
+        onClose={() => onOpenChange(false)}
+        title={disclosure.title}
+        description={`Version ${disclosure.version}`}
+        footer={
+          <Button
+            type="button"
+            variant="primary"
+            disabled={!accepted && !checked}
+            onClick={() => onOpenChange(false)}
+          >
+            {accepted ? "Fermer" : "J’ai lu la notice"}
+          </Button>
+        }
+      >
+        <p className="text-[0.8125rem] leading-5 text-foreground/75">{disclosure.summary}</p>
+        <ul className="mt-4 space-y-3 text-[0.8125rem] leading-5 text-foreground/70">
+          {disclosure.items.map((item) => (
+            <li key={item} className="flex gap-3">
+              <span className="mt-[0.55rem] size-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+        {accepted ? (
+          <p className="mt-5 flex items-center gap-2 border-t border-border pt-4 text-[0.75rem] text-pos-700">
+            <CheckCircle2Icon className="size-4" aria-hidden />
+            Version actuelle déjà acceptée pour votre compte.
+          </p>
+        ) : (
+          <label htmlFor="ai-disclosure-modal-consent" className="mt-5 flex cursor-pointer items-start gap-3 border-t border-border pt-4 text-[0.8125rem] leading-5 text-foreground/80">
+            <input
+              id="ai-disclosure-modal-consent"
+              type="checkbox"
+              checked={checked}
+              onChange={(event) => onCheckedChange(event.target.checked)}
+              className="mt-1 size-4 rounded accent-primary"
+            />
+            <span>J’ai lu cette notice et j’accepte le traitement de mes missions dans ce cadre.</span>
+          </label>
+        )}
+      </Dialog>
+    </>
   );
 }
 
@@ -1005,7 +1145,10 @@ function fieldInputClass(invalid: boolean) {
   return `${inputClass} ${invalid ? "border-[oklch(0.66_0.16_18)] focus:border-[oklch(0.72_0.15_18)] focus:ring-[oklch(0.7_0.14_18/0.16)]" : ""}`;
 }
 
-function Field({ label, hint, error, children }: { label: string; hint: string; error?: string; children: React.ReactNode }) {
+function Field({ label, hint, error, htmlFor, action, children }: { label: string; hint: string; error?: string; htmlFor?: string; action?: React.ReactNode; children: React.ReactNode }) {
+  if (action) {
+    return <div className="block"><div className="flex items-center justify-between gap-3"><label htmlFor={htmlFor} className="text-[0.8125rem] font-medium text-white/88">{label}</label>{action}</div><span className="mt-1 block text-[0.6875rem] text-white/43">{hint}</span><span className="mt-2 block">{children}</span>{error ? <span role="alert" className="mt-1.5 flex items-center gap-1.5 text-[0.6875rem] text-[oklch(0.77_0.16_18)]"><CircleAlertIcon className="size-3 shrink-0" aria-hidden />{error}</span> : null}</div>;
+  }
   return <label className="block"><span className="text-[0.8125rem] font-medium text-white/88">{label}</span><span className="mt-1 block text-[0.6875rem] text-white/43">{hint}</span><span className="mt-2 block">{children}</span>{error ? <span role="alert" className="mt-1.5 flex items-center gap-1.5 text-[0.6875rem] text-[oklch(0.77_0.16_18)]"><CircleAlertIcon className="size-3 shrink-0" aria-hidden />{error}</span> : null}</label>;
 }
 

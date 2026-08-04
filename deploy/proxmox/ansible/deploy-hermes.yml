@@ -1,0 +1,363 @@
+# Déploiement P-OPS du canal officiel latest sur la VM de preuve.
+# Le compte admin réalise les mutations; le conteneur et les données utilisent
+# exclusivement l'UID/GID numérique du compte hermes-console.
+- name: Deploy confined Hermes runtime
+  hosts: managed
+  become: true
+  gather_facts: true
+  vars:
+    expected_host_ip: "{{ lookup('env', 'HERMES_EXPECTED_HOST_IP') }}"
+    service_user: hermes-console
+    runtime_root: /srv/hermes-console/workdir
+    runtime_container: hermes-console-runtime
+    runtime_contract: g1-002-docker-v1
+    allow_native_stop: false
+    runtime_channel: nousresearch/hermes-agent:latest
+
+  pre_tasks:
+    - name: Refuser toute cible différente de la VM de preuve
+      ansible.builtin.assert:
+        that:
+          - expected_host_ip | length > 0
+          - ansible_host == expected_host_ip
+        fail_msg: "Cible inattendue: {{ ansible_host }}"
+
+    - name: Vérifier la séparation admin et service
+      ansible.builtin.command: id -nG "{{ service_user }}"
+      register: service_groups
+      changed_when: false
+
+    - name: Refuser un service privilégié
+      ansible.builtin.assert:
+        that:
+          - "'sudo' not in service_groups.stdout.split()"
+          - "'docker' not in service_groups.stdout.split()"
+
+    - name: Inspecter le runtime natif actif
+      ansible.builtin.command: systemctl is-active --quiet hermes-gateway.service
+      register: native_runtime
+      changed_when: false
+      failed_when: false
+
+    - name: Refuser une collision de mode non autorisée
+      ansible.builtin.assert:
+        that:
+          - allow_native_stop | bool
+        fail_msg: "Hermes natif occupe le port 8642; autorisation explicite requise pour sélectionner Docker."
+      when: native_runtime.rc == 0
+
+    - name: Arrêter Hermes natif pour sélectionner Docker
+      ansible.builtin.systemd_service:
+        name: hermes-gateway.service
+        state: stopped
+      when:
+        - native_runtime.rc == 0
+        - allow_native_stop | bool
+
+    - name: Pré-inspecter le conteneur Docker sélectionné
+      ansible.builtin.command:
+        argv: [docker, inspect, "{{ runtime_container }}"]
+      register: existing_runtime_precheck
+      changed_when: false
+      failed_when: false
+
+    - name: Vérifier que le port Hermes est libéré
+      ansible.builtin.shell: |
+        if ss -ltnH 'sport = :8642' | grep -q .; then
+          echo 'Un service non sélectionné écoute encore sur :8642.' >&2
+          exit 1
+        fi
+      args:
+        executable: /bin/sh
+      changed_when: false
+      when: existing_runtime_precheck.rc != 0
+
+  tasks:
+    - name: Installer Docker depuis Debian
+      ansible.builtin.apt:
+        name: docker.io
+        state: present
+        update_cache: true
+
+    - name: Activer Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Lire l'identité numérique du service
+      ansible.builtin.command: "id -u {{ service_user }}"
+      register: service_uid
+      changed_when: false
+
+    - name: Lire le groupe numérique du service
+      ansible.builtin.command: "id -g {{ service_user }}"
+      register: service_gid
+      changed_when: false
+
+    - name: Préparer les répertoires du gestionnaire de mise à jour
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /usr/local/libexec
+        - /etc/hermes-console
+
+    - name: Installer le gestionnaire de mise à jour distant
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../../apps/server/src/modules/runtime/ssh/remote-update-manager.sh"
+        dest: /usr/local/libexec/hermes-console-runtime-manager
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Sceller la topologie Docker administrable
+      ansible.builtin.copy:
+        dest: /etc/hermes-console/runtime-manager.conf
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          mode=docker
+          runtime_root={{ runtime_root }}
+          service_user={{ service_user }}
+          service_uid={{ service_uid.stdout }}
+          service_gid={{ service_gid.stdout }}
+          docker_contract={{ runtime_contract }}
+          docker_contract_label=hermes.console.contract
+          docker_container={{ runtime_container }}
+          docker_source={{ runtime_channel }}
+
+    - name: Autoriser uniquement inspect et update au compte service
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/hermes-console-runtime-manager
+        owner: root
+        group: root
+        mode: "0440"
+        validate: /usr/sbin/visudo -cf %s
+        content: |
+          {{ service_user }} ALL=(root) NOPASSWD: /usr/local/libexec/hermes-console-runtime-manager inspect, /usr/local/libexec/hermes-console-runtime-manager update
+
+    - name: Préparer les données et le workspace
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ service_uid.stdout }}"
+        group: "{{ service_gid.stdout }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ runtime_root }}"
+          mode: "0700"
+        - path: "{{ runtime_root }}/workspace"
+          mode: "0750"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Garantir la configuration API du mode Docker sans tourner le secret
+      ansible.builtin.shell: |
+        set -eu
+        umask 077
+        envfile={{ runtime_root }}/runtime.env
+        token="$(sed -n 's/^API_SERVER_KEY=//p' "$envfile" 2>/dev/null | head -1 || true)"
+        [ -n "$token" ] || token="$(openssl rand -hex 32)"
+        tmp="$(mktemp)"
+        trap 'rm -f -- "$tmp"' EXIT
+        printf 'API_SERVER_ENABLED=true\nAPI_SERVER_HOST=0.0.0.0\nAPI_SERVER_PORT=8642\nAPI_SERVER_KEY=%s\n' "$token" > "$tmp"
+        if [ -f "$envfile" ] && cmp -s "$tmp" "$envfile"; then
+          printf 'unchanged\n'
+        else
+          install -o {{ service_uid.stdout }} -g {{ service_gid.stdout }} -m 0600 -- "$tmp" "$envfile"
+          printf 'changed\n'
+        fi
+      args:
+        executable: /bin/sh
+      register: runtime_env
+      changed_when: runtime_env.stdout == 'changed'
+      no_log: true
+
+    - name: Tirer le canal officiel latest
+      ansible.builtin.command:
+        argv:
+          - docker
+          - pull
+          - --platform
+          - linux/amd64
+          - "{{ runtime_channel }}"
+      register: image_pull
+      changed_when: "'Downloaded newer image' in image_pull.stdout or 'Pull complete' in image_pull.stdout"
+
+    - name: Résoudre le digest obtenu depuis latest
+      ansible.builtin.command:
+        argv:
+          - docker
+          - image
+          - inspect
+          - --format
+          - "{{ '{{index .RepoDigests 0}}' }}"
+          - "{{ runtime_channel }}"
+      register: resolved_image
+      changed_when: false
+
+    - name: Valider la révision Docker observée
+      ansible.builtin.assert:
+        that:
+          - resolved_image.stdout is match('^nousresearch/hermes-agent@sha256:[a-f0-9]{64}$')
+
+    - name: Mémoriser la révision Docker effective
+      ansible.builtin.set_fact:
+        runtime_image: "{{ resolved_image.stdout }}"
+
+    - name: Inspecter un éventuel conteneur existant
+      ansible.builtin.command:
+        argv: [docker, inspect, "{{ runtime_container }}"]
+      register: existing_runtime
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Valider le contrat de sécurité du conteneur géré avant adoption ou remplacement
+      ansible.builtin.assert:
+        that:
+          - existing_manifest.Config.Labels['hermes.console.managed'] == 'true'
+          - existing_manifest.Config.Labels['hermes.console.contract'] == runtime_contract
+          - existing_manifest.Config.Labels['hermes.console.uid'] == service_uid.stdout
+          - existing_manifest.Config.Labels['hermes.console.gid'] == service_gid.stdout
+          - ('HERMES_UID=' ~ service_uid.stdout) in existing_manifest.Config.Env
+          - ('HERMES_GID=' ~ service_gid.stdout) in existing_manifest.Config.Env
+          - existing_manifest.HostConfig.CapDrop == ['ALL']
+          - existing_manifest.HostConfig.CapAdd | sort == ['CHOWN', 'DAC_OVERRIDE', 'FOWNER', 'SETGID', 'SETUID']
+          - existing_manifest.HostConfig.SecurityOpt == ['no-new-privileges:true']
+          - existing_manifest.HostConfig.PidsLimit == 256
+          - existing_manifest.HostConfig.Memory == 6442450944
+          - existing_manifest.HostConfig.NanoCpus == 1500000000
+          - existing_manifest.HostConfig.PortBindings['8642/tcp'][0].HostIp == '127.0.0.1'
+          - existing_manifest.HostConfig.PortBindings['8642/tcp'][0].HostPort == '8642'
+        fail_msg: "Le conteneur existant ne correspond pas au contrat G1-002; remplacement manuel requis."
+      when: existing_runtime.rc == 0
+      vars:
+        existing_manifest: "{{ (existing_runtime.stdout | from_json)[0] }}"
+      no_log: true
+
+    - name: Déterminer si latest a changé de révision
+      ansible.builtin.set_fact:
+        runtime_recreate: >-
+          {{ existing_runtime.rc == 0 and (
+            existing_manifest.Config.Image != runtime_image or
+            existing_manifest.Config.Labels.get('hermes.console.source', '') != runtime_channel or
+            existing_manifest.Config.Labels.get('hermes.console.resolved', '') != runtime_image
+          ) }}
+      vars:
+        existing_manifest: "{{ (existing_runtime.stdout | from_json)[0] if existing_runtime.rc == 0 else {} }}"
+
+    - name: Remplacer l'ancienne révision gérée sans toucher aux données
+      ansible.builtin.command:
+        argv: [docker, rm, -f, "{{ runtime_container }}"]
+      when: runtime_recreate | bool
+
+    - name: Lancer Hermes avec le contrat G1-002
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --detach
+          - --name
+          - "{{ runtime_container }}"
+          - --label
+          - hermes.console.managed=true
+          - --label
+          - "hermes.console.contract={{ runtime_contract }}"
+          - --label
+          - "hermes.console.source={{ runtime_channel }}"
+          - --label
+          - "hermes.console.resolved={{ runtime_image }}"
+          - --label
+          - "hermes.console.uid={{ service_uid.stdout }}"
+          - --label
+          - "hermes.console.gid={{ service_gid.stdout }}"
+          - --restart
+          - unless-stopped
+          - --cap-drop
+          - ALL
+          - --cap-add
+          - CHOWN
+          - --cap-add
+          - DAC_OVERRIDE
+          - --cap-add
+          - FOWNER
+          - --cap-add
+          - SETGID
+          - --cap-add
+          - SETUID
+          - --security-opt
+          - no-new-privileges:true
+          - --pids-limit
+          - "256"
+          - --cpus
+          - "1.5"
+          - --memory
+          - 6g
+          - --env
+          - "HERMES_UID={{ service_uid.stdout }}"
+          - --env
+          - "HERMES_GID={{ service_gid.stdout }}"
+          - --workdir
+          - /opt/data
+          - --tmpfs
+          - /tmp:size=512m,mode=1777
+          - --tmpfs
+          - /var/tmp:size=256m,mode=1777
+          - --tmpfs
+          - /run:rw,exec,nosuid,nodev,size=64m,mode=0755,uid=0,gid=0
+          - --mount
+          - "type=bind,src={{ runtime_root }},dst=/opt/data"
+          - --publish
+          - 127.0.0.1:8642:8642
+          - --env-file
+          - "{{ runtime_root }}/runtime.env"
+          - "{{ runtime_image }}"
+          - gateway
+          - run
+      when: existing_runtime.rc != 0 or runtime_recreate | bool
+
+    - name: Redémarrer le runtime conforme s'il était arrêté
+      ansible.builtin.command:
+        argv: [docker, start, "{{ runtime_container }}"]
+      when:
+        - existing_runtime.rc == 0
+        - not (runtime_recreate | bool)
+        - not (existing_manifest.State.Running | bool)
+      vars:
+        existing_manifest: "{{ (existing_runtime.stdout | from_json)[0] }}"
+
+    - name: Attendre l'API Hermes
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8642/health
+        method: GET
+        status_code: 200
+      register: health
+      retries: 30
+      delay: 2
+      until: health.status == 200
+
+    - name: Inspecter le manifeste effectif expurgé
+      ansible.builtin.command:
+        argv:
+          - docker
+          - inspect
+          - --format
+          - "{{ '{{json .Config.Image}} {{json .Config.User}} {{json .Config.Labels}} {{json .HostConfig.ReadonlyRootfs}} {{json .HostConfig.CapDrop}} {{json .HostConfig.CapAdd}} {{json .HostConfig.SecurityOpt}} {{json .HostConfig.PidsLimit}} {{json .HostConfig.Memory}} {{json .HostConfig.NanoCpus}} {{json .NetworkSettings.Ports}}' }}"
+          - "{{ runtime_container }}"
+      register: runtime_manifest
+      changed_when: false
+
+    - name: Afficher la preuve non secrète
+      ansible.builtin.debug:
+        msg:
+          - "health={{ health.status }}"
+          - "channel={{ runtime_channel }}"
+          - "resolved_image={{ runtime_image }}"
+          - "uid_gid={{ service_uid.stdout }}:{{ service_gid.stdout }}"
+          - "manifest={{ runtime_manifest.stdout }}"

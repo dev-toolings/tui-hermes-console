@@ -253,6 +253,13 @@
       "when": 1785862800000,
       "tag": "0035_runtime_update_operations",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1785862209000,
+      "tag": "0036_remove_runtime_secret_reveal_challenges",
+      "breakpoints": true
     }
   ]
 }

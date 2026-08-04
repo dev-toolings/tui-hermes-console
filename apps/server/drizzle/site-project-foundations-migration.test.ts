@@ -86,7 +86,19 @@ describeWithDocker("site and project foundations migration on PostgreSQL", () =>
     for (let attempt = 0; attempt < 60; attempt += 1) {
       const ready = spawnSync(
         "docker",
-        ["exec", containerName, "pg_isready", "-U", "postgres"],
+        [
+          "exec",
+          containerName,
+          "psql",
+          "-v",
+          "ON_ERROR_STOP=1",
+          "-U",
+          "postgres",
+          "-d",
+          "postgres",
+          "-Atqc",
+          "SELECT 1;",
+        ],
         { stdio: "ignore" },
       );
       if (ready.status === 0) return;

@@ -14,6 +14,8 @@ import type {
   ArtifactDto,
   FileLimits,
   HermesSkillDto,
+  HermesAchievementsDto,
+  HermesAchievementsScanStatusDto,
   HermesDashboardDto,
   HermesDashboardLifecycleAction,
   HermesRuntimeUpdatePlanDto,
@@ -109,6 +111,16 @@ export const fetchHermesDashboard = () =>
   getJson<{ dashboard: HermesDashboardDto }>("/api/runtime/dashboard").then(
     (r) => r.dashboard,
   );
+
+export const fetchAchievements = () =>
+  getJson<{ achievements: HermesAchievementsDto }>("/api/runtime/achievements").then(
+    (r) => r.achievements,
+  );
+
+export const fetchAchievementsScanStatus = () =>
+  getJson<{ status: HermesAchievementsScanStatusDto }>(
+    "/api/runtime/achievements/scan-status",
+  ).then((r) => r.status);
 
 export const manageHermesDashboard = (
   action: HermesDashboardLifecycleAction,

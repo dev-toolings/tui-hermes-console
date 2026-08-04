@@ -132,9 +132,13 @@ describeWithDocker("production owner/runtime PostgreSQL boundary", () => {
       `POSTGRES_PASSWORD=${ownerPassword}`,
       POSTGRES_IMAGE,
     ]);
+    const initCompleteMarker = "PostgreSQL init process complete; ready for start up.";
     for (let attempt = 0; attempt < 60; attempt += 1) {
+      const logs = spawnSync("docker", ["logs", containerName], { encoding: "utf8" });
+      const output = `${logs.stdout ?? ""}\n${logs.stderr ?? ""}`;
       if (
-        spawnSync("docker", ["exec", containerName, "pg_isready", "-U", "postgres"], {
+        output.includes(initCompleteMarker) &&
+        spawnSync("docker", ["exec", containerName, "psql", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-Atqc", "SELECT 1;"], {
           stdio: "ignore",
         }).status === 0
       ) {

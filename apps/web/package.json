@@ -26,7 +26,6 @@
     "@hookform/resolvers": "^5.5.7",
     "@tanstack/react-router": "^1.170.17",
     "@tanstack/react-table": "^8.21.3",
-    "input-otp": "^1.4.2",
     "lucide-react": "^1.23.0",
     "mermaid": "^11.16.0",
     "radix-ui": "^1.6.7",

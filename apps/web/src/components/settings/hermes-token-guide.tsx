@@ -16,7 +16,7 @@ export function HermesTokenGuide() {
         className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-info-100 px-2 text-[0.6875rem] font-medium text-info-700 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       >
         <BookOpenIcon aria-hidden className="size-3" />
-        Guide
+        Guide token API
       </button>
 
       <Dialog
@@ -130,6 +130,48 @@ API_SERVER_KEY=<votre-clé>`}</Pre>
             </Card>
           </div>
 
+          <Section title="Créer ou remplacer le token">
+            <p>
+              Générez une nouvelle valeur, remplacez uniquement la ligne <Code>API_SERVER_KEY</Code>,
+              puis redémarrez Hermes avant de coller la valeur affichée ici et de cliquer sur{" "}
+              <strong>Tester</strong>. La rotation invalide immédiatement l’ancien token.
+            </p>
+            <div className="grid gap-4 @2xl:grid-cols-2">
+              <Card title="Hermes system-wide">
+                <Pre>{`HERMES_ENV="\${HERMES_HOME:-$HOME/.hermes}/.env"
+TOKEN="$(openssl rand -hex 32)"
+mkdir -p "$(dirname "$HERMES_ENV")"
+touch "$HERMES_ENV" && chmod 600 "$HERMES_ENV"
+tmp="$(mktemp)"
+grep -v '^API_SERVER_KEY=' "$HERMES_ENV" > "$tmp" || true
+printf 'API_SERVER_KEY=%s\\n' "$TOKEN" >> "$tmp"
+install -m 600 "$tmp" "$HERMES_ENV"
+rm -f "$tmp"
+systemctl --user restart hermes-gateway.service
+printf '%s\\n' "$TOKEN"`}</Pre>
+                <p className="text-muted-foreground">
+                  À exécuter avec l’utilisateur qui possède <Code>HERMES_HOME</Code>. Le fichier est
+                  créé s’il n’existe pas, ou sa ligne API est remplacée.
+                </p>
+              </Card>
+              <Card title="Hermes Docker">
+                <Pre>{`TOKEN_FILE="\${HERMES_RUNTIME_TOKEN_FILE:-$HOME/.hermes-console-docker/api-server-key}"
+umask 077
+mkdir -p "$(dirname "$TOKEN_FILE")"
+openssl rand -hex 32 > "$TOKEN_FILE"
+export HERMES_RUNTIME_TOKEN_FILE="$TOKEN_FILE"
+docker compose -f compose.prod.yml \\
+  -f compose.prod.hermes-managed.yml \\
+  up -d --force-recreate hermes
+printf '%s\\n' "$(cat "$TOKEN_FILE")"`}</Pre>
+                <p className="text-muted-foreground">
+                  Le fichier devient le secret Compose. Le service doit être recréé, un conteneur ne
+                  recharge pas <Code>API_SERVER_KEY</Code> à chaud. Conservez le chemin du fichier secret.
+                </p>
+              </Card>
+            </div>
+          </Section>
+
           <Section title="Rotation de la clé">
             <Steps>
               <li>
@@ -168,9 +210,8 @@ API_SERVER_KEY=<votre-clé>`}</Pre>
           <Section title="Côté Console">
             <p>
               Le token est chiffré au repos (AES-256-GCM, clé dérivée de{" "}
-              <Code>APP_ENCRYPTION_KEY</Code>) et reste masqué par défaut. Le bouton de révélation
-              demande un code OTP à votre adresse de session. Un champ laissé vide conserve la
-              valeur enregistrée — <strong>Enregistrer</strong> ne le redemande pas. La
+              <Code>APP_ENCRYPTION_KEY</Code>) et reste masqué par défaut. Un champ laissé vide
+              conserve la valeur enregistrée : <strong>Enregistrer</strong> ne le redemande pas. La
               variable d’environnement <Code>HERMES_RUNTIME_TOKEN</Code> ne sert que de repli quand
               aucune connexion n’est stockée en base.
             </p>

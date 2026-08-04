@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { apiErrorResponse } from "@/modules/api/errors";
 import { assertSameOriginMutation } from "@/modules/api/same-origin";
-import { getRuntimePublic, saveRuntimeConfig } from "@/modules/runtime/config";
+import {
+  deleteRuntimeConfig,
+  getRuntimePublic,
+  saveRuntimeConfig,
+} from "@/modules/runtime/config";
 
 const putRuntimeSchema = z.object({
   baseUrl: z.string().trim().url().max(500),
@@ -25,6 +29,15 @@ export async function PUT(request: Request) {
     const input = putRuntimeSchema.parse(await request.json());
     const runtimeDto = await saveRuntimeConfig(input);
     return Response.json({ runtime: runtimeDto });
+  } catch (error) {
+    return apiErrorResponse(error);
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    assertSameOriginMutation(request);
+    return Response.json({ runtime: await deleteRuntimeConfig() });
   } catch (error) {
     return apiErrorResponse(error);
   }

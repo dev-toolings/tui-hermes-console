@@ -14,7 +14,6 @@ import {
 import type { RuntimePublicDto } from "@console/core/types/api";
 import { SshRuntimeSetup } from "@/components/forms/ssh-runtime-setup";
 import { HermesTokenGuide } from "@/components/settings/hermes-token-guide";
-import { RuntimeSecretReveal } from "@/components/settings/runtime-secret-reveal";
 import { useRuntimeMutation } from "@/components/settings/runtime-mutation-provider";
 import { Button } from "@/components/ui/boardui";
 import { useRouter } from "@/lib/router";
@@ -42,6 +41,9 @@ export function RuntimeConnectionForm({
   const [runtime, setRuntime] = useState<RuntimePublicDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [disconnectError, setDisconnectError] = useState<string | null>(null);
+  const { runMutation } = useRuntimeMutation();
   // `mode` (l'URL) prime sur la donnée chargée : sans lui, l'onglet suit le
   // transport déjà configuré. Dérivé au rendu, pas via un effet — l'URL et le
   // runtime chargé restent les deux seules sources de vérité.
@@ -87,6 +89,38 @@ export function RuntimeConnectionForm({
     notifyRuntimePublicChanged();
   }
 
+  async function disconnectRuntime() {
+    if (!runtime?.configured || runtime.source !== "database") return;
+    if (!window.confirm("Déconnecter Hermes et supprimer cette configuration de la Console ?")) return;
+
+    setDisconnecting(true);
+    setDisconnectError(null);
+    try {
+      const body = await runMutation("Déconnexion du runtime Hermes", async (signal) => {
+        const response = await fetch("/api/runtime", {
+          method: "DELETE",
+          headers: { "X-Hermes-Toast": "updated" },
+          signal,
+        });
+        const nextBody = (await response.json()) as {
+          runtime?: RuntimePublicDto;
+          error?: { message?: string };
+        };
+        if (!response.ok || !nextBody.runtime) {
+          throw new Error(nextBody.error?.message ?? "Déconnexion du runtime impossible.");
+        }
+        return nextBody;
+      });
+      setRuntime(body.runtime!);
+      onRuntimeChange?.(body.runtime!);
+      notifyRuntimePublicChanged();
+    } catch (reason) {
+      setDisconnectError(reason instanceof Error ? reason.message : "Déconnexion du runtime impossible.");
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
   if (loading) return <RuntimeFormSkeleton />;
   if (loadError) {
     return (
@@ -100,8 +134,8 @@ export function RuntimeConnectionForm({
   return (
     <div className="space-y-6">
       <p className="max-w-[70ch] text-[0.6875rem] leading-5 text-muted-foreground">
-        Le serveur de la Console appelle Hermes. Les secrets restent masqués par défaut ; une
-        révélation ponctuelle exige un code envoyé à l’adresse de votre session.
+        Le serveur de la Console appelle Hermes. Les secrets restent masqués par défaut ; seuls
+        les opérateurs autorisés peuvent les modifier.
       </p>
       {showingUnsavedTransport ? (
         <p
@@ -153,6 +187,29 @@ export function RuntimeConnectionForm({
           <SshRuntimeSetup runtime={runtime} onRuntimeChange={publish} />
         </TabsContent>
       </Tabs>
+      {runtime?.configured && runtime.source === "database" ? (
+        <section className="rounded-xl border border-destructive/30 bg-destructive/5 p-4" aria-labelledby="runtime-disconnect-title">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 id="runtime-disconnect-title" className="text-[0.8125rem] font-semibold">
+                Déconnecter ce runtime
+              </h3>
+              <p className="mt-1 max-w-[62ch] text-[0.6875rem] leading-5 text-muted-foreground">
+                Supprime la cible {runtime.transport === "ssh" ? "SSH" : "directe"}, ses secrets chiffrés et le tunnel SSH actif.
+              </p>
+            </div>
+            <Button type="button" variant="secondary" disabled={disconnecting} onClick={() => void disconnectRuntime()}>
+              {disconnecting ? <LoaderCircleIcon className="size-4 animate-spin" /> : <XCircleIcon className="size-4" />}
+              {disconnecting ? "Déconnexion…" : "Déconnecter le runtime"}
+            </Button>
+          </div>
+          {disconnectError ? <p role="alert" className="mt-3 text-[0.6875rem] text-destructive">{disconnectError}</p> : null}
+        </section>
+      ) : runtime?.configured && runtime.source === "env" ? (
+        <p role="status" className="rounded-xl border border-info-100 bg-info-soft px-3 py-2 text-[0.6875rem] leading-5 text-info-700">
+          Ce runtime vient des variables d’environnement du serveur ; retirez-les dans la configuration du serveur pour le déconnecter.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -173,13 +230,6 @@ function DirectRuntimeForm({
   const [status, setStatus] = useState<FormStatus>({ kind: "idle" });
   const { runMutation } = useRuntimeMutation();
   const tokenReusable = canReuseDirectRuntimeToken(runtime, baseUrl);
-  const canReveal = Boolean(
-    tokenReusable ||
-      (runtime?.configured &&
-        runtime.source === "env" &&
-        runtime.transport === "direct" &&
-        runtime.baseUrl?.replace(/\/+$/, "") === baseUrl.trim().replace(/\/+$/, "")),
-  );
   const busy = status.kind === "loading";
 
   function payload() {
@@ -282,13 +332,15 @@ function DirectRuntimeForm({
             : "API_SERVER_KEY requise pour cette nouvelle adresse Hermes."
         }
       >
-        <RuntimeSecretReveal
+        <input
           id="direct-runtime-token"
+          type="password"
+          autoComplete="new-password"
           value={token}
-          onChange={setToken}
-          canReveal={canReveal}
+          onChange={(event) => setToken(event.target.value)}
+          placeholder={tokenReusable ? "Inchangé si vide" : "Requis pour cette adresse"}
           disabled={busy}
-          placeholder={canReveal ? "••••••••••••••••" : tokenReusable ? "Inchangé si vide" : "Requis pour cette adresse"}
+          className={inputClass}
         />
       </Field>
       <div className="flex flex-col gap-3 border-t border-seam pt-4 sm:flex-row sm:items-center sm:justify-between">

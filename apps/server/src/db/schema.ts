@@ -300,44 +300,6 @@ export const runtimeCredentialOperations = pgTable(
   ],
 );
 
-/** Challenge éphémère pour révéler API_SERVER_KEY après une vérification OTP. */
-export const runtimeSecretRevealChallenges = pgTable(
-  "runtime_secret_reveal_challenges",
-  {
-    id: text("id").primaryKey(),
-    runtimeId: text("runtime_id").notNull().default("default"),
-    userId: text("user_id")
-      .notNull()
-      .references(() => consoleUsers.id, { onDelete: "cascade" }),
-    /** Le hash de session lie le challenge à ce navigateur authentifié. */
-    sessionHash: text("session_hash").notNull(),
-    secretName: text("secret_name").notNull().default("API_SERVER_KEY"),
-    runtimeVersion: text("runtime_version").notNull(),
-    otpDigest: text("otp_digest").notNull(),
-    attempts: integer("attempts").notNull().default(0),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    lastSentAt: timestamp("last_sent_at", { withTimezone: true }).notNull(),
-    consumedAt: timestamp("consumed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    index("runtime_secret_reveal_challenges_session_idx").on(
-      table.sessionHash,
-      table.runtimeId,
-      table.createdAt,
-    ),
-    index("runtime_secret_reveal_challenges_expiry_idx").on(table.expiresAt),
-    check(
-      "runtime_secret_reveal_challenges_secret_check",
-      sql`${table.secretName} = 'API_SERVER_KEY'`,
-    ),
-    check(
-      "runtime_secret_reveal_challenges_attempts_check",
-      sql`${table.attempts} >= 0 AND ${table.attempts} <= 5`,
-    ),
-  ],
-);
-
 export type RuntimeStorageMigrationStatus =
   | "planned"
   | "queued"

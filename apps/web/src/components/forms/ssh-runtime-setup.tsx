@@ -30,7 +30,6 @@ import type {
   RuntimeSshWorkspaceDiscoveryDto,
 } from "@console/core/types/api";
 import { HermesTokenGuide } from "@/components/settings/hermes-token-guide";
-import { RuntimeSecretReveal } from "@/components/settings/runtime-secret-reveal";
 import { Badge, Button } from "@/components/ui/boardui";
 import { useRuntimeMutation } from "@/components/settings/runtime-mutation-provider";
 import { cn } from "@/lib/cn";
@@ -490,13 +489,15 @@ export function SshRuntimeSetup({
                   ? "Déjà chiffré pour cette cible. Laissez vide pour le conserver."
                   : "Laissez vide pour importer automatiquement API_SERVER_KEY via SSH. Saisie manuelle disponible en secours."}
             >
-              <RuntimeSecretReveal
+              <input
                 id="ssh-runtime-token"
+                type="password"
+                autoComplete="new-password"
                 value={token}
-                onChange={setToken}
-                canReveal={connectionSaved}
+                onChange={(event) => setToken(event.target.value)}
+                placeholder={tokenReusable ? "Inchangé pour cette cible" : "Import automatique si vide"}
                 disabled={busy}
-                placeholder={connectionSaved ? "••••••••••••••••" : tokenReusable ? "Inchangé pour cette cible" : "Import automatique si vide"}
+                className={inputClass}
               />
             </Field>
             {connectionSaved ? (
@@ -1271,6 +1272,11 @@ function AdvancedProvisioning({
 }) {
   const [mode, setMode] = useState<RuntimeProvisionMode>("docker");
   const [workdir, setWorkdir] = useState(defaultWorkdir);
+  const [provisionerHost, setProvisionerHost] = useState(target.host);
+  const [provisionerPort, setProvisionerPort] = useState(String(target.port || 22));
+  const [provisionerUser, setProvisionerUser] = useState("hermes-admin");
+  const [provisionerAuth, setProvisionerAuth] = useState<SshAuth>(target.auth);
+  const [provisionerPassword, setProvisionerPassword] = useState("");
   const [plan, setPlan] = useState<RuntimeSshPlanDto | null>(null);
   const [job, setJob] = useState<RuntimeSshProvisionJobDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1281,8 +1287,24 @@ function AdvancedProvisioning({
 
   function payload() {
     if (!target.host.trim() || !target.user.trim()) throw new Error("Renseignez d’abord la cible SSH.");
+    if (!provisionerHost.trim() || !provisionerUser.trim()) {
+      throw new Error("Renseignez la cible SSH d’administration.");
+    }
+    if (provisionerUser.trim() === target.user.trim()) {
+      throw new Error("Les comptes admin et service doivent être distincts.");
+    }
+    if (provisionerAuth === "password" && !provisionerPassword) {
+      throw new Error("Saisissez le mot de passe du compte d’administration.");
+    }
     if (!effectiveWorkdir.trim()) throw new Error("Indiquez le futur dossier de données Hermes sur le VPS.");
     return {
+      provisioner: {
+        host: provisionerHost.trim(),
+        port: parsePort(provisionerPort),
+        user: provisionerUser.trim(),
+        auth: provisionerAuth,
+        ...(provisionerPassword ? { password: provisionerPassword } : {}),
+      },
       target: {
         host: target.host.trim(),
         port: parsePort(String(target.port)),
@@ -1377,7 +1399,32 @@ function AdvancedProvisioning({
       <div className="mt-5 space-y-4 pl-0 sm:pl-10">
         <div className="grid gap-2 sm:grid-cols-2">
           <Choice active={mode === "docker"} onClick={() => { setMode("docker"); setPlan(null); }} title="Hermes Docker" description="Déploiement isolé avec données persistantes et workspace dédié." />
-          <Choice active={mode === "native"} onClick={() => { setMode("native"); setPlan(null); }} title="Hermes natif" description="Installation pour l’utilisateur SSH avec service systemd." />
+          <Choice active={mode === "native"} onClick={() => { setMode("native"); setPlan(null); }} title="Hermes system-wide" description="Release vérifiée sous /opt, exécutée par systemd avec le compte service sans sudo." />
+        </div>
+        <div className="space-y-4 rounded-xl border border-input bg-card p-4">
+          <div>
+            <p className="text-[0.75rem] font-semibold">Identité d’administration temporaire</p>
+            <p className="mt-1 text-[0.6875rem] leading-5 text-muted-foreground">
+              Utilisée uniquement pour installer Docker ou la release system-wide, gérer systemd et préparer les fichiers. Le compte service ci-dessus reste sans sudo ni accès Docker et sera le seul enregistré pour les missions.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
+            <Field icon={ServerIcon} label="Hôte ou alias SSH admin" hint="Peut être un alias ~/.ssh/config avec sa propre IdentityFile.">
+              <input value={provisionerHost} onChange={(event) => { setProvisionerHost(event.target.value); setPlan(null); }} placeholder={target.host || "hermes-admin-vm"} className={inputClass} />
+            </Field>
+            <Field icon={NetworkIcon} label="Port SSH admin" hint="Doit viser la même VM.">
+              <input inputMode="numeric" value={provisionerPort} onChange={(event) => { setProvisionerPort(event.target.value); setPlan(null); }} className={inputClass} />
+            </Field>
+          </div>
+          <Field icon={UserRoundIcon} label="Utilisateur admin" hint="Compte sudo distinct du compte service.">
+            <input value={provisionerUser} onChange={(event) => { setProvisionerUser(event.target.value); setPlan(null); }} placeholder="hermes-admin" className={inputClass} />
+          </Field>
+          <AuthModeToggle value={provisionerAuth} onChange={(value) => { setProvisionerAuth(value); setPlan(null); }} />
+          {provisionerAuth === "password" ? (
+            <Field icon={KeyRoundIcon} label="Mot de passe admin" hint="Chiffré en transit, jamais persisté comme identité runtime.">
+              <input type="password" value={provisionerPassword} onChange={(event) => { setProvisionerPassword(event.target.value); setPlan(null); }} autoComplete="current-password" className={inputClass} />
+            </Field>
+          ) : null}
         </div>
         <Field icon={FolderCheckIcon} label="Racine persistante sur le VPS" hint="Le plan exact sera affiché avant toute mutation.">
           <input value={effectiveWorkdir} onChange={(event) => setWorkdir(event.target.value)} placeholder="/srv/hermes-console" className={inputClass} />

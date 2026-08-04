@@ -18,12 +18,15 @@ import {
   type RuntimeMutationLease,
 } from "@/modules/runs/active-runtime-guard";
 import {
-  HermesRuntimeError,
   testHermesRuntimeAgainst,
   type HermesCapabilities,
 } from "../hermes-adapter";
+import { buildRemoteUpdateManagerInstallCommand } from "./remote-update-manager";
 
 export type RuntimeSshProvisionInput = {
+  /** Compte d'administration éphémère : sudo/Docker, jamais persisté comme runtime. */
+  provisioner: SshTarget;
+  /** Compte de service non privilégié persisté pour tunnel, SFTP et missions. */
   target: SshTarget;
   mode: RuntimeProvisionMode;
   remoteBaseUrl: string;
@@ -47,8 +50,12 @@ export type ProvisionResult = {
 };
 
 const DOCKER_NAME = "hermes-console-runtime";
-const DOCKER_IMAGE =
-  "nousresearch/hermes-agent:v2026.7.30@sha256:b869e64d6496d4763d5e4fb675b5f504cb23b0e35ec9b790481a56118602b10f";
+const DOCKER_CONTRACT = "g1-002-docker-v1";
+const DOCKER_CHANNEL = "nousresearch/hermes-agent:latest";
+const NATIVE_BRANCH = "main";
+const NATIVE_ROOT = "/opt/hermes-console";
+const NATIVE_INSTALLER_URL =
+  `https://raw.githubusercontent.com/NousResearch/hermes-agent/${NATIVE_BRANCH}/scripts/install.sh`;
 
 export function validateRemoteBaseUrl(value: string) {
   const normalized = value.trim().replace(/\/+$/, "");
@@ -179,6 +186,13 @@ export function buildSshProvisionPlan(
   const blockers: string[] = [];
   const warnings = [...(inspection?.warnings ?? [])];
 
+  if (input.provisioner.user === input.target.user) {
+    blockers.push("Les identités SSH de provisioning et de service doivent être distinctes.");
+  }
+  if (input.provisioner.port !== input.target.port) {
+    blockers.push("Les alias SSH admin et service doivent viser le même port distant.");
+  }
+
   if (inspection?.client.knownHostStatus === "mismatch") blockers.push("La clé d’hôte SSH ne correspond pas à known_hosts.");
   if (inspection?.client.knownHostStatus === "unknown") blockers.push("La clé d’hôte SSH n’est pas validée dans known_hosts.");
   if (inspection?.client.knownHostStatus === "unavailable") blockers.push("La cible SSH n’a pas pu être vérifiée.");
@@ -192,11 +206,6 @@ export function buildSshProvisionPlan(
   if (input.mode === "native" && inspection?.remote.systemd !== "available") {
     blockers.push("Le mode Hermes natif nécessite systemd sur le VPS.");
   }
-  if (input.mode === "native") {
-    blockers.push(
-      "Le provisioning natif est désactivé tant qu’une release Hermes et son checksum officiel ne sont pas épinglés.",
-    );
-  }
   if (inspection?.remote.hermes === "healthy") {
     blockers.push("Une installation Hermes saine existe déjà : connectez-la avec le parcours SSH normal pour éviter de la remplacer.");
   }
@@ -207,16 +216,16 @@ export function buildSshProvisionPlan(
   const steps: RuntimeSshPlanStep[] = [
     {
       id: "inspect",
-      label: "Vérifier la cible SSH",
-      description: "Contrôler le système, les privilèges, le port Hermes et le workdir.",
+      label: "Vérifier les identités SSH",
+      description: "Contrôler l’admin sudo et le compte service non privilégié avant toute mutation.",
       commandPreview: "diagnostic SSH non destructif",
       destructive: false,
     },
     {
       id: "workdir",
       label: "Préparer le workdir distant",
-      description: "Créer le répertoire durable avec les droits de l’utilisateur SSH.",
-      commandPreview: `sudo install -d -o ${input.target.user} -g ${input.target.user} -m 0750 ${remoteWorkdir}`,
+      description: "Créer le répertoire durable avec les droits du compte service.",
+      commandPreview: `sudo install -d -o ${input.target.user} -g <gid-service> -m 0750 ${remoteWorkdir}`,
       destructive: false,
     },
   ];
@@ -233,28 +242,37 @@ export function buildSshProvisionPlan(
       {
         id: "hermes-docker",
         label: "Déployer Hermes Docker",
-        description: "Lancer Hermes sur loopback :8642 avec redémarrage automatique.",
-        commandPreview: `docker run --name ${DOCKER_NAME} --label hermes.console.managed=true --env-file ${remoteWorkdir}/runtime.env -p 127.0.0.1:8642:8642 -v ${remoteWorkdir}:/opt/data ${DOCKER_IMAGE} gateway run`,
+        description: "Tirer le canal officiel latest, résoudre son digest, puis exécuter Hermes sous l’UID/GID du compte service.",
+        commandPreview: `sudo docker pull ${DOCKER_CHANNEL} && sudo docker run --name ${DOCKER_NAME} --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --cap-add SETGID --cap-add SETUID --security-opt no-new-privileges:true -e HERMES_UID=<uid-service> -e HERMES_GID=<gid-service> --mount type=bind,src=${remoteWorkdir},dst=/opt/data -p 127.0.0.1:8642:8642 <digest-résolu> gateway run`,
         destructive: Boolean(inspection?.remote.hermes === "healthy"),
       },
       {
         id: "dashboard",
         label: "Préparer le Dashboard Hermes",
         description: "Démarrer un service Dashboard persistant sur loopback :9119, sans remplacer Hermes API.",
-        commandPreview: `docker run --name hermes-console-dashboard --restart unless-stopped --network host -v ${remoteWorkdir}:/opt/data ${DOCKER_IMAGE} dashboard --host 127.0.0.1 --port 9119 --no-open`,
+        commandPreview: `sudo docker run --name hermes-console-dashboard --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --cap-add SETGID --cap-add SETUID --security-opt no-new-privileges:true -e HERMES_UID=<uid-service> -e HERMES_GID=<gid-service> -p 127.0.0.1:9119:9119 --mount type=bind,src=${remoteWorkdir},dst=/opt/data <digest-résolu-de-latest> dashboard --host 0.0.0.0 --port 9119 --no-open`,
         destructive: false,
       },
     );
   }
 
   if (input.mode === "native") {
-    steps.push({
-      id: "hermes-native",
-      label: "Provisioning natif indisponible",
-      description: "Une release et son checksum officiel doivent être épinglés avant activation de ce mode.",
-      commandPreview: null,
-      destructive: false,
-    });
+    steps.push(
+      {
+        id: "native-dependencies",
+        label: "Installer les prérequis natifs",
+        description: "Installer les dépendances OS sous l’identité admin avant de rendre la main au compte service.",
+        commandPreview: "sudo apt-get install -y git curl xz-utils build-essential python3-dev libffi-dev ripgrep ffmpeg",
+        destructive: false,
+      },
+      {
+        id: "hermes-native",
+        label: "Déployer Hermes system-wide",
+        description: "Télécharger l’installateur officiel, suivre main, enregistrer le commit obtenu, sceller la release et activer systemd avec rollback.",
+        commandPreview: `install --branch ${NATIVE_BRANCH} && record <commit-résolu> && systemctl enable --now hermes-gateway.service`,
+        destructive: Boolean(inspection?.remote.hermes === "healthy"),
+      },
+    );
   }
 
   steps.push({
@@ -267,6 +285,7 @@ export function buildSshProvisionPlan(
 
   return {
     mode: input.mode,
+    provisioner: { host: input.provisioner.host, port: input.provisioner.port, user: input.provisioner.user },
     target: { host: input.target.host, port: input.target.port, user: input.target.user },
     remoteBaseUrl,
     remoteWorkdir,
@@ -293,14 +312,7 @@ async function provisionSshRuntimeWithLease(
   update: ProvisionUpdate,
   mutationLease: RuntimeMutationLease,
 ) {
-  if (input.mode === "native") {
-    throw new HermesRuntimeError(
-      "Le provisioning natif est désactivé faute de release Hermes avec checksum épinglé.",
-      409,
-      "SSH_NATIVE_PROVISION_UNPINNED",
-    );
-  }
-  return withEphemeralSshChannel(input.target, (channel) =>
+  return withEphemeralSshChannel(input.provisioner, (channel) =>
     provisionSshRuntimeOnChannel(input, update, channel, mutationLease),
   );
 }
@@ -316,63 +328,118 @@ async function provisionSshRuntimeOnChannel(
   let token = input.token?.trim() ?? "";
   let activatedHostWorkdir = remoteWorkdir;
   let activatedHermesWorkdir = remoteWorkdir;
+  const sudo = sudoPrefix(input.provisioner.user);
 
   update({ step: "inspect", progress: 8, message: "Inspection SSH en cours…" });
-  await runRemote(channel, inspectionCommand(remoteBaseUrl, remoteWorkdir, input.target.user));
+  await runRemote(channel, inspectionCommand(remoteBaseUrl, remoteWorkdir, input.provisioner.user));
+  const serviceIdentity = await verifySeparatedServiceIdentity(
+    channel,
+    input.provisioner,
+    input.target,
+  );
 
   update({ step: "workdir", progress: 24, message: "Préparation du workdir distant…" });
   await runRemote(
     channel,
-    `set -eu; ${sudoPrefix(input.target.user)} install -d -o ${shellQuote(input.target.user)} -g ${shellQuote(input.target.user)} -m 0750 -- ${shellQuote(remoteWorkdir)}`,
+    `set -eu; ${sudo} install -d -o ${serviceIdentity.uid} -g ${serviceIdentity.gid} -m 0750 -- ${shellQuote(remoteWorkdir)}`,
+  );
+  await runRemote(
+    channel,
+    buildRemoteUpdateManagerInstallCommand({
+      sudo,
+      serviceUser: input.target.user,
+      serviceUid: serviceIdentity.uid,
+      serviceGid: serviceIdentity.gid,
+      runtimeRoot: remoteWorkdir,
+      mode: input.mode,
+    }),
   );
 
   if (input.mode === "docker") {
     update({ step: "docker", progress: 40, message: "Vérification de Docker…" });
     await runRemote(
       channel,
-      `set -eu; if ! ${sudoPrefix(input.target.user)} docker info >/dev/null 2>&1; then ${sudoPrefix(input.target.user)} apt-get update && ${sudoPrefix(input.target.user)} apt-get install -y docker.io; fi`,
-    );
-    const existingContainer = await channel.exec(
-      `${sudoPrefix(input.target.user)} docker inspect ${shellQuote(DOCKER_NAME)} >/dev/null 2>&1`,
+      `set -eu; if ! ${sudo} docker info >/dev/null 2>&1; then ${sudo} apt-get update && ${sudo} apt-get install -y docker.io; fi`,
     );
     activatedHostWorkdir = `${remoteWorkdir.replace(/\/+$/, "")}/workspace`;
     activatedHermesWorkdir = "/opt/data/workspace";
     await runRemote(
       channel,
-      `set -eu; ${sudoPrefix(input.target.user)} install -d -o ${shellQuote(input.target.user)} -g ${shellQuote(input.target.user)} -m 0750 -- ${shellQuote(activatedHostWorkdir)}`,
+      `set -eu; ${sudo} install -d -o ${serviceIdentity.uid} -g ${serviceIdentity.gid} -m 0750 -- ${shellQuote(activatedHostWorkdir)}`,
     );
     const dockerResult = await runRemote(
       channel,
       [
         "set -eu",
-        `if ${sudoPrefix(input.target.user)} docker inspect ${shellQuote(DOCKER_NAME)} >/dev/null 2>&1; then`,
-        `  TOKEN="$(${sudoPrefix(input.target.user)}docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' ${shellQuote(DOCKER_NAME)} | sed -n 's/^API_SERVER_KEY=//p' | head -1)"`,
-        `  test -n "$TOKEN" || { echo 'API_SERVER_KEY absent du conteneur existant' >&2; exit 1; }`,
-        `  ${sudoPrefix(input.target.user)} docker start ${shellQuote(DOCKER_NAME)} >/dev/null 2>&1 || true`,
-        "else",
-        token ? `  TOKEN=${shellQuote(token)}` : "  TOKEN=$(openssl rand -hex 32)",
-        `  ENVFILE=${shellQuote(`${remoteWorkdir.replace(/\/+$/, "")}/runtime.env`)}`,
-        `  printf 'API_SERVER_ENABLED=true\\nAPI_SERVER_HOST=0.0.0.0\\nAPI_SERVER_PORT=8642\\nAPI_SERVER_KEY=%s\\n' "$TOKEN" > "$ENVFILE.tmp"`,
-        `  chmod 600 "$ENVFILE.tmp" && mv -f -- "$ENVFILE.tmp" "$ENVFILE"`,
-        `  ${sudoPrefix(input.target.user)} docker pull ${shellQuote(DOCKER_IMAGE)}`,
-        `  ${sudoPrefix(input.target.user)} docker run -d --name ${shellQuote(DOCKER_NAME)} --label hermes.console.managed=true --restart unless-stopped --user "$(id -u):$(id -g)" -v ${shellQuote(`${remoteWorkdir}:/opt/data`)} -p 127.0.0.1:8642:8642 --env-file "$ENVFILE" ${shellQuote(DOCKER_IMAGE)} gateway run >/dev/null`,
+        `${sudo} docker pull ${shellQuote(DOCKER_CHANNEL)}`,
+        `TARGET_IMAGE="$(${sudo} docker image inspect -f '{{index .RepoDigests 0}}' ${shellQuote(DOCKER_CHANNEL)})"`,
+        `case "$TARGET_IMAGE" in nousresearch/hermes-agent@sha256:????????????????????????????????????????????????????????????????) ;; *) echo 'Le canal latest ne résout pas un digest Hermes valide.' >&2; exit 1 ;; esac`,
+        `ENVFILE=${shellQuote(`${remoteWorkdir.replace(/\/+$/, "")}/runtime.env`)}`,
+        token ? `TOKEN=${shellQuote(token)}` : `TOKEN="$(sed -n 's/^API_SERVER_KEY=//p' "$ENVFILE" 2>/dev/null | head -1 || true)"; [ -n "$TOKEN" ] || TOKEN="$(openssl rand -hex 32)"`,
+        "TMP_ENV=$(mktemp)",
+        `trap 'rm -f -- "$TMP_ENV"' EXIT`,
+        `printf 'API_SERVER_ENABLED=true\\nAPI_SERVER_HOST=0.0.0.0\\nAPI_SERVER_PORT=8642\\nAPI_SERVER_KEY=%s\\n' "$TOKEN" > "$TMP_ENV"`,
+        `${sudo} install -o ${serviceIdentity.uid} -g ${serviceIdentity.gid} -m 0600 -- "$TMP_ENV" "$ENVFILE"`,
+        "RECREATE=true",
+        `if ${sudo} docker inspect ${shellQuote(DOCKER_NAME)} >/dev/null 2>&1; then`,
+        `  OWNERSHIP="$(${sudo} docker inspect -f '{{index .Config.Labels "hermes.console.managed"}}|{{index .Config.Labels "hermes.console.contract"}}' ${shellQuote(DOCKER_NAME)})"`,
+        `  test "$OWNERSHIP" = ${shellQuote(`true|${DOCKER_CONTRACT}`)} || { echo 'Le conteneur Hermes homonyme n’appartient pas au contrat Console.' >&2; exit 1; }`,
+        `  SHAPE="$(${sudo} docker inspect -f '{{.Config.Image}}|{{.Config.User}}|{{index .Config.Labels "hermes.console.contract"}}|{{index .Config.Labels "hermes.console.source"}}|{{index .Config.Labels "hermes.console.resolved"}}|{{index .Config.Labels "hermes.console.uid"}}|{{index .Config.Labels "hermes.console.gid"}}|{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{.Source}}{{end}}{{end}}' ${shellQuote(DOCKER_NAME)})"`,
+        `  EXPECTED="$TARGET_IMAGE|root|${DOCKER_CONTRACT}|${DOCKER_CHANNEL}|$TARGET_IMAGE|${serviceIdentity.uid}|${serviceIdentity.gid}|${remoteWorkdir}"`,
+        `  if [ "$SHAPE" = "$EXPECTED" ]; then RECREATE=false; ${sudo} docker start ${shellQuote(DOCKER_NAME)} >/dev/null 2>&1 || true; else ${sudo} docker rm -f ${shellQuote(DOCKER_NAME)} >/dev/null; fi`,
         "fi",
-        "printf 'hermes_token=%s\\n' \"$TOKEN\"",
+        `if [ "$RECREATE" = true ]; then ${sudo} docker run -d --name ${shellQuote(DOCKER_NAME)} --label hermes.console.managed=true --label hermes.console.contract=${DOCKER_CONTRACT} --label hermes.console.source=${DOCKER_CHANNEL} --label hermes.console.resolved="$TARGET_IMAGE" --label hermes.console.uid=${serviceIdentity.uid} --label hermes.console.gid=${serviceIdentity.gid} --restart unless-stopped --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --cap-add SETGID --cap-add SETUID --security-opt no-new-privileges:true --pids-limit 256 --cpus 1.5 --memory 6g --env HERMES_UID=${serviceIdentity.uid} --env HERMES_GID=${serviceIdentity.gid} --workdir /opt/data --tmpfs /tmp:size=512m,mode=1777 --tmpfs /var/tmp:size=256m,mode=1777 --tmpfs /run:rw,exec,nosuid,nodev,size=64m,mode=0755,uid=0,gid=0 --mount ${shellQuote(`type=bind,src=${remoteWorkdir},dst=/opt/data`)} -p 127.0.0.1:8642:8642 --env-file "$ENVFILE" "$TARGET_IMAGE" gateway run >/dev/null; fi`,
+        "printf 'hermes_token=%s\\nhermes_image=%s\\n' \"$TOKEN\" \"$TARGET_IMAGE\"",
       ].join("\n"),
     );
     token = parseMarker(dockerResult.stdout, "hermes_token") || token;
+    const resolvedImage = parseMarker(dockerResult.stdout, "hermes_image");
+    if (!/^nousresearch\/hermes-agent@sha256:[a-f0-9]{64}$/.test(resolvedImage)) {
+      throw new Error("Le digest Hermes résolu n’a pas pu être déterminé.");
+    }
 
     update({ step: "dashboard", progress: 64, message: "Préparation du Dashboard Hermes…" });
-    await ensureDockerDashboard(channel, input.target.user, remoteWorkdir);
+    await ensureDockerDashboard(
+      channel,
+      input.provisioner.user,
+      remoteWorkdir,
+      serviceIdentity,
+      resolvedImage,
+    );
     await verifyRemoteDashboard(channel);
+  }
+
+  if (input.mode === "native") {
+    update({ step: "native-dependencies", progress: 40, message: "Installation des prérequis natifs…" });
+    await runRemote(
+      channel,
+      `set -eu; ${sudo} apt-get update; ${sudo} env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y ca-certificates curl git xz-utils build-essential python3-dev libffi-dev ripgrep ffmpeg`,
+    );
+    update({ step: "hermes-native", progress: 58, message: "Installation du dernier Hermes depuis main…" });
+    const nativeResult = await provisionNativeRuntime(
+      channel,
+      input.provisioner.user,
+      input.target.user,
+      serviceIdentity,
+      remoteWorkdir,
+      token,
+    );
+    token = parseMarker(nativeResult.stdout, "hermes_token") || token;
+    activatedHostWorkdir = `${remoteWorkdir.replace(/\/+$/, "")}/workspace`;
+    activatedHermesWorkdir = activatedHostWorkdir;
   }
 
   if (!token) throw new Error("Le token Hermes n’a pas pu être déterminé.");
 
   update({ step: "verify", progress: 82, message: "Vérification de l’API Hermes…" });
   const endpoint = new URL(remoteBaseUrl);
-  const localBaseUrl = await channel.forward(endpoint.hostname, Number(endpoint.port || 80));
-  const verified = await testHermesRuntimeAgainst({ baseUrl: localBaseUrl, token });
+  const verified = await withEphemeralSshChannel(input.target, async (serviceChannel) => {
+    const localBaseUrl = await serviceChannel.forward(
+      endpoint.hostname,
+      Number(endpoint.port || 80),
+    );
+    return testHermesRuntimeAgainst({ baseUrl: localBaseUrl, token });
+  });
   update({ step: "verify", progress: 96, message: "Connexion runtime prête…" });
   const connected = await connectAndSaveSshRuntime({
     baseUrl: remoteBaseUrl,
@@ -384,6 +451,8 @@ async function provisionSshRuntimeOnChannel(
       auth: input.target.auth,
       password: input.target.password,
     },
+    managementMode: "managed",
+    credentialAdapter: input.mode === "native" ? "native_systemd" : "docker",
   }, mutationLease);
   const revision = connected.runtime.configRevision;
   if (!revision) throw new Error("La révision runtime SSH est absente après connexion.");
@@ -412,6 +481,65 @@ async function runRemote(channel: SshChannel, command: string): Promise<SshExecR
   return result;
 }
 
+type ServiceIdentity = {
+  uid: number;
+  gid: number;
+  home: string;
+  machineId: string;
+};
+
+export async function inspectSeparatedSshTargets(
+  provisioner: SshTarget,
+  service: SshTarget,
+) {
+  return withEphemeralSshChannel(provisioner, (channel) =>
+    verifySeparatedServiceIdentity(channel, provisioner, service)
+  );
+}
+
+async function verifySeparatedServiceIdentity(
+  provisionerChannel: SshChannel,
+  provisioner: SshTarget,
+  service: SshTarget,
+): Promise<ServiceIdentity> {
+  if (provisioner.user === service.user) {
+    throw new Error("Les comptes admin et service doivent être distincts.");
+  }
+  const adminResult = await runRemote(
+    provisionerChannel,
+    "set -eu; printf 'machine_id=%s\\n' \"$(cat /etc/machine-id)\"",
+  );
+  const serviceResult = await withEphemeralSshChannel(service, (channel) =>
+    runRemote(
+      channel,
+      [
+        "set -eu",
+        "test \"$(id -u)\" -ne 0",
+        "if sudo -n true >/dev/null 2>&1; then echo 'Le compte service possède sudo.' >&2; exit 31; fi",
+        "if docker info >/dev/null 2>&1; then echo 'Le compte service accède à Docker.' >&2; exit 32; fi",
+        "printf 'machine_id=%s\\n' \"$(cat /etc/machine-id)\"",
+        "printf 'uid=%s\\n' \"$(id -u)\"",
+        "printf 'gid=%s\\n' \"$(id -g)\"",
+        "printf 'home=%s\\n' \"$HOME\"",
+      ].join("; "),
+    )
+  );
+  const admin = parseKeyValueOutput(adminResult.stdout);
+  const observed = parseKeyValueOutput(serviceResult.stdout);
+  if (!admin.machine_id || admin.machine_id !== observed.machine_id) {
+    throw new Error("Les alias SSH admin et service ne désignent pas la même machine.");
+  }
+  const uid = Number(observed.uid);
+  const gid = Number(observed.gid);
+  if (!Number.isSafeInteger(uid) || uid <= 0 || !Number.isSafeInteger(gid) || gid <= 0) {
+    throw new Error("L’UID/GID numérique du compte service est invalide.");
+  }
+  if (!observed.home?.startsWith("/") || /[\r\n]/.test(observed.home)) {
+    throw new Error("Le HOME du compte service est invalide.");
+  }
+  return { uid, gid, home: observed.home, machineId: observed.machine_id };
+}
+
 function inspectionCommand(baseUrl: string, workdir: string, user: string) {
   const url = shellQuote(`${baseUrl}/health`);
   const sudo = sudoPrefix(user);
@@ -430,7 +558,7 @@ function inspectionCommand(baseUrl: string, workdir: string, user: string) {
     'printf "systemd=%s\\n" "$systemd"',
     `if curl --connect-timeout 2 --max-time 4 -fsS ${url} >/dev/null 2>&1; then hermes=healthy; else hermes=unreachable; fi`,
     'printf "hermes=%s\\n" "$hermes"',
-    `if ${sudo ? `${sudo} ` : ""}docker inspect hermes-console-runtime >/dev/null 2>&1; then hermes_mode=docker; elif systemctl --user is-active --quiet hermes-gateway.service 2>/dev/null; then hermes_mode=native; else hermes_mode=unknown; fi`,
+    `if ${sudo ? `${sudo} ` : ""}docker inspect hermes-console-runtime >/dev/null 2>&1 && ${sudo ? `${sudo} ` : ""}docker inspect -f '{{.State.Running}}' hermes-console-runtime 2>/dev/null | grep -qx true; then hermes_mode=docker; elif systemctl --user is-active --quiet hermes-gateway.service 2>/dev/null || systemctl is-active --quiet hermes-gateway.service 2>/dev/null; then hermes_mode=native; else hermes_mode=unknown; fi`,
     'printf "hermes_mode=%s\\n" "$hermes_mode"',
     'if ss -lnt 2>/dev/null | grep -Eq ":8642[[:space:]]"; then port8642=listening; else port8642=closed; fi',
     'printf "port8642=%s\\n" "$port8642"',
@@ -443,10 +571,107 @@ function inspectionCommand(baseUrl: string, workdir: string, user: string) {
   ].join("; ");
 }
 
+export async function provisionNativeRuntime(
+  channel: SshChannel,
+  provisionerUser: string,
+  serviceUser: string,
+  serviceIdentity: ServiceIdentity,
+  remoteWorkdir: string,
+  requestedToken: string,
+) {
+  const sudo = sudoPrefix(provisionerUser);
+  const installerPath = "/var/tmp/hermes-console-install-main.sh";
+  const envFile = `${remoteWorkdir.replace(/\/+$/, "")}/runtime.env`;
+  const workspace = `${remoteWorkdir.replace(/\/+$/, "")}/workspace`;
+  const runAsService = provisionerUser === "root"
+    ? `runuser -u ${shellQuote(serviceUser)} -- env HOME=${shellQuote(serviceIdentity.home)} HERMES_HOME=${shellQuote(remoteWorkdir)}`
+    : `${sudo} -u ${shellQuote(serviceUser)} -H env HOME=${shellQuote(serviceIdentity.home)} HERMES_HOME=${shellQuote(remoteWorkdir)}`;
+  const unit = [
+    "[Unit]",
+    "Description=Hermes Agent gateway managed by Hermes Console",
+    "After=network-online.target",
+    "Wants=network-online.target",
+    "",
+    "[Service]",
+    "Type=simple",
+    `User=${serviceIdentity.uid}`,
+    `Group=${serviceIdentity.gid}`,
+    `WorkingDirectory=${JSON.stringify(workspace)}`,
+    `Environment=${JSON.stringify(`HOME=${serviceIdentity.home}`)}`,
+    `Environment=${JSON.stringify(`HERMES_HOME=${remoteWorkdir}`)}`,
+    `Environment=${JSON.stringify(`PATH=${NATIVE_ROOT}/current/venv/bin:${remoteWorkdir}/node/bin:/usr/local/bin:/usr/bin:/bin`)}`,
+    `EnvironmentFile=${JSON.stringify(envFile)}`,
+    `ExecStart=${NATIVE_ROOT}/current/venv/bin/hermes gateway run --replace`,
+    "Restart=on-failure",
+    "RestartSec=3",
+    "NoNewPrivileges=true",
+    "PrivateTmp=true",
+    "ProtectSystem=full",
+    "ProtectKernelTunables=true",
+    "ProtectKernelModules=true",
+    "ProtectControlGroups=true",
+    "RestrictSUIDSGID=true",
+    "LockPersonality=true",
+    "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+    "",
+    "[Install]",
+    "WantedBy=multi-user.target",
+    "",
+  ].join("\n");
+  const encodedUnit = Buffer.from(unit).toString("base64");
+  const tokenAssignment = requestedToken
+    ? `TOKEN=${shellQuote(requestedToken)}`
+    : `TOKEN="$(sed -n 's/^API_SERVER_KEY=//p' ${shellQuote(envFile)} 2>/dev/null | head -1 || true)"; [ -n "$TOKEN" ] || TOKEN="$(openssl rand -hex 32)"`;
+
+  return runRemote(
+    channel,
+    [
+      "set -eu",
+      `${sudo} install -d -o 0 -g 0 -m 0755 -- ${shellQuote(NATIVE_ROOT)}`,
+      `${sudo} install -d -o ${serviceIdentity.uid} -g ${serviceIdentity.gid} -m 0755 -- ${shellQuote(`${NATIVE_ROOT}/releases`)}`,
+      `${sudo} install -d -o ${serviceIdentity.uid} -g ${serviceIdentity.gid} -m 0700 -- ${shellQuote(remoteWorkdir)}`,
+      `${sudo} install -d -o ${serviceIdentity.uid} -g ${serviceIdentity.gid} -m 0750 -- ${shellQuote(workspace)}`,
+      "ENV_TMP= UNIT_TMP= NATIVE_RELEASE=",
+      `INSTALLER_TMP="$(${sudo} mktemp)"`,
+      `trap 'for f in "\${ENV_TMP:-}" "\${UNIT_TMP:-}"; do [ -z "$f" ] || rm -f -- "$f"; done; ${sudo} rm -f -- "$INSTALLER_TMP"' EXIT`,
+      `${sudo} curl -fsSL --retry 3 -o "$INSTALLER_TMP" ${shellQuote(NATIVE_INSTALLER_URL)}`,
+      `INSTALLER_SHA256="$(${sudo} sha256sum "$INSTALLER_TMP" | cut -d ' ' -f1)"`,
+      `printf '%s' "$INSTALLER_SHA256" | grep -Eq '^[a-f0-9]{64}$' || { echo 'Hash installateur Hermes invalide.' >&2; exit 1; }`,
+      `${sudo} install -o 0 -g 0 -m 0755 -- "$INSTALLER_TMP" ${shellQuote(installerPath)}`,
+      `RESOLVED_COMMIT="$(${sudo} git ls-remote https://github.com/NousResearch/hermes-agent.git refs/heads/main | cut -f1)"`,
+      `printf '%s' "$RESOLVED_COMMIT" | grep -Eq '^[a-f0-9]{40}$' || { echo 'Commit Hermes résolu invalide.' >&2; exit 1; }`,
+      `NATIVE_RELEASE=${shellQuote(`${NATIVE_ROOT}/releases`)}"/$RESOLVED_COMMIT"`,
+      `if [ -e "$NATIVE_RELEASE" ] && { [ ! -x "$NATIVE_RELEASE/venv/bin/hermes" ] || ! head -n 1 "$NATIVE_RELEASE/venv/bin/hermes" | grep -Fq "$NATIVE_RELEASE/"; }; then ${sudo} rm -rf -- "$NATIVE_RELEASE"; fi`,
+      `if [ ! -e "$NATIVE_RELEASE" ]; then ${runAsService} bash ${shellQuote(installerPath)} --branch ${shellQuote(NATIVE_BRANCH)} --dir "$NATIVE_RELEASE" --hermes-home ${shellQuote(remoteWorkdir)} --skip-setup --skip-browser --non-interactive; fi`,
+      `test "$(${sudo} git -c safe.directory="$NATIVE_RELEASE" -C "$NATIVE_RELEASE" rev-parse HEAD)" = "$RESOLVED_COMMIT"`,
+      `${sudo} chown -R 0:0 -- "$NATIVE_RELEASE"`,
+      tokenAssignment,
+      "ENV_TMP=$(mktemp)",
+      `printf 'API_SERVER_ENABLED=true\nAPI_SERVER_HOST=127.0.0.1\nAPI_SERVER_PORT=8642\nAPI_SERVER_KEY=%s\n' "$TOKEN" > "$ENV_TMP"`,
+      `${sudo} install -o ${serviceIdentity.uid} -g ${serviceIdentity.gid} -m 0600 -- "$ENV_TMP" ${shellQuote(envFile)}`,
+      "UNIT_TMP=$(mktemp)",
+      `printf '%s' ${shellQuote(encodedUnit)} | base64 -d > "$UNIT_TMP"`,
+      `${sudo} install -o 0 -g 0 -m 0644 -- "$UNIT_TMP" /etc/systemd/system/hermes-gateway.service`,
+      `PREVIOUS="$(${sudo} readlink -f ${shellQuote(`${NATIVE_ROOT}/current`)} 2>/dev/null || true)"`,
+      `${sudo} ln -sfn -- "$NATIVE_RELEASE" ${shellQuote(`${NATIVE_ROOT}/current`)}`,
+      `${sudo} systemctl daemon-reload`,
+      `${sudo} systemctl enable hermes-gateway.service >/dev/null`,
+      `if ! ${sudo} systemctl restart hermes-gateway.service; then if [ -n "$PREVIOUS" ]; then ${sudo} ln -sfn -- "$PREVIOUS" ${shellQuote(`${NATIVE_ROOT}/current`)}; ${sudo} systemctl restart hermes-gateway.service || true; else ${sudo} rm -f -- ${shellQuote(`${NATIVE_ROOT}/current`)}; fi; exit 1; fi`,
+      "READY=false",
+      `i=0; while [ "$i" -lt 45 ]; do if curl --connect-timeout 2 --max-time 4 -fsS http://127.0.0.1:8642/health >/dev/null 2>&1; then READY=true; break; fi; i=$((i + 1)); sleep 2; done`,
+      `if [ "$READY" != true ]; then ${sudo} systemctl stop hermes-gateway.service || true; if [ -n "$PREVIOUS" ]; then ${sudo} ln -sfn -- "$PREVIOUS" ${shellQuote(`${NATIVE_ROOT}/current`)}; ${sudo} systemctl restart hermes-gateway.service || true; else ${sudo} rm -f -- ${shellQuote(`${NATIVE_ROOT}/current`)}; fi; echo 'Le healthcheck natif a échoué; rollback exécuté.' >&2; exit 1; fi`,
+      `MAIN_PID="$(${sudo} systemctl show -p MainPID --value hermes-gateway.service)"; test "$(ps -o euid= -p "$MAIN_PID" | tr -d ' ')" = ${shellQuote(String(serviceIdentity.uid))}`,
+      `printf 'hermes_token=%s\nhermes_commit=%s\ninstaller_sha256=%s\n' "$TOKEN" "$RESOLVED_COMMIT" "$INSTALLER_SHA256"`,
+    ].join("\n"),
+  );
+}
+
 async function ensureDockerDashboard(
   channel: SshChannel,
   user: string,
   remoteWorkdir: string,
+  serviceIdentity: Pick<ServiceIdentity, "uid" | "gid">,
+  resolvedImage: string,
 ) {
   const sudo = sudoPrefix(user);
   const existingCompanion = await channel.exec(
@@ -454,12 +679,17 @@ async function ensureDockerDashboard(
   );
   if (existingCompanion.code === 0) {
     const companionShape = await channel.exec(
-      `${sudo ? `${sudo} ` : ""}docker inspect -f '{{.HostConfig.NetworkMode}} {{json .Config.Cmd}}' hermes-console-dashboard`,
+      `${sudo ? `${sudo} ` : ""}docker inspect -f '{{index .Config.Labels "hermes.console.managed"}}|{{index .Config.Labels "hermes.console.contract"}}|{{.Config.Image}} {{.HostConfig.NetworkMode}} {{json .Config.Cmd}}' hermes-console-dashboard`,
     );
+    const ownedPrefix = `true|${DOCKER_CONTRACT}|`;
+    if (companionShape.code === 0 && !companionShape.stdout.startsWith(ownedPrefix)) {
+      throw new Error("Le conteneur Dashboard homonyme n’appartient pas au contrat Console.");
+    }
     if (
       companionShape.code !== 0 ||
-      !companionShape.stdout.includes("host") ||
-      !companionShape.stdout.includes("127.0.0.1")
+      !companionShape.stdout.startsWith(`${ownedPrefix}${resolvedImage} `) ||
+      !companionShape.stdout.includes("bridge") ||
+      !companionShape.stdout.includes("0.0.0.0")
     ) {
       await runRemote(
         channel,
@@ -489,8 +719,7 @@ async function ensureDockerDashboard(
     channel,
     [
       "set -eu",
-      `${sudo ? `${sudo} ` : ""}docker pull ${shellQuote(DOCKER_IMAGE)}`,
-      `${sudo ? `${sudo} ` : ""}docker run -d --name hermes-console-dashboard --restart unless-stopped --network host --user "$(id -u):$(id -g)" -v ${shellQuote(`${remoteWorkdir}:/opt/data`)} ${shellQuote(DOCKER_IMAGE)} dashboard --host 127.0.0.1 --port 9119 --no-open >/dev/null`,
+      `${sudo ? `${sudo} ` : ""}docker run -d --name hermes-console-dashboard --label hermes.console.managed=true --label hermes.console.contract=${DOCKER_CONTRACT} --restart unless-stopped --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --cap-add SETGID --cap-add SETUID --security-opt no-new-privileges:true --pids-limit 128 --cpus 0.5 --memory 1g --env HERMES_UID=${serviceIdentity.uid} --env HERMES_GID=${serviceIdentity.gid} --workdir /opt/data --tmpfs /tmp:size=128m,mode=1777 --tmpfs /run:rw,exec,nosuid,nodev,size=32m,mode=0755,uid=0,gid=0 --mount ${shellQuote(`type=bind,src=${remoteWorkdir},dst=/opt/data`)} -p 127.0.0.1:9119:9119 ${shellQuote(resolvedImage)} dashboard --host 0.0.0.0 --port 9119 --no-open >/dev/null`,
     ].join("; "),
   );
 }
@@ -550,6 +779,12 @@ function provisionConfirmation(
   const digest = createHash("sha256")
     .update(JSON.stringify({
       mode: input.mode,
+      provisioner: {
+        host: input.provisioner.host,
+        port: input.provisioner.port,
+        user: input.provisioner.user,
+        auth: input.provisioner.auth,
+      },
       target: {
         host: input.target.host,
         port: input.target.port,
@@ -561,5 +796,5 @@ function provisionConfirmation(
     }))
     .digest("hex")
     .slice(0, 12);
-  return `${input.target.user}@${input.target.host}:${input.target.port}#${digest}`;
+  return `${input.provisioner.user}=>${input.target.user}@${input.target.host}:${input.target.port}#${digest}`;
 }

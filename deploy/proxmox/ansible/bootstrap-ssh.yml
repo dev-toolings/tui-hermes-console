@@ -1,0 +1,155 @@
+---
+# Bootstrap de la VM PVE vierge utilisée par US-G1-SSH-001..009.
+#
+# L'inventaire est généré par pvecli iac inventory. Les clés sont lues depuis
+# des chemins locaux fournis par l'environnement, jamais depuis le dépôt.
+- name: Bootstrap SSH Hermes Console
+  hosts: managed
+  become: true
+  gather_facts: true
+  vars:
+    expected_host_ip: "{{ lookup('env', 'HERMES_EXPECTED_HOST_IP') }}"
+    admin_user: hermes-admin
+    service_user: hermes-console
+    admin_public_key_file: "{{ lookup('env', 'HERMES_ADMIN_PUBLIC_KEY_FILE') }}"
+    service_public_key_file: "{{ lookup('env', 'HERMES_SERVICE_PUBLIC_KEY_FILE') }}"
+    work_group: hermes-work
+    work_root: /srv/hermes-console/workdir
+
+  pre_tasks:
+    - name: Refuser toute cible différente de la VM de preuve
+      ansible.builtin.assert:
+        that:
+          - expected_host_ip | length > 0
+          - ansible_host == expected_host_ip
+        fail_msg: >-
+          Cible inattendue: {{ ansible_host }}. Cette recette exige
+          HERMES_EXPECTED_HOST_IP={{ expected_host_ip }}.
+
+    - name: Vérifier les chemins de clés locaux
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ admin_public_key_file }}"
+        - "{{ service_public_key_file }}"
+      delegate_to: localhost
+      become: false
+      register: public_key_files
+
+    - name: Refuser une clé manquante ou non régulière
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isreg
+        fail_msg: "Clé publique absente ou invalide: {{ item.item }}"
+      loop: "{{ public_key_files.results }}"
+
+  tasks:
+    - name: Créer le groupe de partage du workdir
+      ansible.builtin.group:
+        name: "{{ work_group }}"
+        state: present
+
+    - name: Créer le compte admin recovery
+      ansible.builtin.user:
+        name: "{{ admin_user }}"
+        shell: /bin/bash
+        groups: sudo
+        append: true
+        create_home: true
+        password_lock: true
+        state: present
+
+    - name: Créer le compte de service non privilégié
+      ansible.builtin.user:
+        name: "{{ service_user }}"
+        shell: /bin/bash
+        groups: "{{ work_group }}"
+        append: true
+        create_home: true
+        password_lock: true
+        state: present
+
+    - name: Installer la clé admin
+      ansible.posix.authorized_key:
+        user: "{{ admin_user }}"
+        key: "{{ lookup('file', admin_public_key_file) }}"
+        exclusive: true
+        manage_dir: true
+        state: present
+
+    - name: Installer la clé service
+      ansible.posix.authorized_key:
+        user: "{{ service_user }}"
+        key: "{{ lookup('file', service_public_key_file) }}"
+        exclusive: true
+        manage_dir: true
+        state: present
+
+    - name: Autoriser l'élévation non interactive de l'admin recovery
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/hermes-admin
+        content: "hermes-admin ALL=(ALL) NOPASSWD:ALL\n"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: /usr/sbin/visudo -cf %s
+
+    - name: Créer le workdir durable
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ work_group }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ work_root }}", owner: "{{ service_user }}", mode: "2770" }
+        - { path: "{{ work_root }}/in", owner: "{{ service_user }}", mode: "2770" }
+        - { path: "{{ work_root }}/out", owner: "{{ service_user }}", mode: "2770" }
+
+    - name: Écrire le durcissement SSH Hermes
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/60-hermes-console.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          PubkeyAuthentication yes
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PermitRootLogin no
+          AllowUsers {{ admin_user }} {{ service_user }}
+          GatewayPorts no
+          PermitTunnel no
+          X11Forwarding no
+
+          Match User {{ service_user }}
+              AllowTcpForwarding local
+              PermitOpen 127.0.0.1:8642
+              AllowAgentForwarding no
+              PermitTTY no
+      notify: Apply SSH hardening
+
+    - name: Vérifier les groupes privilégiés du compte service
+      ansible.builtin.command: id -nG "{{ service_user }}"
+      register: service_groups
+      changed_when: false
+
+    - name: Refuser un compte service privilégié
+      ansible.builtin.assert:
+        that:
+          - "'sudo' not in service_groups.stdout.split()"
+          - "'docker' not in service_groups.stdout.split()"
+        fail_msg: "Le compte {{ service_user }} a des groupes interdits: {{ service_groups.stdout }}"
+
+  handlers:
+    - name: Valider sshd
+      listen: Apply SSH hardening
+      ansible.builtin.command: /usr/sbin/sshd -t
+      changed_when: false
+
+    - name: Recharger SSH
+      listen: Apply SSH hardening
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded

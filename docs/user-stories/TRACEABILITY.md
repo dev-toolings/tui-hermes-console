@@ -4,9 +4,10 @@ Cette matrice est l'index de décision. La colonne `Preuve` est renseignée par 
 daté seulement après exécution ; `—` signifie « non prouvé », pas « non applicable ».
 
 > **Audit de cohérence du 04-08-2026.** Les états ci-dessous ont été confrontés au code, à
-> l'historique git et à l'exécution réelle des tests. Six écarts sont consignés dans le
-> [registre des incohérences](INCOHERENCES.md), dont deux fonctionnalités livrées sans story
-> (`updates`, `skills`) et une preuve de sécurité qui ne passe plus. Lire ce registre avant
+> l'historique git et à l'exécution réelle des tests. Six écarts historiques sont consignés dans le
+> [registre des incohérences](INCOHERENCES.md), dont une fonctionnalité encore livrée sans story
+> (`skills`) et une preuve de sécurité qui ne passe plus. `updates` est désormais rattachée à
+> `US-G1-002D` avec sa preuve locale/Proxmox réelle. Lire ce registre avant
 > d'accorder du crédit à un état `IMPLÉMENTÉE` ou `VÉRIFIÉE` antérieur au 02-08-2026.
 
 | Story | Exigence PRD | Dépendances | Preuve | État courant |
@@ -15,15 +16,17 @@ daté seulement après exécution ; `—` signifie « non prouvé », pas « non
 | US-G0-002 | §3.1, §13 — workflow étroit par partenaire | US-G0-001 | — | `PROPOSÉE` |
 | US-G0-003 | §13, §15 — métriques et engagement payant | US-G0-002 | — | `PROPOSÉE` |
 | US-G1-001 | §9.1, §13 — artefacts persistants | US-G0-003 | [durabilité Compose locale 2026-08-01](evidence/2026-08-01-gate-1-artifact-durability-local.md) | `IMPLÉMENTÉE` — preuve locale, P-OPS production ouverte |
-| US-G1-002 | §9.5, §13 — Hermes pinné et confiné | US-G0-003 | [manifeste local G1-002A 2026-08-01](evidence/2026-08-01-gate-1-hermes-confinement-audit.md), [compatibilité image réelle G1-002B 2026-08-01](evidence/2026-08-01-gate-1-hermes-real-image-confinement.md), [matrice candidate G1-002C 2026-08-01](evidence/2026-08-01-gate-1-g1-002c-candidate-matrix.md), [analyse du pin registre 04-08-2026](evidence/2026-08-04-g1-002-registry-pin-analysis.md) | `BLOQUÉE` — matrice préparatoire non promue ; P-SEC/P-OPS/P-E2E ouvertes. Le pin G1-002C est orphelin de tag ; les tags amont sont CalVer et `0.19.0` correspond à `v2026.7.20`, donc la décision version/image est tranchable sans amender le PRD. Décision produit toujours requise |
+| US-G1-002 | §9.5, §13 — Hermes suivi et confiné | US-G0-003 | [manifeste local G1-002A 2026-08-01](evidence/2026-08-01-gate-1-hermes-confinement-audit.md), [compatibilité image réelle G1-002B 2026-08-01](evidence/2026-08-01-gate-1-hermes-real-image-confinement.md), [revalidation `latest`/`main` 04-08-2026](evidence/2026-08-04-g1-002-latest-docker-native.md), [preuve pinnée historique](evidence/2026-08-04-g1-002-docker-native-pops.md) | `IMPLÉMENTÉE` avec preuve technique verte — `READY/0`, Docker et system-wide idempotents sans pin d’entrée, révision observée pour preuve/rollback, admin/service séparés. Revue indépendante et P-E2E ouverts avant `VÉRIFIÉE` |
+| US-G1-002D | §9.5, §10, §13 — mise à jour locale, system-wide et Docker depuis `/updates` | US-G1-002 | [rejeu réel local + Proxmox 210 04-08-2026](evidence/2026-08-04-g1-002-latest-docker-native.md) | `IMPLÉMENTÉE` — local `~/.hermes`, update UI system-wide et Docker, santé 200, rollback/privileges bornés et idempotence prouvés techniquement. Revue indépendante et P-E2E opérateur 2 ouverts |
 | US-G1-003 | §9.5, §13 — avertissement IA | US-G0-003 | [P-INT notice IA 2026-08-01](evidence/2026-08-01-gate-1-ai-disclosure-local.md), [P-E2E navigateur 2026-08-01](evidence/2026-08-01-gate-1-ai-disclosure-e2e.md) | `IMPLÉMENTÉE` — revue lecteur d’écran ouverte |
-| US-G1-004 | §9.2, §13 — policy fail-closed | US-G1-002 | [enveloppe/enforcer local G1-004A 2026-08-01](evidence/2026-08-01-gate-1-g1-004a-local.md), [claim/audit fidèle G1-004B 2026-08-01](evidence/2026-08-01-gate-1-g1-004b-approval-claim.md), [CAS pré-effet local G1-004C 2026-08-01](evidence/2026-08-01-gate-1-g1-004c-pre-effect-approval.md) | `BLOQUÉE` — G1-004C local livré ; policy OS/approbation Hermes réelle, P-SEC/P-E2E ouvertes |
-| US-G1-005 | §8.2, §9.2, §13 — approbation et audit | US-G1-004 | [export audit expurgé 2026-08-01](evidence/2026-08-01-gate-1-audit-export.md), [G1-005B export HTTP/PG 2026-08-01](evidence/2026-08-01-gate-1-g1-005b-audit-export.md), [G1-005C immutabilité PostgreSQL 2026-08-01](evidence/2026-08-01-gate-1-g1-005c-audit-immutability.md), [registre des incohérences 04-08-2026](INCOHERENCES.md) | `BLOQUÉE` au 04-08-2026 — la preuve `proof:g1-005c` échoue : `hermes_releases` et `runtime_update_operations` (migrations 0034/0035) ne sont pas classées. Contrôle fail-closed déclenché et non traité. Dépendance G1-004, P-SEC/P-E2E et revue indépendante restent ouvertes |
+| US-G1-004 | §9.2, §13 — policy fail-closed | US-G1-002 | [G1-004A local](evidence/2026-08-01-gate-1-g1-004a-local.md), [G1-004B claim/audit](evidence/2026-08-01-gate-1-g1-004b-approval-claim.md), [G1-004C CAS](evidence/2026-08-01-gate-1-g1-004c-pre-effect-approval.md), [G1-004D relais Hermes](guides/G1-004D-HERMES-PRE-EFFECT.md), [P-E2E Hermes local](evidence/2026-08-04-g1-004-hermes-local-p-e2e.md), [route Console réelle](evidence/2026-08-04-g1-004-real-console-local.md), [préflight Hermes PVE 210](evidence/2026-08-04-g1-004-hermes-runtime-preflight.md) | `IMPLÉMENTÉE` techniquement — route Console/PostgreSQL/policy/adaptateur et reprise locale prouvés ; P-E2E VM 210 est bloqué par le provider absent, P-SEC et revues indépendantes restent ouverts |
+| US-G1-005 | §8.2, §9.2, §13 — approbation et audit | US-G1-004 | [export audit expurgé 2026-08-01](evidence/2026-08-01-gate-1-audit-export.md), [G1-005B export HTTP/PG 2026-08-01](evidence/2026-08-01-gate-1-g1-005b-audit-export.md), [G1-005C immutabilité PostgreSQL 2026-08-01](evidence/2026-08-01-gate-1-g1-005c-audit-immutability.md), [rejeu G1-005C 04-08-2026](evidence/2026-08-04-g1-005c-replay.md) | `IMPLÉMENTÉE` — classification corrigée et 3/3 tests G1-005C passés. Dépendance G1-004, P-SEC/P-E2E, revue indépendante et acceptation Gate 1 restent ouvertes |
 | US-G1-006 | §9.1, §13 — rétention, export, backup, restauration | US-G1-001, US-G1-005 | [slice policy/preview 2026-08-01](evidence/2026-08-01-gate-1-lifecycle-preview.md), [export métier 2026-08-01](evidence/2026-08-01-gate-1-lifecycle-export.md), [vérificateur relationnel 2026-08-01](evidence/2026-08-01-gate-1-lifecycle-verifier.md), [business-export scratch 2026-08-01](evidence/2026-08-01-gate-1-lifecycle-business-export-scratch.md), [DR local G1-006D2 2026-08-01](evidence/2026-08-01-gate-1-lifecycle-dr-local.md), [purge conditionnée G1-006E 2026-08-01](evidence/2026-08-01-gate-1-lifecycle-purge.md) | `IMPLÉMENTÉE` (G1-006A/B/C + D-local + D2-local + E-local ; destination externe/DR/P-OPS/P-SEC ouverts) |
 | US-G1-007 | §11, §13 — E2E critique | US-G1-001..006 | [slice local G1-007A post-setup 2026-08-01](evidence/2026-08-01-gate-1-g1-007a-post-setup-local.md), [slice G1-007B connectivité runtime 2026-08-02](evidence/2026-08-02-gate-1-hermes-runtime-connectivity.md) | `IMPLÉMENTÉE` localement pour G1-007A/B ; story complète bloquée par P-E2E vierge, navigateur/OIDC, P-SEC et acceptation Gate |
-| US-G1-008 | §9.4, §10, §13 — SSH/SFTP réel | US-G1-002 | [connectivité Hermes VPS 02-08-2026](evidence/2026-08-02-gate-1-hermes-runtime-connectivity.md), [diagnostic read-only VPS 187.55.227.55 01-08-2026](evidence/2026-08-01-gate-1-ssh-vps-18755-diagnostic.md), [diagnostic VPS 31-07-2026](evidence/2026-07-31-gate-1-ssh-vps-diagnostic.md) | `BLOQUÉE` — tunnel Hermes prouvé sur cible existante ; compte non-root, SFTP borné, rotation/résilience et P-SEC ouverts. **Reste bloquée pendant toute la durée du gel de `US-G1-SSH-001..009`** |
-| US-G1-SSH-001..009 | §9.4, §10 — recette SSH détaillée | US-G1-008 | [états détaillés](SSH-STORIES.md), [décision de gel 04-08-2026](evidence/2026-08-04-ssh-001-gel-decision.md), [garde SFTP locale 006A](evidence/2026-08-01-gate-1-ssh-sftp-006a-local.md), [preuve partielle SSH-001/002 (run auto)](evidence/2026-08-04-ssh-001-002-18755-diagnostic.md) | `BLOQUÉE` — **chaîne gelée le 04-08-2026** faute de VPS vierge ; `US-G1-SSH-001` est la racine, `002..009` en dépendent transitivement. Ne pas relancer de campagne de preuve sans hôte vierge. Critère de dégel dans la décision liée |
-| US-G1-SSH-010 | §9.4, §10 — stockage Docker `/opt/data` | US-G1-SSH-005, US-G1-SSH-006 | [migration Docker P-OPS 2026-08-02](evidence/2026-08-02-gate-1-ssh-storage-migration.md) | `VÉRIFIÉE` — cutover P-OPS sur VPS réel avec rollback déclenché puis retry réussi ; hors périmètre du gel, mais acceptation reviewer et dépendances gelées restent ouvertes |
+| US-G1-008 | §9.4, §10, §13 — SSH réel, SFTP gelé | US-G1-002 | [connectivité Hermes VPS 02-08-2026](evidence/2026-08-02-gate-1-hermes-runtime-connectivity.md), [VM vierge 04-08-2026](evidence/2026-08-04-ssh-003-005-hermes-ephemeral-01.md) | `BLOQUÉE` sur le sous-périmètre SSH — tunnel, séparation des comptes, empreintes et rotation restent à accepter. SFTP est explicitement `GELÉE` et non bloquante |
+| US-G1-SSH-001..005,008 | §9.4, §10 — bootstrap, confiance, tunnel et identité SSH | US-G1-008 | [états détaillés](SSH-STORIES.md), [VM vierge Terraform/Ansible 04-08-2026](evidence/2026-08-04-ssh-003-005-hermes-ephemeral-01.md), [preuve latest/main et SSH-005](evidence/2026-08-04-g1-002-latest-docker-native.md), [preuve SSH-001/002](evidence/2026-08-04-ssh-001-002-hermes-ephemeral-01.md), [preuve SSH-008](evidence/2026-08-04-ssh-008-hermes-ephemeral-01.md) | `TECHNIQUEMENT VÉRIFIÉE` — SSH-008 rotation/révocation prouvée ; revue indépendante et opérateur 2 restent ouverts |
+| US-G1-SSH-006/007/009 | §9.4, §10 — transferts SFTP et E2E fichiers | US-G1-008 | [garde SFTP locale 006A historique](evidence/2026-08-01-gate-1-ssh-sftp-006a-local.md) | `GELÉE` — SFTP explicitement hors périmètre produit ; aucune implémentation, preuve P-E2E ou recette n'est demandée dans cette phase |
+| US-G1-SSH-010 | §9.4, §10 — stockage Docker `/opt/data` sans transfert SFTP | US-G1-SSH-005 | [migration Docker P-OPS 2026-08-02](evidence/2026-08-02-gate-1-ssh-storage-migration.md) | `VÉRIFIÉE` techniquement pour le cutover P-OPS ; preuve SFTP retirée du contrat courant, acceptation reviewer restante |
 | US-G2-001 | §6.3, §8, §13 — site/projet | Gate 1 acceptée | [preuve site context 2026-08-01](evidence/2026-08-01-gate-2-site-context.md) | `VÉRIFIÉE` |
 | US-G2-002 | §4, §13 — cinq rôles | US-G2-001 | [preuve RBAC 2026-08-01](evidence/2026-08-01-gate-2-rbac.md) | `IMPLÉMENTÉE` |
 | US-G2-003 | §8, §13 — propriété des ressources | US-G2-001, US-G2-002 | [preuve ownership 2026-08-01](evidence/2026-08-01-gate-2-ownership.md) | `IMPLÉMENTÉE` |
@@ -61,20 +64,19 @@ verdict de Gate.
 Le rapport DOIT lister chaque story, son état, son lien de preuve, les dérogations ouvertes et la
 décision explicite `GO`, `NO-GO` ou `PIVOT`.
 
-## Fonctionnalités livrées hors méthode (constat du 04-08-2026)
+## Fonctionnalités livrées hors méthode restant à rattacher
 
-Ces capacités sont présentes et fonctionnelles dans l'application, mais aucune story ne les couvre.
-Elles n'ont donc ni scénario positif, ni scénario négatif, ni preuve, ni reviewer. Elles ne peuvent
-être invoquées dans aucune revue de gate tant qu'une story ne leur est pas rattachée.
+`updates` est maintenant rattachée à `US-G1-002D` et peut être examinée dans Gate 1 sur la base de
+sa preuve datée. `skills` reste la seule capacité identifiée ici sans story, scénario, preuve ni
+reviewer.
 
 | Capacité | Artefacts principaux | Story | Statut |
 |---|---|---|---|
-| Mises à jour du runtime Hermes | `apps/server/src/modules/updates/`, `/api/runtime/update*`, `/api/updates/hermes`, migrations `0034`/`0035`, nav `/updates` | **aucune** | hors périmètre d'acceptation |
 | Administration des skills Hermes | `apps/server/src/api/skills/`, `apps/server/src/modules/runtime/hermes-skills-admin.ts`, `apps/web/src/screens/skills.tsx`, nav `/skills` | **aucune** | hors périmètre d'acceptation |
 
-La fonctionnalité de mises à jour est la cause directe de la régression consignée en INC-01 : ses
-migrations ont introduit deux tables non classées qui font tomber la frontière owner/runtime prouvée
-par `US-G1-005`. Voir le [registre des incohérences](INCOHERENCES.md).
+La fonctionnalité de mises à jour a été la cause directe de la régression INC-01 ; ses deux tables
+sont maintenant classées dans la frontière owner/runtime et sa story est tracée. Voir le [registre des
+incohérences](INCOHERENCES.md) pour l'historique.
 
-Aucun identifiant de story n'est attribué ici : décider du périmètre et du contrat de ces capacités
-relève du propriétaire produit, pas de la mise à jour documentaire.
+Le propriétaire produit doit encore décider du périmètre de `skills` ; cette décision est indépendante
+de l'acceptation de `US-G1-002D`.

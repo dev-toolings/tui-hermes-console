@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
+import { generateDecisionKeyPair } from "@/modules/policy/decision-envelope";
 
 const runtimeEffect = mock(() => undefined);
 const stopEffect = mock(() => undefined);
@@ -127,7 +128,25 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
       "--env", "POSTGRES_HOST_AUTH_METHOD=trust", POSTGRES_IMAGE,
     ]);
     for (let attempt = 0; attempt < 60; attempt += 1) {
-      if (spawnSync("docker", ["exec", containerName, "pg_isready", "-U", "postgres"], { stdio: "ignore" }).status === 0) break;
+      if (
+        spawnSync(
+          "docker",
+          [
+            "exec",
+            containerName,
+            "psql",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-U",
+            "postgres",
+            "-d",
+            "postgres",
+            "-Atqc",
+            "SELECT 1;",
+          ],
+          { stdio: "ignore" },
+        ).status === 0
+      ) break;
       await Bun.sleep(250);
     }
     psql('CREATE DATABASE "site_api";', "postgres");
@@ -184,6 +203,11 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
     if (!port) throw new Error(`Port PostgreSQL illisible: ${binding}`);
     process.env.DATABASE_URL = `postgres://postgres@127.0.0.1:${port}/site_api`;
     process.env.APP_ENCRYPTION_KEY = "p-int-site-scope-hmac";
+    const policyKeys = generateDecisionKeyPair();
+    process.env.HERMES_POLICY_PRIVATE_KEY_B64URL = policyKeys.privateKey
+      .export({ format: "der", type: "pkcs8" })
+      .toString("base64url");
+    process.env.HERMES_POLICY_PUBLIC_KEY_B64URL = policyKeys.publicKey;
   }, 30_000);
 
   afterAll(async () => {
@@ -196,6 +220,8 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
     delete databaseGlobal.hermesConsoleDb;
     delete process.env.DATABASE_URL;
     delete process.env.APP_ENCRYPTION_KEY;
+    delete process.env.HERMES_POLICY_PRIVATE_KEY_B64URL;
+    delete process.env.HERMES_POLICY_PUBLIC_KEY_B64URL;
     spawnSync("docker", ["rm", "--force", containerName], { stdio: "ignore" });
   });
 

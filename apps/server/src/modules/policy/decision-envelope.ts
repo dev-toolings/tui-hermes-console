@@ -14,6 +14,11 @@ export const POLICY_DECISION_DOMAIN = "hermes-console/policy-decision/v1\0" as c
 export const POLICY_DECISION_VERSION = 1 as const;
 export const POLICY_DECISION_ALGORITHM = "Ed25519" as const;
 export const MAX_DECISION_TTL_MS = 5 * 60 * 1000;
+export const POLICY_ACTION_KINDS = [
+  "fixture.marker.write",
+  "hermes.run.approval",
+] as const;
+export type PolicyActionKind = (typeof POLICY_ACTION_KINDS)[number];
 
 const base64UrlPattern = /^[A-Za-z0-9_-]+$/;
 const sha256Pattern = /^[a-f0-9]{64}$/;
@@ -31,7 +36,7 @@ const envelopeSchema = z
     runId: z.string().regex(identifierPattern),
     siteId: z.string().regex(identifierPattern),
     correlationId: z.string().regex(identifierPattern),
-    actionKind: z.literal("fixture.marker.write"),
+    actionKind: z.enum(POLICY_ACTION_KINDS),
     scopeId: z.string().regex(identifierPattern),
     payloadSha256: z.string().regex(sha256Pattern),
     outcome: z.enum(["allow", "deny"]),
@@ -54,7 +59,7 @@ export type DecisionRequestScope = {
   runId: string;
   siteId: string;
   correlationId: string;
-  actionKind: "fixture.marker.write";
+  actionKind: PolicyActionKind;
   scopeId: string;
 };
 

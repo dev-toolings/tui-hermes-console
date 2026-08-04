@@ -11,6 +11,7 @@ import {
   PaletteIcon,
   ServerIcon,
   ShieldIcon,
+  TrophyIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -23,6 +24,7 @@ const SECTIONS = [
   { href: "/settings/notifications", label: "Notifications", icon: BellIcon, exact: false as const },
   { href: "/settings/retention", label: "Conservation", icon: DatabaseIcon, exact: false as const },
   { href: "/settings/security", label: "Sécurité", icon: ShieldIcon, exact: false as const },
+  { href: "/settings/achievements", label: "Badges", icon: TrophyIcon, exact: false as const },
 ];
 
 export function SettingsNav({ className }: { className?: string }) {

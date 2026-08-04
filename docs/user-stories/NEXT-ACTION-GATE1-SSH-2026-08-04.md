@@ -1,56 +1,73 @@
-# Exécution immédiate (objectif: faire avancer Gate 1)
+# RAF concret — Gate 1 après le rejeu runtime
 
 Date: 2026-08-04
 
-> **CE DOCUMENT EST SUSPENDU DEPUIS LE 04-08-2026.** `US-G1-SSH-001` est gelée faute de VPS vierge,
-> et `US-G1-SSH-002` à `US-G1-SSH-009` sont gelées par dépendance. Voir la
-> [décision de gel](evidence/2026-08-04-ssh-001-gel-decision.md).
->
-> La procédure ci-dessous reste correcte et sera reprise **telle quelle au dégel**. Elle ne doit pas
-> être relancée avant : sans hôte vierge, elle produit des rapports `BLOQUÉ` qui n'apportent aucune
-> preuve et coûtent un aller-retour à chaque fois. Le prérequis manquant n'est pas un paramètre de
-> ligne de commande, c'est une machine à provisionner.
+> **Actualisation du 04-08-2026 :** le prérequis VPS vierge est maintenant fourni par
+> `hermes-ephemeral-01` (`192.168.1.210`), créé via Terraform/pvecli puis préparé par Ansible.
+> La campagne runtime est maintenant rejouée : `US-G1-002` et `US-G1-002D` passent techniquement
+> en local `~/.hermes` et sur la VM 210 en system-wide/Docker ; SSH-003/004/005 passent aussi
+> techniquement. Le passage en `VÉRIFIÉE` reste interdit sans reviewer indépendant et opérateur 2.
 
-Ce document fige l’ordre d’exécution recommandé à partir des états actuels :
-`US-G1-002`, `US-G1-004`, `US-G1-008` et `US-G1-SSH-001..009` restent bloquantes.
+Ce document fige le reste à faire, avec un propriétaire et une preuve de sortie. Aucun nouveau
+développement n'est requis pour `US-G1-002D` tant qu'un rejeu indépendant ne révèle pas un échec.
 
-```text
-╔══════════════╗      Bloquant         ╔════════════════╗      Preuve exigée      ╔══════════════╗
-║ US-G1-002   ║ ───────────────▶ ║ SSH-001..009    ║ ────────────────────▶ ║ Revue Gate 1 ║
-╚══════╤═══════╝                     ╚════╤═════════════╝                        ╚════╤════════╝
-       │ dépendance                        │ dépendance                                 │
-       ▼                                   ▼                                            ▼
-┌──────┴───────┐                     ┌────┴───────────────────────┐            ┌───────┴───────────────┐
-║ Revue +      ║                     ║ Preuves P-OPS/P-SEC/P-E2E   ║            ║ Verdict Accepté/NO-GO ║
-║ Evidence     ║◀────────────────────╢ Réalités VPS vierge + cible   ║───────────▶ ║ + preuve traceabilité ║
-╚──────────────┘                     ╚─────────────────────────────╝            ╚──────────────────────┘
-```
+╔════════════════════╗
+║ Preuves déjà vertes║
+║ local / PVE 210    ║
+╚════════════════════╝
+          │ revue indépendante des faits
+          ▼
+┌──────────────────────────┐
+│ Rejeu opérateur 2         │
+│ update + SSH-008          │
+└──────────────────────────┘
+          │ rapport daté + négatifs
+          ▼
+╔════════════════════╗
+║ Revue Gate 1       ║
+║ GO / NO-GO / PIVOT ║
+╚════════════════════╝
 
-## Règle de séquence (ne pas changer l’ordre)
+Légende : les flèches indiquent la preuve nécessaire avant l'étape suivante. Composants : preuves
+runtime, opérateur distinct, recette SSH, reviewer sécurité/exploitation et décision Gate 1.
 
-1. **US-G1-SSH-001** (bootstrap VPS vierge)  
-2. **US-G1-SSH-002** (empreinte hôte hors bande)  
-3. **US-G1-SSH-003** (compte admin + compte service séparés)  
-4. **US-G1-SSH-004** (key-only + refus inconnu/révoqué)  
-5. **US-G1-SSH-005** (tunnel borné à `127.0.0.1:8642`)  
-6. **US-G1-SSH-006** (SFTP workdir borné + intégrité)  
-7. **US-G1-SSH-007** (reconnexion/concurrence/coupure)  
-8. **US-G1-SSH-008** (rotation + révocation)  
-9. **US-G1-SSH-009** (guide E2E par opérateur 2)  
-10. **US-G1-SSH-010** (acceptation formelle, même si implémentation P-OPS locale existe déjà)
+## RAF priorisé et concret
 
-Le passage de `US-G1-008` dépend du succès complet de `SSH-001..009`.
+| Rang | Action | Propriétaire | Dépendance | Preuve de sortie | État |
+|---|---|---|---|---|---|
+| R0 | Geler le code runtime et remettre le dossier de preuve au reviewer | Implémenteur | preuve actuelle | lien vers `2026-08-04-g1-002-latest-docker-native.md`, aucun commit/push dans ce passage | PRÊT |
+| R1 | Revue indépendante de `US-G1-002` + `US-G1-002D` : code, playbooks, manager, privilèges, preuve PVE 210 | Reviewer sécurité/exploitation distinct | R0 | rapport signé, réserves classées, verdict technique | OUVERT |
+| R2 | Rejouer le parcours `/updates` en local `~/.hermes`, system-wide PVE et Docker PVE | Opérateur 2 / QA | R1 | captures/IDs d'opération, version/health, second passage, état final exclusif | OUVERT |
+| R3 | Exécuter SSH-008 : rotation/révocation de l'identité SSH et fermeture des sessions | Ops + reviewer | SSH-003/005 | [preuve SSH-008 VM 210](evidence/2026-08-04-ssh-008-hermes-ephemeral-01.md), ancienne clé inutilisable, sessions fermées, SLA ~315 ms | TECHNIQUEMENT PASSÉ |
+| R4 | Maintenir SSH-006/007/009 gelées et retirer SFTP de la décision Gate 1 | Produit + responsable Gate | décision produit | traceability avec statut `GELÉE`, aucun scénario SFTP dans le RAF actif | FAIT |
+| R5 | Brancher et prouver la policy pré-effet Hermes de `US-G1-004` | Responsable sécurité + implémenteur policy | US-G1-002 | [G1-004D](guides/G1-004D-HERMES-PRE-EFFECT.md), [harness route Console réelle](evidence/2026-08-04-g1-004-real-console-local.md), refus avant POST, décision signée corrélée au run | TECHNIQUEMENT PASSÉ — local réel ; PVE 210 provider absent |
+| R6 | Décider Gate 1, puis seulement ouvrir Gate 2 | Responsable sécurité/exploitation + produit | R1 à R5 | rapport `GO`, `NO-GO` ou `PIVOT` et traceability signée | BLOQUANT |
 
-## Ce qu’on fait maintenant (prochaine itération)
+### Critères de sortie R1/R2
 
-- **Objectif court-terme** : prouver `US-G1-SSH-001` et `US-G1-SSH-002` sur une vraie cible vierge.
-- **Critère de sortie court** :
-  - `BLOQUÉE` retirée sur `US-G1-SSH-001`
-  - `BLOQUÉE` retirée sur `US-G1-SSH-002`
-  - preuve datée déposée avec identifiants corrélables (dates, host alias expurgé, résultats `true/false`, artefacts inventaire)
-  - traceability préservée dans `TRACEABILITY.md`
+Le runtime update est accepté uniquement si le reviewer et l'opérateur 2 constatent tous les points
+suivants :
 
-## Commandes de pré-exécution (avant connexion réelle)
+- local `~/.hermes`, system-wide et Docker atteignent Hermes `0.20.0` avec `/health` HTTP 200 ;
+- system-wide suit `main` sans `--commit`, Docker suit `latest` puis exécute le digest résolu ;
+- le compte `hermes-console` ne peut ni faire `sudo` général ni utiliser Docker ;
+- un échec de santé ou de transport est visible et ne laisse pas le nouveau runtime déclaré sain ;
+- un second passage ne change rien et l'ancien mode reste arrêté selon l'exclusivité ;
+- les deux opérations UI sont corrélées au rapport et aucune ressource temporaire ne subsiste.
+
+### Décision actuelle
+
+`US-G1-002` et `US-G1-002D` sont **IMPLÉMENTÉES techniquement**, mais pas `VÉRIFIÉES`. Le prochain
+acte concret est R1, confié à une personne distincte de l'implémenteur ; R2 doit ensuite être rejoué
+par un opérateur 2. Les vrais blocages Gate 1 restants sont `US-G1-004` et le sous-périmètre SSH
+actif, notamment `US-G1-SSH-002/008`. SFTP n'est plus un blocage.
+
+## Annexe — recette SSH détaillée
+
+Les commandes ci-dessous restent le runbook historique des sous-stories SSH ; elles ne remplacent pas
+le rapport daté ni la revue indépendante demandés par R3. Les sections SFTP ne sont plus à exécuter.
+
+### Commandes de pré-exécution (avant connexion réelle)
 
 - Vérifier la cible réellement neuve (aucune clé `hermes-console`, port/UID anormaux, SSH non durci).
 - Exporter les variables de contexte (date, alias site expurgé, IP/host, opérateur).

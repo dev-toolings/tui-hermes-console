@@ -56,7 +56,7 @@ function directDashboardBaseUrl(runtimeBaseUrl: string | null) {
   }
 }
 
-async function withDashboardBaseUrl<T>(operation: (baseUrl: string) => Promise<T>) {
+export async function withDashboardBaseUrl<T>(operation: (baseUrl: string) => Promise<T>) {
   const runtime = await getRuntimePublic();
 
   if (runtime.transport === "ssh") {
@@ -70,7 +70,7 @@ async function withDashboardBaseUrl<T>(operation: (baseUrl: string) => Promise<T
   return operation(directDashboardBaseUrl(runtime.baseUrl));
 }
 
-async function dashboardJson<T>(
+export async function dashboardJson<T>(
   baseUrl: string,
   path: string,
   init?: RequestInit,

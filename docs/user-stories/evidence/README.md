@@ -6,6 +6,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 
 ## Rapports disponibles
 
+- [04-08-2026 — G1-002 Docker et system-wide sur VM](2026-08-04-g1-002-docker-native-pops.md) :
+  `READY/0`, digest/commit/checksum figés, séparation admin/service, identités effectives, refus
+  sudo/Docker/secrets, loopback, bascule de mode et deuxièmes passages `changed=0`.
 - [02-08-2026 — migration du stockage Docker Hermes](2026-08-02-gate-1-ssh-storage-migration.md) :
   cutover réel du volume `/opt/data` vers `/srv/hermes-console/data`, manifestes identiques,
   sauvegarde vérifiable, sondes Hermes/SFTP et rollback automatique réellement déclenché ; reviewer,
@@ -13,10 +16,22 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 - [02-08-2026 — connectivité Hermes native, Docker locale et Docker VPS](2026-08-02-gate-1-hermes-runtime-connectivity.md) :
   Console en arrière-plan, probes réels `/health` + `/v1/capabilities` et tunnel créé par le module
   SSH du projet ; SFTP, compte non-root, confinement et acceptation Gate restent ouverts.
-- [04-08-2026 — décision de gel SSH-001](2026-08-04-ssh-001-gel-decision.md) : `US-G1-SSH-001` est
-  gelée faute de VPS vierge, et `US-G1-SSH-002` à `US-G1-SSH-009` le sont par dépendance.
+- [04-08-2026 — VM SSH vierge Terraform/Ansible](2026-08-04-ssh-003-005-hermes-ephemeral-01.md) :
+  SSH-003/004 vérifiées, SSH-005 négatif vérifié et forward Hermes positif restant à rejouer.
+- [04-08-2026 — preuve SSH-001/002 sur VM vierge](2026-08-04-ssh-001-002-hermes-ephemeral-01.md) :
+  ED25519 concordante hors bande ; RSA/ECDSA encore à confirmer si tous les algorithmes sont requis.
+- [04-08-2026 — rotation/révocation SSH-008 sur VM vierge](2026-08-04-ssh-008-hermes-ephemeral-01.md) :
+  nouvelle identité fonctionnelle, ancienne clé refusée, ControlMaster fermé et SLA d'environ 315 ms.
 - [04-08-2026 — analyse du pin registre Hermes](2026-08-04-g1-002-registry-pin-analysis.md) :
   tags amont en CalVer, digest G1-002C orphelin de tag, candidats épinglables identifiés.
+- [04-08-2026 — matrice réelle du candidat v2026.7.20](2026-08-04-g1-002c-v2026.7.20.md) :
+  profil upstream compatible, profils Console/root bloqués, promotion refusée.
+- [04-08-2026 — revalidation G1-002 sur `latest`/`main`](2026-08-04-g1-002-latest-docker-native.md) :
+  Docker et system-wide réels, `READY/0`, identités séparées et deux passages idempotents. Le même
+  rapport couvre désormais `US-G1-002D` : rejeu du runtime `~/.hermes` local et update depuis
+  `/updates` sur la VM Proxmox 210, avec les deux identifiants d'opération et l'état final restauré.
+- [04-08-2026 — rejeu G1-005C](2026-08-04-g1-005c-replay.md) : classification owner/runtime corrigée,
+  3 tests pass et 0 échec.
 - Gabarit de preuve SSH-001/002 : [`guides/SSH-001-002-EVIDENCE-TEMPLATE.md`](../guides/SSH-001-002-EVIDENCE-TEMPLATE.md)
   (feuille à remplir ; rangée dans `guides/` et non ici, un gabarit vide n'étant pas une preuve).
 - [script] `scripts/run-ssh-001-002.sh` (optionnel) :
@@ -64,8 +79,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 - [01-08-2026 — notice IA et garde de consentement](2026-08-01-gate-1-ai-disclosure-local.md) :
   notice versionnée, manifeste de routes, persistance PostgreSQL et refus centralisé `423/428` ;
   P-E2E navigateur et revue clavier/lecteur d’écran encore ouverts.
-- [01-08-2026 — garde SFTP locale](2026-08-01-gate-1-ssh-sftp-006a-local.md) : US-G1-SSH-006A
-  borne les chemins distants avant les appels SFTP ; aucune preuve de frontière OS/VPS.
+- [01-08-2026 — garde SFTP locale historique](2026-08-01-gate-1-ssh-sftp-006a-local.md) :
+  US-G1-SSH-006A bornait les chemins distants avant les appels SFTP ; aucune preuve de frontière
+  OS/VPS. Le périmètre SFTP est désormais gelé et ce rapport n'est pas un RAF actif.
 - [01-08-2026 — manifeste Hermes confiné](2026-08-01-gate-1-hermes-confinement-audit.md) :
   préparation locale G1-002A (overlay digesté, UID non-root, rootfs RO, caps/limites/réseau et
   sondes fixture) ; Hermes réel, P-SEC/P-OPS/P-E2E encore ouverts, story `BLOQUÉE`.
