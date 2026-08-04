@@ -515,7 +515,27 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
     const originalFetch = globalThis.fetch;
     const runtimeCalls: string[] = [];
     globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
       runtimeCalls.push(input instanceof Request ? input.url : String(input));
+      if (url.includes("/api/model/options")) {
+        return Response.json({
+          providers: [{
+            slug: "direct",
+            name: "Direct",
+            is_current: true,
+            authenticated: true,
+            auth_type: null,
+            warning: null,
+            source: "direct",
+            models: ["hermes-approval"],
+            capabilities: {
+              "hermes-approval": { fast: true, reasoning: true },
+            },
+          }],
+          model: "hermes-approval",
+          provider: "direct",
+        });
+      }
       return new Response(null, { status: 204 });
     }) as typeof fetch;
     try {
