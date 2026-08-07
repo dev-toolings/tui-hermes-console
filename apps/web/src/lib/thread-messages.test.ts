@@ -4,10 +4,17 @@ import {
   buildMessages,
   buildPartsFromEvents,
   buildThreadMessagesFromSnapshot,
+  threadMessageId,
 } from "./thread-messages";
 import type { ThreadSnapshot } from "@console/core/modules/runs/types";
 
 describe("thread-messages", () => {
+  test("stabilise l'identité d'un message dès que le run est connu", () => {
+    expect(threadMessageId("user", "run_1", "optimistic_msg_1")).toBe("user_run_1");
+    expect(threadMessageId("assistant", "run_1", "msg_a")).toBe("assistant_run_1");
+    expect(threadMessageId("user", null, "msg_u")).toBe("msg_u");
+  });
+
   test("entrelace text, reasoning et tool-call", () => {
     const parts = buildPartsFromEvents([
       { type: "agent.reasoning", payload: { text: "plan" } },
@@ -250,6 +257,8 @@ describe("thread-messages", () => {
       content: [{ type: "text", text: "done" }],
       status: { type: "complete", reason: "stop" },
     });
+    expect(terminal[0]?.id).toBe("user_run_1");
+    expect(persisted[0]?.id).toBe(terminal[0]?.id);
     expect(persisted.at(-1)?.id).toBe(terminal.at(-1)?.id);
   });
 

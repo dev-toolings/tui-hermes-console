@@ -52,7 +52,6 @@ export const XuluxThread: FC<{
     >
       <ThreadPrimitive.Viewport
         turnAnchor="top"
-        autoScroll
         data-slot="aui_thread-viewport"
         className={cn(
           // `overflow-y-scroll` réserve la gouttière en permanence : la barre
@@ -88,35 +87,31 @@ export const XuluxThread: FC<{
         ) : null}
 
         {hasMessages ? <ThreadScrollToBottom /> : null}
+
+        <ThreadPrimitive.ViewportFooter
+          data-slot="aui_thread-viewport-footer"
+          className="aui-thread-viewport-footer sticky bottom-0 z-20 mt-auto flex w-full flex-col overflow-visible bg-background"
+        >
+          {beforeComposer ? (
+            <div className="shrink-0 pt-3">{beforeComposer}</div>
+          ) : null}
+
+          {showComposer ? (
+            <div className="aui-thread-composer-dock shrink-0 bg-background pt-3 pb-4 md:pb-5">
+              {/*
+                Le footer appartient au viewport : assistant-ui mesure ainsi
+                sa hauteur pour conserver le nouveau tour ancré en haut quand
+                le placeholder de streaming se contracte en réponse courte.
+              */}
+              <div className="mx-auto w-full max-w-(--thread-max-width)">
+                <XuluxComposer />
+              </div>
+              <ComposerMetaBar modelLabel={modelLabel} phase={phase} />
+            </div>
+          ) : null}
+        </ThreadPrimitive.ViewportFooter>
       </ThreadPrimitive.Viewport>
 
-      {hasMessages ? (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-6 bg-gradient-to-b from-background to-transparent"
-        />
-      ) : null}
-
-      {/* Hors du dock : un fil en lecture seule (rejeu de fixtures) n'a pas de
-          composer, mais peut très bien porter une demande d'autorisation. */}
-      {beforeComposer ? (
-        <div className="shrink-0 bg-background px-4 pt-3">{beforeComposer}</div>
-      ) : null}
-
-      {showComposer ? (
-        <div className="aui-thread-composer-dock shrink-0 bg-background px-4 pt-3 pb-4 md:pb-5">
-          {/*
-            Entièrement statique, y compris pendant le chargement. Le composer
-            ne dépend d'aucune donnée serveur pour accepter une frappe, et le
-            bloquer punissait l'utilisateur pour une latence qui n'est pas la
-            sienne. L'envoi, lui, attend le snapshot — voir `sendMessage`.
-          */}
-          <div className="mx-auto w-full max-w-(--thread-max-width)">
-            <XuluxComposer />
-          </div>
-          <ComposerMetaBar modelLabel={modelLabel} phase={phase} />
-        </div>
-      ) : null}
     </ThreadPrimitive.Root>
   );
 };

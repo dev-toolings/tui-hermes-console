@@ -18,6 +18,14 @@ type EventLike = {
 /** `ThreadMessageLike["content"]` est readonly : on construit dans un tableau mutable. */
 type Part = Extract<ThreadMessageLike["content"], readonly unknown[]>[number];
 
+export function threadMessageId(
+  role: "user" | "assistant",
+  runId: string | null,
+  fallbackId: string,
+) {
+  return runId ? `${role}_${runId}` : fallbackId;
+}
+
 /**
  * Convertit une séquence d’événements produit en parts assistant-ui
  * (text / reasoning / tool-call), dans l’ordre réel du stream.
@@ -212,10 +220,10 @@ export function buildThreadMessagesFromSnapshot(snapshot: ThreadSnapshot): Threa
     }
 
     const built: ThreadMessageLike = {
-      id:
-        message.role === "assistant" && message.runId
-          ? `assistant_${message.runId}`
-          : message.id,
+      // Le run est l'identité stable du tour. L'id PostgreSQL du message
+      // utilisateur n'est connu qu'après persistance ; l'utiliser ici
+      // remplacerait l'ancre `turnAnchor="top"` à la fin du stream.
+      id: threadMessageId(message.role, message.runId, message.id),
       role: message.role,
       content: contentToParts(message.content),
       createdAt: new Date(message.createdAt),

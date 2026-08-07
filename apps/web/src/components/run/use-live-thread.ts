@@ -9,7 +9,10 @@ import type {
 } from "@console/core/modules/runs/types";
 import type { ConnectorType } from "@console/core/types/domain";
 import { awaitServerReady } from "@/lib/api";
-import { buildThreadMessagesFromSnapshot } from "@/lib/thread-messages";
+import {
+  buildThreadMessagesFromSnapshot,
+  threadMessageId,
+} from "@/lib/thread-messages";
 import { consumeProductEventStream } from "@/lib/consume-product-event-stream";
 import { isSessionCommandMessage } from "@console/core/modules/session/commands";
 import { parseAgentMention } from "@console/core/modules/session/mentions";
@@ -657,7 +660,11 @@ export function useLiveThread(threadId: string) {
               ...optimistic,
               messages: optimistic.messages.map((item) =>
                 item.id === optimisticMessageId
-                  ? { ...item, id: `msg_pending_${runId}`, runId }
+                  ? {
+                      ...item,
+                      id: threadMessageId("user", runId, item.id),
+                      runId,
+                    }
                   : item,
               ),
               runs: optimistic.runs.map((run) =>
