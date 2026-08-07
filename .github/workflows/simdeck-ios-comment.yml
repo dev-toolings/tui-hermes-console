@@ -1,0 +1,33 @@
+name: SimDeck iOS Comment
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: simdeck-ios-pr-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  simdeck-ios:
+    if: github.event.issue.pull_request && startsWith(github.event.comment.body, 'simdeck run ios')
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - name: Run PR app in SimDeck
+        uses: NativeScript/SimDeck/actions/run-ios-comment-session@v0.1.22
+        with:
+          pr_number: ${{ github.event.issue.number }}
+          command: ${{ github.event.comment.body }}
+          command_comment_id: ${{ github.event.comment.id }}
+          command_comment_author: ${{ github.event.comment.user.login }}
+          build_workflow: build-ios-simulator.yml
+          bundle_id: com.hermesconsole.mobile
+          stream_profile: full
+          session_password: ${{ secrets.SIMDECK_PASSWORD }}

@@ -763,6 +763,32 @@ export const consoleAuthTransactions = pgTable(
   (table) => [index("console_auth_transactions_expires_idx").on(table.expiresAt)],
 );
 
+/** Association éphémère d'un appareil natif, consommable une seule fois. */
+export const consoleMobilePairings = pgTable(
+  "console_mobile_pairings",
+  {
+    codeHash: text("code_hash").primaryKey(),
+    userId: text("user_id").notNull().references(() => consoleUsers.id, { onDelete: "cascade" }),
+    siteId: text("site_id"),
+    mandateId: text("mandate_id").references(() => mspMandates.id, { onDelete: "set null" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.userId, table.siteId],
+      foreignColumns: [siteMemberships.userId, siteMemberships.siteId],
+      name: "console_mobile_pairings_user_site_membership_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.siteId, table.mandateId],
+      foreignColumns: [mspMandates.siteId, mspMandates.id],
+      name: "console_mobile_pairings_site_mandate_fk",
+    }).onDelete("set null"),
+    index("console_mobile_pairings_expires_idx").on(table.expiresAt),
+  ],
+);
+
 /**
  * La mise en service est une propriété de l'installation, pas d'un compte.
  * Plusieurs opérateurs autorisés retrouvent donc exactement le même point de

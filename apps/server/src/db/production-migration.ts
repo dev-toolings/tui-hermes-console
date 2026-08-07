@@ -10,6 +10,7 @@ const MUTABLE_APPLICATION_TABLES = [
   "artifacts",
   "connectors",
   "console_auth_transactions",
+  "console_mobile_pairings",
   "console_sessions",
   "console_setup",
   "console_users",

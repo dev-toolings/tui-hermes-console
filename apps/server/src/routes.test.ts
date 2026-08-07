@@ -56,6 +56,13 @@ describe("route authorization inventory", () => {
     });
   });
 
+  test("keeps the one-time mobile exchange public without exposing product routes", () => {
+    expect(ROUTES.find(({ path }) => path === "/api/auth/mobile")?.access).toEqual({
+      boundary: "public",
+    });
+    expect(ROUTES.find(({ path }) => path === "/api/threads")?.access.boundary).toBe("site");
+  });
+
   test("registers membership management, audit read and site-scoped export", () => {
     expect(
       ROUTES.find(({ path }) => path === "/api/site/memberships")?.access,

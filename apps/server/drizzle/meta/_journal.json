@@ -267,6 +267,13 @@
       "when": 1785945600000,
       "tag": "0037_guided_software_delivery",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1786125600000,
+      "tag": "0038_mobile_pairing",
+      "breakpoints": true
     }
   ]
 }

@@ -27,6 +27,7 @@ import {
   AuthError,
   developmentAuthBypassConfig,
   getSession,
+  usesBearerSession,
   requireSiteRequestContext,
   type SiteRequestContext,
 } from "@/modules/auth/service";
@@ -104,7 +105,7 @@ app.use(
   }),
 );
 
-const PUBLIC_API_PATHS = new Set(["/api/healthz", "/api/readyz", "/api/auth"]);
+const PUBLIC_API_PATHS = new Set(["/api/healthz", "/api/readyz", "/api/auth", "/api/auth/mobile"]);
 const SETUP_API_PATHS = new Set(["/api/setup", "/api/runtime", "/api/runtime/test", "/api/agents"]);
 
 /**
@@ -121,7 +122,7 @@ app.use("/api/*", async (c, next) => {
     }
     c.set("authSession", session);
     c.set("siteContext", await requireSiteRequestContext(session));
-    if (!["GET", "HEAD"].includes(c.req.method)) {
+    if (!["GET", "HEAD"].includes(c.req.method) && !usesBearerSession(c.req.raw)) {
       assertSameOriginMutation(c.req.raw);
       assertCsrf(c.req.raw, session);
     }

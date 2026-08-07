@@ -16,6 +16,7 @@ import * as skillToggle from "@/api/skills/toggle/route";
 import * as audit from "@/api/audit/route";
 import * as auditExports from "@/api/audit/exports/route";
 import * as auth from "@/api/auth/route";
+import * as mobileAuth from "@/api/auth/mobile/route";
 import * as agentDetail from "@/api/agents/[agentId]/route";
 import * as connectors from "@/api/connectors/route";
 import * as connectorDetail from "@/api/connectors/[type]/route";
@@ -122,6 +123,7 @@ export const ROUTES: RouteDefinition[] = [
   { path: "/api/healthz", module: healthz, access: publicAccess },
   { path: "/api/readyz", module: readyz, access: publicAccess },
   { path: "/api/auth", module: auth, access: publicAccess },
+  { path: "/api/auth/mobile", module: mobileAuth, access: publicAccess },
   { path: "/api/setup", module: setup, access: setupAccess },
 
   {

@@ -1,7 +1,7 @@
 import { apiErrorResponse } from "@/modules/api/errors";
 import { assertSameOriginMutation } from "@/modules/api/same-origin";
 import { consoleSetupRequired } from "@/modules/setup/service";
-import { AuthError, assertCsrf, beginGoogleLogin, clearSessionHeaders, completeDevelopmentLogin, completeGoogleLogin, deleteSession, developmentAuthBypassAvailable, findActiveAssignedMandates, getSession, oidcStateClearingHeader, requireSiteRequestContext, resolveSiteRequirement, selectSessionMandate, selectSessionSite, type SiteRequestContext } from "@/modules/auth/service";
+import { AuthError, assertCsrf, beginGoogleLogin, clearSessionHeaders, completeDevelopmentLogin, completeGoogleLogin, deleteSession, developmentAuthBypassAvailable, findActiveAssignedMandates, getSession, oidcStateClearingHeader, requireSiteRequestContext, resolveSiteRequirement, selectSessionMandate, selectSessionSite, usesBearerSession, type SiteRequestContext } from "@/modules/auth/service";
 import { siteCapabilitiesForRole } from "@/modules/auth/site-authorization";
 import { z } from "zod";
 import {
@@ -202,8 +202,10 @@ export async function POST(request: Request) {
     if (action !== "logout" && action !== "select-site" && action !== "select-mandate") throw new AuthError("Action d'authentification inconnue.", 404, "AUTH_ACTION_NOT_FOUND");
     const session = await getSession(request);
     if (!session) throw new AuthError("Authentification requise.", 401, "AUTH_REQUIRED");
-    assertSameOriginMutation(request);
-    assertCsrf(request, session);
+    if (!usesBearerSession(request)) {
+      assertSameOriginMutation(request);
+      assertCsrf(request, session);
+    }
     if (action === "select-site") {
       const { siteId } = z
         .object({ siteId: z.string().trim().min(1).max(200) })
