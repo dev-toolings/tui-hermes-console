@@ -185,6 +185,78 @@ describe("thread-messages", () => {
     });
   });
 
+  test("conserve les fichiers d'entrée dans le message utilisateur", () => {
+    const message = {
+      id: "msg_u",
+      role: "user" as const,
+      content: [{ type: "text" as const, text: "Résume ce document" }],
+      runId: "run_1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    const snapshot = {
+      id: "thr_1",
+      title: "t",
+      source: "chat" as const,
+      workflow: "general" as const,
+      agentName: "a",
+      instructions: "i",
+      model: "m",
+      effectiveModel: "m",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      messages: [message],
+      runs: [
+        {
+          id: "run_1",
+          status: "completed" as const,
+          input: "Résume ce document",
+          output: "ok",
+          usage: null,
+          error: null,
+          hermesResponseId: null,
+          runtimeSession: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          startedAt: "2026-01-01T00:00:00.000Z",
+          endedAt: "2026-01-01T00:00:01.000Z",
+          lastEventAt: "2026-01-01T00:00:01.000Z",
+        },
+      ],
+      events: [],
+      artifacts: [
+        {
+          id: "file_pdf",
+          runId: "run_1",
+          direction: "input" as const,
+          filename: "convention.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 42,
+          checksumSha256: "abc",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      cursor: 0,
+    } satisfies ThreadSnapshot;
+
+    const beforeArtifact = buildThreadMessagesFromSnapshot({
+      ...snapshot,
+      artifacts: [],
+    });
+    const afterArtifact = buildThreadMessagesFromSnapshot(snapshot);
+
+    expect(beforeArtifact[0]?.attachments).toBeUndefined();
+    expect(afterArtifact[0]).not.toBe(beforeArtifact[0]);
+    expect(afterArtifact[0]?.attachments).toEqual([
+      {
+        id: "file_pdf",
+        type: "document",
+        name: "convention.pdf",
+        contentType: "application/pdf",
+        status: { type: "complete" },
+        content: [],
+      },
+    ]);
+  });
+
   test("conserve le même message assistant entre terminal live et persistance", () => {
     const base = {
       id: "thr_1",

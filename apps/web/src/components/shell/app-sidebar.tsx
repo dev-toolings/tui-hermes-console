@@ -9,6 +9,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarTrigger,
 } from "@boardui/ui";
 import { Link } from "@/lib/router";
 import { NavFooter } from "./nav-footer";
@@ -27,22 +28,29 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5!">
-              <Link href={DEFAULT_CONSOLE_PATH}>
-                <img
-                  src="/brand/hermes-console-favicon.png"
-                  alt=""
-                  width="24"
-                  height="24"
-                  className="size-6 shrink-0 rounded-md object-contain"
-                />
-                <span className="text-base font-semibold">Hermes Console</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="flex items-center gap-1">
+          <SidebarMenu className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5!">
+                <Link href={DEFAULT_CONSOLE_PATH}>
+                  <img
+                    src="/brand/hermes-console-favicon.png"
+                    alt=""
+                    width="24"
+                    height="24"
+                    className="size-6 shrink-0 rounded-md object-contain"
+                  />
+                  <span className="text-base font-semibold">Hermes Console</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+          <SidebarTrigger
+            aria-label="Basculer la barre latérale"
+            title="Basculer la barre latérale"
+            className="size-8 shrink-0"
+          />
+        </div>
       </SidebarHeader>
 
       <SidebarContent>

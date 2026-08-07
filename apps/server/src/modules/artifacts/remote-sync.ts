@@ -112,7 +112,9 @@ export async function pushRunInputsToWorkspace(
       );
     }
     await correlated(runId, "upload_input", () =>
-      sftp.upload(path.join(localDir, name), `${remote.input}/${name}`),
+      // Le staging local reste privé (0600). La copie distante doit toutefois
+      // être lisible par l'UID non-root qui exécute Hermes dans le conteneur.
+      sftp.upload(path.join(localDir, name), `${remote.input}/${name}`, 0o644),
     );
   }
 }

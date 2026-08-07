@@ -182,8 +182,15 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
           });
         });
       },
-      async upload(localPath: string, remotePath: string) {
+      async upload(localPath: string, remotePath: string, mode?: number) {
         await pipeline(createReadStream(localPath), handle.createWriteStream(remotePath));
+        if (mode !== undefined) {
+          await new Promise<void>((resolve, reject) => {
+            handle.chmod(remotePath, mode, (error) =>
+              error ? reject(mapSshError(error)) : resolve(),
+            );
+          });
+        }
       },
       async download(remotePath: string, localPath: string, maxBytes: number) {
         await pipeline(

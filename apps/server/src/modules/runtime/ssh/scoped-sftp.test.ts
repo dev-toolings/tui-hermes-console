@@ -21,8 +21,8 @@ function fakeSftp(calls: string[]): SftpOps {
       calls.push(`stat:${remotePath}`);
       return { size: 0, type: "file" };
     },
-    async upload(localPath, remotePath) {
-      calls.push(`upload:${localPath}:${remotePath}`);
+    async upload(localPath, remotePath, mode) {
+      calls.push(`upload:${localPath}:${remotePath}:${mode?.toString(8)}`);
     },
     async download(remotePath, localPath, maxBytes) {
       calls.push(`download:${remotePath}:${localPath}:${maxBytes}`);
@@ -71,7 +71,7 @@ describe("createScopedSftp", () => {
     await scoped.mkdirp(`${ROOT}/runs/run-1/in`);
     await scoped.list(`${ROOT}/runs/run-1/out`, 5);
     await scoped.stat(`${ROOT}/runs/run-1/out/report.txt`);
-    await scoped.upload("/tmp/local-input.txt", `${ROOT}/runs/run-1/in/input.txt`);
+    await scoped.upload("/tmp/local-input.txt", `${ROOT}/runs/run-1/in/input.txt`, 0o644);
     await scoped.download(
       `${ROOT}/runs/run-1/out/report.txt`,
       "/tmp/local-output.part",
@@ -82,7 +82,7 @@ describe("createScopedSftp", () => {
       `mkdirp:${ROOT}/runs/run-1/in`,
       `list:${ROOT}/runs/run-1/out:5`,
       `stat:${ROOT}/runs/run-1/out/report.txt`,
-      `upload:/tmp/local-input.txt:${ROOT}/runs/run-1/in/input.txt`,
+      `upload:/tmp/local-input.txt:${ROOT}/runs/run-1/in/input.txt:644`,
       `download:${ROOT}/runs/run-1/out/report.txt:/tmp/local-output.part:100`,
     ]);
   });

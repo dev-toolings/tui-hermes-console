@@ -43,19 +43,14 @@ export function ChatSurfaceSkeleton({ home }: { home?: ReactNode }) {
             <p className="truncate text-sm font-semibold tracking-tight">Hermes</p>
             <p className="truncate text-[0.625rem] text-muted-foreground">Control · Chat</p>
           </div>
-        </div>
-
-        {/* Une action ne dépend d'aucune donnée : « New session » est peinte en
-            entier, libellé et icône compris, et reste cliquable. La griser
-            revenait à faire attendre l'utilisateur pour un chargement qui ne la
-            concerne pas. */}
-        <div className="px-2 pb-2">
           <a
             href="/chat/new"
-            className="flex h-9 items-center gap-2 rounded-lg bg-background/70 px-2.5 text-sm font-medium text-foreground shadow-sm ring-1 ring-border/60 transition-colors hover:bg-background"
+            data-slot="chat-sidebar-new"
+            aria-label="New session"
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            <PlusIcon className="size-4" />
-            New session
+            <PlusIcon className="size-3.5" aria-hidden />
+            <span>New</span>
           </a>
         </div>
 

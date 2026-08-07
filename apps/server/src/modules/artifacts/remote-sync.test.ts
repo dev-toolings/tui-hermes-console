@@ -32,6 +32,34 @@ function workspace(sftp: Partial<SftpOps>, root = "/srv/hermes-console") {
 }
 
 describe("remote artifact sync", () => {
+  test("publishes remote inputs with a mode readable by the Hermes runtime", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "hermes-remote-sync-"));
+    const uploads: Array<{ remote: string; mode?: number }> = [];
+    try {
+      await mkdir(runInputDir("run_readable", root), { recursive: true });
+      await writeFile(path.join(runInputDir("run_readable", root), "brief.txt"), "ok");
+
+      await pushRunInputsToWorkspace(
+        "run_readable",
+        workspace({
+          upload: async (_local, remote, mode) => {
+            uploads.push({ remote, mode });
+          },
+        }),
+        root,
+      );
+
+      expect(uploads).toEqual([
+        {
+          remote: "/srv/hermes-console/runs/run_readable/in/brief.txt",
+          mode: 0o644,
+        },
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("rejects an unsafe remote workspace before any SFTP operation", async () => {
     const calls: string[] = [];
     const root = await mkdtemp(path.join(tmpdir(), "hermes-remote-sync-"));

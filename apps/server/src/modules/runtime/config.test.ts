@@ -4,6 +4,7 @@ import {
   requireDurableRemoteWorkdir,
   sameSshConnectionIdentity,
   saveRuntimeConfig,
+  workspaceActivationProofVersions,
 } from "./config";
 import { acquireRunStartLease } from "@/modules/runs/active-runtime-guard";
 
@@ -90,6 +91,15 @@ describe("SSH workspace gate", () => {
         expect((error as { code?: string }).code).toBe("SSH_WORKSPACE_REQUIRED");
       }
     }
+  });
+});
+
+describe("SSH workspace setup proof", () => {
+  test("advances a completed setup proof with the workspace revision", () => {
+    expect(workspaceActivationProofVersions(6)).toEqual({
+      previous: "database:6",
+      next: "database:7",
+    });
   });
 });
 

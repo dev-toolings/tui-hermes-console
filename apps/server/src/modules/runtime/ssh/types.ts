@@ -20,7 +20,7 @@ export type SftpOps = {
     size: number;
     type: "file" | "directory" | "symlink" | "other";
   }>;
-  upload(localPath: string, remotePath: string): Promise<void>;
+  upload(localPath: string, remotePath: string, mode?: number): Promise<void>;
   download(
     remotePath: string,
     localPath: string,

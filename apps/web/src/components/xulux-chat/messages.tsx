@@ -9,6 +9,7 @@ import { PencilIcon } from "lucide-react";
 import type { FC } from "react";
 import { XuluxAssistantActionBar } from "./assistant-action-bar";
 import { XuluxBranchPicker } from "./branch-picker";
+import { UserMessageAttachments } from "@/components/assistant-ui/attachment";
 
 const messageTimestampFormatter = new Intl.DateTimeFormat("fr-FR", {
   hour: "2-digit",
@@ -35,7 +36,8 @@ export const XuluxUserMessage: FC = () => (
     data-role="user"
     className="fade-in slide-in-from-bottom-1 animate-in mx-auto grid w-full max-w-(--thread-max-width) auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 px-2 duration-150 [&:where(>*)]:col-start-2"
   >
-    <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
+    <UserMessageAttachments />
+    <div className="aui-user-message-content-wrapper relative col-start-2 row-start-2 min-w-0">
       <div className="aui-user-message-content peer bg-muted text-foreground empty:hidden rounded-xl px-4 py-2 wrap-break-word">
         <MessagePrimitive.Parts
           components={{

@@ -197,8 +197,11 @@ export function createSystemSshChannel(target: SshTarget): SshChannel {
         ]);
         return parseSystemSftpStat(out);
       },
-      async upload(localPath: string, remotePath: string) {
+      async upload(localPath: string, remotePath: string, mode?: number) {
         await scp(localPath, `${target.user}@${target.host}:${remotePath}`);
+        if (mode !== undefined) {
+          await run(["chmod", mode.toString(8), "--", shellQuote(remotePath)]);
+        }
       },
       async download(remotePath: string, localPath: string, maxBytes: number) {
         await downloadBounded(remotePath, localPath, maxBytes);

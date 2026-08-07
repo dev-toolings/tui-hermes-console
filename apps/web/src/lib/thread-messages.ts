@@ -202,20 +202,54 @@ function assistantStatusForRun(
  */
 const convertedMessages = new WeakMap<
   object,
-  { status: ProductRunStatus; error: string | null; built: ThreadMessageLike }
+  {
+    status: ProductRunStatus;
+    error: string | null;
+    attachmentKey: string;
+    built: ThreadMessageLike;
+  }
 >();
 
 /** Snapshot live multi-turn + éventuelle queue d’événements du run en cours. */
 export function buildThreadMessagesFromSnapshot(snapshot: ThreadSnapshot): ThreadMessageLike[] {
   const runsById = new Map(snapshot.runs.map((run) => [run.id, run]));
+  const inputArtifactsByRun = new Map<
+    string,
+    NonNullable<ThreadMessageLike["attachments"]>
+  >();
+  for (const artifact of snapshot.artifacts) {
+    if (artifact.direction !== "input") continue;
+    const attachments = inputArtifactsByRun.get(artifact.runId) ?? [];
+    inputArtifactsByRun.set(artifact.runId, [
+      ...attachments,
+      {
+        id: artifact.id,
+        type: artifact.mimeType?.startsWith("image/") ? "image" : "document",
+        name: artifact.filename,
+        contentType: artifact.mimeType ?? undefined,
+        status: { type: "complete" },
+        content: [],
+      },
+    ]);
+  }
 
   const result: ThreadMessageLike[] = snapshot.messages.map((message) => {
     const run = message.runId ? runsById.get(message.runId) : undefined;
     const status = run?.status ?? "completed";
     const error = run?.error ?? null;
+    const attachments =
+      message.role === "user" && message.runId
+        ? inputArtifactsByRun.get(message.runId) ?? []
+        : [];
+    const attachmentKey = attachments.map((attachment) => attachment.id).join("\0");
 
     const cached = convertedMessages.get(message);
-    if (cached && cached.status === status && cached.error === error) {
+    if (
+      cached &&
+      cached.status === status &&
+      cached.error === error &&
+      cached.attachmentKey === attachmentKey
+    ) {
       return cached.built;
     }
 
@@ -227,13 +261,14 @@ export function buildThreadMessagesFromSnapshot(snapshot: ThreadSnapshot): Threa
       role: message.role,
       content: contentToParts(message.content),
       createdAt: new Date(message.createdAt),
+      ...(attachments.length > 0 ? { attachments } : {}),
       ...(message.role === "assistant"
         ? {
             status: assistantStatusForRun(status, error),
           }
         : {}),
     };
-    convertedMessages.set(message, { status, error, built });
+    convertedMessages.set(message, { status, error, attachmentKey, built });
     return built;
   });
 

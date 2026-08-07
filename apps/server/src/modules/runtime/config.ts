@@ -141,6 +141,13 @@ export function databaseRuntimeConfigurationVersion(revision: number) {
   return `database:${revision}` as const;
 }
 
+export function workspaceActivationProofVersions(expectedRevision: number) {
+  return {
+    previous: databaseRuntimeConfigurationVersion(expectedRevision),
+    next: databaseRuntimeConfigurationVersion(expectedRevision + 1),
+  } as const;
+}
+
 export function databaseRevisionFromRuntimeVersion(
   version: RuntimeConfigurationVersion,
 ) {
@@ -803,24 +810,43 @@ export async function persistSshWorkspace(input: {
   const remoteHermesWorkdir = requireDurableRemoteWorkdir(
     input.remoteHermesWorkdir,
   );
-  const [updated] = await getDatabase()
-    .update(runtimeConfig)
-    .set({
-      remoteWorkdir,
-      remoteHermesWorkdir,
-      workspaceStatus: "ready",
-      configRevision: input.expectedRevision + 1,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(runtimeConfig.id, RUNTIME_ID),
-        eq(runtimeConfig.transport, "ssh"),
-        eq(runtimeConfig.configRevision, input.expectedRevision),
-      ),
-    )
-    .returning({ id: runtimeConfig.id });
-  if (!updated) throw runtimeConfigurationChanged();
+  const now = new Date();
+  const proofVersions = workspaceActivationProofVersions(input.expectedRevision);
+  await getDatabase().transaction(async (tx) => {
+    const [updated] = await tx
+      .update(runtimeConfig)
+      .set({
+        remoteWorkdir,
+        remoteHermesWorkdir,
+        workspaceStatus: "ready",
+        configRevision: input.expectedRevision + 1,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(runtimeConfig.id, RUNTIME_ID),
+          eq(runtimeConfig.transport, "ssh"),
+          eq(runtimeConfig.configRevision, input.expectedRevision),
+        ),
+      )
+      .returning({ id: runtimeConfig.id });
+    if (!updated) throw runtimeConfigurationChanged();
+
+    await tx
+      .update(consoleSetup)
+      .set({
+        runtimeConfigVersion: proofVersions.next,
+        runtimeVerifiedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(consoleSetup.id, RUNTIME_ID),
+          eq(consoleSetup.step, "completed"),
+          eq(consoleSetup.runtimeConfigVersion, proofVersions.previous),
+        ),
+      );
+  });
   return getRuntimePublic();
 }
 

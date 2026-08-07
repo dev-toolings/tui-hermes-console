@@ -36,6 +36,7 @@ import { consoleSetupRequired } from "@/modules/setup/service";
 import {
   runStartPreconditionResponse,
 } from "@/modules/setup/ai-disclosure";
+import { isApiAvailableDuringSetup } from "@/modules/setup/api-access";
 import {
   assertSiteAction,
   assertInstallationAccess,
@@ -106,8 +107,6 @@ app.use(
 );
 
 const PUBLIC_API_PATHS = new Set(["/api/healthz", "/api/readyz", "/api/auth", "/api/auth/mobile"]);
-const SETUP_API_PATHS = new Set(["/api/setup", "/api/runtime", "/api/runtime/test", "/api/agents"]);
-
 /**
  * La garde est centrale : une nouvelle route produit est protégée dès son
  * montage, au lieu de dépendre d'un oubli éventuel dans son handler.
@@ -131,7 +130,7 @@ app.use("/api/*", async (c, next) => {
       const precondition = runStartPreconditionResponse(setupRequired, session);
       if (precondition) return precondition;
     }
-    if (setupRequired && !SETUP_API_PATHS.has(c.req.path)) {
+    if (setupRequired && !isApiAvailableDuringSetup(c.req.path)) {
       return c.json(
         { error: { code: "SETUP_REQUIRED", message: "La configuration initiale doit être terminée." } },
         423,

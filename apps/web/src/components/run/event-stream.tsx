@@ -9,6 +9,7 @@ import {
 } from "@assistant-ui/react";
 import type { RunEvent } from "@console/core/lib/hermes-events";
 import { buildMessages } from "@/lib/thread-messages";
+import { chatAttachmentAdapter } from "@/lib/chat-attachment-adapter";
 import { HermesThread } from "@/components/assistant-ui/thread";
 import { XuluxThread } from "@/components/xulux-chat/thread";
 import { HermesToolCallUI } from "./hermes-tool-ui";
@@ -86,6 +87,7 @@ export function EventStream({
       }
     },
     ...(onCancel ? { onCancel } : {}),
+    adapters: { attachments: chatAttachmentAdapter },
   });
 
   const thread =

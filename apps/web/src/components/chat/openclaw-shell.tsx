@@ -569,22 +569,21 @@ function OpenClawSessionSidebar({
           <p className="truncate text-sm font-semibold tracking-tight">Hermes</p>
           <p className="truncate text-[0.625rem] text-muted-foreground">Control · Chat</p>
         </div>
+        <Link
+          href="/chat/new"
+          onClick={onNavigate}
+          data-slot="chat-sidebar-new"
+          aria-label="New session"
+          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <PlusIcon className="size-3.5" aria-hidden />
+          <span>New</span>
+        </Link>
         {/*
           Pas de second bouton de repli ici : celui de l'en-tête du transcript
           fait déjà l'aller-retour, et il reste atteignable une fois la colonne
           repliée à 0 — ce qui n'était pas le cas de celui-ci.
         */}
-      </div>
-
-      <div className="px-2 pb-2">
-        <Link
-          href="/chat/new"
-          onClick={onNavigate}
-          className="flex h-9 items-center gap-2 rounded-lg bg-background/70 px-2.5 text-sm font-medium shadow-sm ring-1 ring-border/60 transition-colors hover:bg-background"
-        >
-          <PlusIcon className="size-4" />
-          New session
-        </Link>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 scrollbar-subtle">
@@ -600,14 +599,6 @@ function OpenClawSessionSidebar({
           >
             <ListFilterIcon className="size-3.5" />
           </button>
-          <Link
-            href="/chat/new"
-            onClick={onNavigate}
-            className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-            aria-label="New session"
-          >
-            <PlusIcon className="size-3.5" />
-          </Link>
         </div>
 
         {draft ? (

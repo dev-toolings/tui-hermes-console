@@ -10,6 +10,8 @@ describe("ChatSurfaceSkeleton", () => {
 
     expect(html).toContain('data-slot="chat-home-fallback"');
     expect(html).toContain('data-slot="chat-sidebar-thread-skeleton"');
+    expect(html).toContain('data-slot="chat-sidebar-new"');
+    expect(html).toContain("New</span>");
     expect(html).toContain("État vide final");
     expect(html).not.toContain('data-slot="chat-conversation-skeleton"');
   });

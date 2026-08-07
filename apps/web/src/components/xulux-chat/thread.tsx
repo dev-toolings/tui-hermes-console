@@ -2,7 +2,7 @@
 
 import { XuluxTooltipIconButton } from "./tooltip-icon-button";
 import { cn } from "@/lib/utils";
-import { ThreadPrimitive, useAuiState, useThreadViewport } from "@assistant-ui/react";
+import { ThreadPrimitive, useAuiState } from "@assistant-ui/react";
 import { ArrowDownIcon, BrainIcon } from "lucide-react";
 import { type FC, type ReactNode } from "react";
 import { XuluxComposer } from "./composer";
@@ -86,12 +86,12 @@ export const XuluxThread: FC<{
           />
         ) : null}
 
-        {hasMessages ? <ThreadScrollToBottom /> : null}
-
         <ThreadPrimitive.ViewportFooter
           data-slot="aui_thread-viewport-footer"
-          className="aui-thread-viewport-footer sticky bottom-0 z-20 mt-auto flex w-full flex-col overflow-visible bg-background"
+          className="aui-thread-viewport-footer relative sticky bottom-0 z-20 mt-auto flex w-full flex-col overflow-visible bg-background"
         >
+          {hasMessages ? <ThreadScrollToBottom /> : null}
+
           {beforeComposer ? (
             <div className="shrink-0 pt-3">{beforeComposer}</div>
           ) : null}
@@ -116,35 +116,16 @@ export const XuluxThread: FC<{
   );
 };
 
-/**
- * Le bouton reste monté et se fond : le démonter faisait apparaître et
- * disparaître un disque au milieu du flux, à chaque passage de la limite du bas.
- */
-const ThreadScrollToBottom: FC = () => {
-  const isAtBottom = useThreadViewport((s) => s.isAtBottom);
-
-  return (
-    <div
-      className={cn(
-        "pointer-events-none sticky bottom-2 z-10 flex justify-center transition-opacity duration-150 motion-reduce:transition-none",
-        isAtBottom ? "opacity-0" : "opacity-100",
-      )}
+const ThreadScrollToBottom: FC = () => (
+  <ThreadPrimitive.ScrollToBottom asChild>
+    <XuluxTooltipIconButton
+      tooltip="Aller en bas"
+      className="aui-thread-scroll-to-bottom absolute -top-10 z-30 size-8 self-center rounded-full border border-border bg-background shadow-sm disabled:invisible dark:border-border dark:bg-background dark:hover:bg-accent"
     >
-      <ThreadPrimitive.ScrollToBottom asChild>
-        <XuluxTooltipIconButton
-          tooltip="Aller en bas"
-          className={cn(
-            "aui-thread-scroll-to-bottom size-8 rounded-full border border-border bg-background shadow-sm",
-            "dark:border-border dark:bg-background dark:hover:bg-accent",
-            isAtBottom ? "pointer-events-none" : "pointer-events-auto",
-          )}
-        >
-          <ArrowDownIcon />
-        </XuluxTooltipIconButton>
-      </ThreadPrimitive.ScrollToBottom>
-    </div>
-  );
-};
+      <ArrowDownIcon />
+    </XuluxTooltipIconButton>
+  </ThreadPrimitive.ScrollToBottom>
+);
 
 const ThreadWelcome: FC = () => (
   <div className="aui-thread-welcome-root mx-auto mb-6 flex w-full max-w-(--thread-max-width) flex-col items-center px-4 text-center">
