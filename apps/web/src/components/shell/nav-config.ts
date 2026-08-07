@@ -14,6 +14,7 @@ import {
   MilestoneIcon,
   ScrollTextIcon,
   SettingsIcon,
+  SquarePenIcon,
   SparklesIcon,
   RocketIcon,
   type LucideIcon,
@@ -28,43 +29,50 @@ export type NavItem = {
   section?: string;
 };
 
-export const DEFAULT_CONSOLE_PATH = "/chat";
+export const DEFAULT_CONSOLE_PATH = "/tasks/new";
 
 export const WORK_NAV = [
   {
-    label: "Chat",
-    href: "/chat",
-    icon: MessageSquareIcon,
-    requiredCapability: "thread.read",
-    section: "Conversations",
+    label: "Nouvelle tâche",
+    href: "/tasks/new",
+    icon: SquarePenIcon,
+    requiredCapability: "thread.create",
+    section: "Travail",
   },
   {
-    label: "Sessions",
+    label: "Historique",
     href: "/sessions",
     icon: HistoryIcon,
     requiredCapability: "thread.read",
-    section: "Conversations",
+    section: "Travail",
   },
   {
     label: "Agents",
     href: "/agents",
     icon: BotIcon,
     requiredCapability: "agent.read",
-    section: "Agents",
+    section: "Détails techniques",
   },
   {
     label: "Skills",
     href: "/skills",
     icon: SparklesIcon,
     requiredCapability: "agent.read",
-    section: "Agents",
+    section: "Détails techniques",
   },
   {
     label: "Artefacts",
     href: "/artifacts",
     icon: FileBoxIcon,
     requiredCapability: "artifact.read",
-    section: "Travail",
+    section: "Détails techniques",
+  },
+  {
+    label: "Chat expert",
+    href: "/chat",
+    icon: MessageSquareIcon,
+    requiredCapability: "thread.read",
+    section: "Détails techniques",
   },
   {
     label: "Aperçu",
@@ -155,6 +163,7 @@ export type PageMeta = {
 };
 
 export function pageMeta(pathname: string): PageMeta {
+  if (pathname === "/tasks/new") return { title: "Nouvelle tâche", crumb: "Créer" };
   if (pathname === "/overview") return { title: "Vue d’ensemble", crumb: "Aperçu" };
   if (pathname === "/agents/new") {
     return { title: "Nouvel agent", crumb: "Créer", parent: { label: "Agents", href: "/agents" } };

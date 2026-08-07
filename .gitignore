@@ -13,6 +13,10 @@ auth.md
 !apps/web/src-tauri/icons/**/*.png
 # Visuel d'onboarding généré, référencé par le bundle Vite.
 !apps/web/src/assets/setup-operation-board.png
+# Preuve produit expurgée du parcours guidé local.
+!docs/user-stories/evidence/2026-08-05-guided-delivery-plan.png
+!docs/user-stories/evidence/2026-08-06-guided-delivery-result.png
+!docs/user-stories/evidence/2026-08-06-guided-delivery-mobile-320.png
 .playwright-mcp/
 .impeccable/
 .playwright-cli/

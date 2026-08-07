@@ -624,7 +624,11 @@ function OpenClawSessionSidebar({
         {loading ? (
           // Même gabarit que `SessionRow` — h-8, même gouttière, même retrait —
           // pour que le passage du squelette aux lignes ne déplace rien.
-          <ul aria-hidden className="flex flex-col gap-0.5">
+          <ul
+            aria-hidden
+            data-slot="chat-sidebar-thread-skeleton"
+            className="flex flex-col gap-0.5"
+          >
             <li className="px-2.5 pt-1 pb-1">
               <div className="h-2.5 w-14 animate-pulse rounded bg-muted" />
             </li>

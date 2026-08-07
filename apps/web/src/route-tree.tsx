@@ -19,10 +19,12 @@ import { AppProviders } from "@/components/providers/app-providers";
 import { ConsoleShell } from "@/components/shell/console-shell";
 import { SettingsNav } from "@/components/settings/settings-nav";
 import { ChatSurfaceSkeleton } from "@/components/chat/chat-surface-skeleton";
+import { OpenClawChatHome } from "@/components/chat/openclaw-chat-home";
+import { OpenClawNewSessionDraft } from "@/components/chat/openclaw-new-draft";
 import { usePathname } from "@/lib/router";
 import { siteAccessBlock, type AuthSiteContext } from "@/lib/auth-site-context";
 import { setSessionCacheScope } from "@/lib/session-cache-scope";
-import { setPersonaCapabilities } from "@/lib/persona-capabilities";
+import { setPersonaCapabilities, setPersonaRole } from "@/lib/persona-capabilities";
 /**
  * Écrans de conversation, chargés à la demande.
  *
@@ -31,9 +33,11 @@ import { setPersonaCapabilities } from "@/lib/persona-capabilities";
  * différer sort ce poids du démarrage sans rien coûter à l'usage : le chunk
  * arrive pendant que la route se monte.
  *
+ * L'accueil `/chat` et le brouillon `/chat/new`, qui n'attendent aucune donnée
+ * de conversation, restent synchrones afin qu'une navigation entre eux ne
+ * suspende jamais toute la surface.
  * `lazy` ne sait charger qu'un export par défaut, d'où le `.then` répété sur
- * chaque export nommé — un helper générique perdait le typage des props. La
- * frontière `Suspense` est unique, dans la coque Console.
+ * chaque export nommé. La frontière `Suspense` est unique, dans la coque Console.
  */
 const ChatPane = lazy(() =>
   import("@/components/chat/openclaw-shell").then((m) => ({ default: m.ChatPane })),
@@ -41,16 +45,6 @@ const ChatPane = lazy(() =>
 const ChatSurfaceFrame = lazy(() =>
   import("@/components/chat/openclaw-shell").then((m) => ({
     default: m.ChatSurfaceFrame,
-  })),
-);
-const OpenClawChatHome = lazy(() =>
-  import("@/components/chat/openclaw-chat-home").then((m) => ({
-    default: m.OpenClawChatHome,
-  })),
-);
-const OpenClawNewSessionDraft = lazy(() =>
-  import("@/components/chat/openclaw-new-draft").then((m) => ({
-    default: m.OpenClawNewSessionDraft,
   })),
 );
 const InstallationGuideScreen = lazy(() =>
@@ -61,7 +55,6 @@ const InstallationGuideScreen = lazy(() =>
 const RunScreen = lazy(() =>
   import("@/components/run/run-screen").then((m) => ({ default: m.RunScreen })),
 );
-import { RunForm } from "@/components/forms/run-form";
 import { AgentForm } from "@/components/forms/agent-form";
 import { AgentDetailClient } from "@/components/agents/agent-detail-client";
 import { SettingsContent } from "@/components/settings/settings-content";
@@ -87,7 +80,10 @@ import { SetupScreen } from "@/screens/setup";
 import { NotFoundScreen } from "@/screens/not-found";
 import { SessionsScreen } from "@/screens/sessions";
 import { AuditScreen } from "@/screens/audit";
+import { GuidedTaskScreen } from "@/screens/guided-task";
+import { GuidedTaskDetailScreen } from "@/screens/guided-task-detail";
 import { DEFAULT_CONSOLE_PATH } from "@/components/shell/nav-config";
+import { parseRuntimeSection } from "@/lib/runtime/settings-navigation";
 
 import {
   loadAgent,
@@ -165,6 +161,7 @@ const consoleLayout = createRoute({
     const response = await fetch("/api/auth", { cache: "no-store" });
     const auth = (await response.json()) as ConsoleAccessStatus;
     setPersonaCapabilities(auth.siteContext?.capabilities);
+    setPersonaRole(auth.siteContext?.activeSite?.role ?? null);
     setSessionCacheScope(
       auth.user?.email,
       auth.siteContext?.activeSite?.id,
@@ -207,7 +204,7 @@ function Pending() {
 function RouteFallback() {
   const pathname = usePathname();
   return pathname === "/chat" || pathname.startsWith("/chat/") ? (
-    <ChatSurfaceSkeleton />
+    <ChatSurfaceSkeleton home={pathname === "/chat" ? <OpenClawChatHome /> : undefined} />
   ) : (
     <Pending />
   );
@@ -270,6 +267,21 @@ const auditRoute = createRoute({
   errorComponent: ErrorBox,
 });
 
+const guidedTaskRoute = createRoute({
+  getParentRoute: () => consoleLayout,
+  path: "/tasks/new",
+  component: GuidedTaskScreen,
+});
+
+const guidedTaskDetailRoute = createRoute({
+  getParentRoute: () => consoleLayout,
+  path: "/tasks/$taskId",
+  component: function GuidedTaskDetailRoute() {
+    const { taskId } = guidedTaskDetailRoute.useParams();
+    return <GuidedTaskDetailScreen taskId={taskId} />;
+  },
+});
+
 // ── Sessions de mission ─────────────────────────────────────────────────────
 const missionsRoute = createRoute({
   getParentRoute: () => consoleLayout,
@@ -288,19 +300,9 @@ const missionsRoute = createRoute({
 const newMissionRoute = createRoute({
   getParentRoute: () => consoleLayout,
   path: "/runs/new",
-  component: () => (
-    <PageShell className="mx-auto max-w-4xl">
-      <SectionHeading
-        title="Confier une mission"
-        description="Choisissez un agent, décrivez le résultat attendu et ajoutez les fichiers nécessaires."
-      />
-      <Card>
-        <CardSurface>
-          <RunForm />
-        </CardSurface>
-      </Card>
-    </PageShell>
-  ),
+  beforeLoad: () => {
+    throw redirect({ to: "/tasks/new" as never, replace: true });
+  },
 });
 
 const missionDetailRoute = createRoute({
@@ -516,6 +518,7 @@ const settingsRuntimeRoute = createRoute({
     // Absent : l'onglet suit le transport déjà configuré. Présent : l'URL
     // force l'onglet (lien partagé, retour arrière), même avant le chargement.
     mode: search.mode === "direct" || search.mode === "ssh" ? search.mode : undefined,
+    section: parseRuntimeSection(search.section),
   }),
   component: function SettingsRuntimeRoute() {
     return <SettingsRuntimeScreen search={settingsRuntimeRoute.useSearch()} />;
@@ -609,6 +612,8 @@ export const routeTree = rootRoute.addChildren([
     dashboardRoute,
     sessionsRoute,
     auditRoute,
+    guidedTaskRoute,
+    guidedTaskDetailRoute,
     missionsRoute,
     newMissionRoute,
     missionDetailRoute,

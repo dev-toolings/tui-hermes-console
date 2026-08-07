@@ -27,7 +27,7 @@ export function AgentsScreen({ data }: { data: AgentsData }) {
         title="Agents configurés"
         description="Les agents actifs peuvent recevoir de nouvelles missions. Les agents archivés restent disponibles pour restauration ou suppression."
         action={
-          <ButtonLink href="/runs/new" variant="primary">
+          <ButtonLink href="/tasks/new" variant="primary">
             <PlusIcon className="size-4" />
             Nouvelle mission
           </ButtonLink>

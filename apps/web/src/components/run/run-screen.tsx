@@ -22,6 +22,7 @@ import { ConnectorGapBanner } from "./connector-gap-banner";
 import { useRuntimeStatus } from "@/components/shell/use-runtime-status";
 import { ButtonLink } from "@/components/ui/boardui";
 import { XuluxButton } from "@/components/xulux-chat/button";
+import { GuidedRunProgress } from "./guided-run-progress";
 
 export function RunScreen({
   runId,
@@ -189,6 +190,9 @@ function LiveThreadScreen({
       }
       alerts={
         <>
+          {snapshot?.workflow === "software_delivery" && latestRun ? (
+            <GuidedRunProgress status={latestRun.status} />
+          ) : null}
           <ConnectorGapBanner gaps={connectorGaps} />
           {deliveryNotice ? (
             <div

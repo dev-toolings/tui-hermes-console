@@ -31,6 +31,7 @@ export type {
   RuntimeTransport,
   RuntimeWorkspaceStatus,
   ThreadSource,
+  ThreadWorkflow,
   Usage,
 } from "@console/core/types/domain";
 
@@ -46,8 +47,17 @@ import type {
   RuntimeTransport,
   RuntimeWorkspaceStatus,
   ThreadSource,
+  ThreadWorkflow,
   Usage,
 } from "@console/core/types/domain";
+import type {
+  GuidedDecisionKind,
+  GuidedTaskDraft,
+} from "@console/core/modules/guided-task/spec";
+import type {
+  GuidedAttemptStatus,
+  GuidedRevisionState,
+} from "@console/core/modules/guided-task/task";
 
 export type SiteMembershipRole =
   | "admin"
@@ -110,6 +120,34 @@ export const projects = pgTable(
     uniqueIndex("projects_site_id_idx").on(table.siteId, table.id),
     uniqueIndex("projects_site_slug_idx").on(table.siteId, table.slug),
     index("projects_site_idx").on(table.siteId),
+  ],
+);
+
+export type GuidedRepositoryNetworkPolicy = "none" | "host";
+
+export const projectRepositories = pgTable(
+  "project_repositories",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull(),
+    rootPath: text("root_path").notNull(),
+    baseRef: text("base_ref").notNull().default("HEAD"),
+    testCommands: jsonb("test_commands").notNull().default([]).$type<string[][]>(),
+    networkPolicy: text("network_policy")
+      .notNull()
+      .default("none")
+      .$type<GuidedRepositoryNetworkPolicy>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("project_repositories_site_project_idx").on(table.siteId, table.projectId),
+    foreignKey({
+      columns: [table.siteId, table.projectId],
+      foreignColumns: [projects.siteId, projects.id],
+      name: "project_repositories_site_project_fk",
+    }).onDelete("cascade"),
   ],
 );
 
@@ -820,6 +858,10 @@ export const threads = pgTable(
     model: text("model").notNull().default("hermes-agent"),
     reasoningEffort: text("reasoning_effort"),
     source: text("source").notNull().default("chat").$type<ThreadSource>(),
+    workflow: text("workflow")
+      .notNull()
+      .default("general")
+      .$type<ThreadWorkflow>(),
     hermesConversation: text("hermes_conversation").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -860,8 +902,192 @@ export const threads = pgTable(
     }),
     index("threads_agent_idx").on(table.agentId),
     index("threads_source_idx").on(table.source),
+    index("threads_workflow_idx").on(table.workflow),
     index("threads_site_idx").on(table.siteId),
     index("threads_site_owner_idx").on(table.siteId, table.ownerUserId),
+  ],
+);
+
+export type GuidedTaskStatus =
+  | "draft"
+  | "ready"
+  | "running"
+  | "awaiting_validation"
+  | "completed"
+  | "failed";
+
+export const guidedTasks = pgTable(
+  "guided_tasks",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
+    authorUserId: text("author_user_id").notNull().references(() => consoleUsers.id),
+    idempotencyKey: text("idempotency_key").notNull(),
+    title: text("title").notNull(),
+    status: text("status").notNull().default("draft").$type<GuidedTaskStatus>(),
+    currentRevisionId: text("current_revision_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("guided_tasks_site_id_idx").on(table.siteId, table.id),
+    uniqueIndex("guided_tasks_project_scope_idx").on(table.siteId, table.projectId, table.id),
+    uniqueIndex("guided_tasks_idempotency_idx").on(table.siteId, table.idempotencyKey),
+    foreignKey({
+      columns: [table.siteId, table.projectId],
+      foreignColumns: [projects.siteId, projects.id],
+      name: "guided_tasks_site_project_fk",
+    }),
+    foreignKey({
+      columns: [table.ownerUserId, table.siteId],
+      foreignColumns: [siteMemberships.userId, siteMemberships.siteId],
+      name: "guided_tasks_owner_site_membership_fk",
+    }),
+    index("guided_tasks_owner_idx").on(table.siteId, table.ownerUserId),
+  ],
+);
+
+export const guidedTaskRevisions = pgTable(
+  "guided_task_revisions",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull(),
+    taskId: text("task_id").notNull(),
+    number: integer("number").notNull(),
+    authorUserId: text("author_user_id").notNull().references(() => consoleUsers.id),
+    idempotencyKey: text("idempotency_key").notNull(),
+    content: jsonb("content").notNull().$type<GuidedTaskDraft>(),
+    contentSha256: text("content_sha256").notNull(),
+    state: text("state").notNull().default("draft").$type<GuidedRevisionState>(),
+    requiresTechnicalApproval: boolean("requires_technical_approval").notNull().default(false),
+    validatedAt: timestamp("validated_at", { withTimezone: true }),
+    validatedByUserId: text("validated_by_user_id").references(() => consoleUsers.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("guided_task_revisions_site_task_id_idx").on(table.siteId, table.taskId, table.id),
+    uniqueIndex("guided_task_revisions_task_number_idx").on(table.siteId, table.taskId, table.number),
+    uniqueIndex("guided_task_revisions_idempotency_idx").on(table.siteId, table.idempotencyKey),
+    foreignKey({
+      columns: [table.siteId, table.projectId, table.taskId],
+      foreignColumns: [guidedTasks.siteId, guidedTasks.projectId, guidedTasks.id],
+      name: "guided_task_revisions_task_scope_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+export const guidedTaskAttempts = pgTable(
+  "guided_task_attempts",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull(),
+    taskId: text("task_id").notNull(),
+    revisionId: text("revision_id").notNull(),
+    authorUserId: text("author_user_id").notNull().references(() => consoleUsers.id),
+    attemptNumber: integer("attempt_number").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    status: text("status").notNull().default("pending").$type<GuidedAttemptStatus>(),
+    repositoryPath: text("repository_path").notNull(),
+    baseCommit: text("base_commit").notNull(),
+    branchName: text("branch_name").notNull(),
+    sandboxPath: text("sandbox_path"),
+    hermesSessionId: text("hermes_session_id"),
+    hermesOutput: text("hermes_output"),
+    error: text("error"),
+    testsPassed: boolean("tests_passed"),
+    evidenceComplete: boolean("evidence_complete").notNull().default(false),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    cleanedUpAt: timestamp("cleaned_up_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("guided_task_attempts_site_task_id_idx").on(table.siteId, table.taskId, table.id),
+    uniqueIndex("guided_task_attempts_task_number_idx").on(table.siteId, table.taskId, table.attemptNumber),
+    uniqueIndex("guided_task_attempts_idempotency_idx").on(table.siteId, table.idempotencyKey),
+    foreignKey({
+      columns: [table.siteId, table.projectId, table.taskId],
+      foreignColumns: [guidedTasks.siteId, guidedTasks.projectId, guidedTasks.id],
+      name: "guided_task_attempts_project_scope_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.siteId, table.taskId, table.revisionId],
+      foreignColumns: [guidedTaskRevisions.siteId, guidedTaskRevisions.taskId, guidedTaskRevisions.id],
+      name: "guided_task_attempts_task_revision_fk",
+    }),
+    index("guided_task_attempts_status_idx").on(table.siteId, table.status),
+  ],
+);
+
+export const guidedTaskDecisions = pgTable(
+  "guided_task_decisions",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull(),
+    taskId: text("task_id").notNull(),
+    revisionId: text("revision_id").notNull(),
+    attemptId: text("attempt_id"),
+    decisionNumber: integer("decision_number").notNull(),
+    kind: text("kind").notNull().$type<GuidedDecisionKind>(),
+    outcome: text("outcome").notNull().$type<"approved" | "rejected">(),
+    actorUserId: text("actor_user_id").notNull().references(() => consoleUsers.id),
+    actorRole: text("actor_role").notNull().$type<SiteMembershipRole>(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    reason: text("reason"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("guided_task_decisions_idempotency_idx").on(table.siteId, table.idempotencyKey),
+    uniqueIndex("guided_task_decisions_task_number_idx").on(table.siteId, table.taskId, table.decisionNumber),
+    foreignKey({
+      columns: [table.siteId, table.taskId, table.revisionId],
+      foreignColumns: [guidedTaskRevisions.siteId, guidedTaskRevisions.taskId, guidedTaskRevisions.id],
+      name: "guided_task_decisions_task_revision_fk",
+    }),
+    foreignKey({
+      columns: [table.siteId, table.taskId, table.attemptId],
+      foreignColumns: [guidedTaskAttempts.siteId, guidedTaskAttempts.taskId, guidedTaskAttempts.id],
+      name: "guided_task_decisions_attempt_fk",
+    }),
+    index("guided_task_decisions_task_idx").on(table.siteId, table.taskId, table.createdAt),
+  ],
+);
+
+export type GuidedEvidenceKind =
+  | "diff"
+  | "files"
+  | "tests"
+  | "commands"
+  | "preview"
+  | "summary"
+  | "hermes_output"
+  | "cleanup";
+
+export const guidedTaskEvidence = pgTable(
+  "guided_task_evidence",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+    taskId: text("task_id").notNull(),
+    attemptId: text("attempt_id").notNull(),
+    kind: text("kind").notNull().$type<GuidedEvidenceKind>(),
+    label: text("label").notNull(),
+    payload: jsonb("payload").notNull().$type<Record<string, unknown>>(),
+    checksumSha256: text("checksum_sha256").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.siteId, table.taskId, table.attemptId],
+      foreignColumns: [guidedTaskAttempts.siteId, guidedTaskAttempts.taskId, guidedTaskAttempts.id],
+      name: "guided_task_evidence_attempt_fk",
+    }).onDelete("cascade"),
+    index("guided_task_evidence_attempt_idx").on(table.siteId, table.attemptId, table.createdAt),
   ],
 );
 

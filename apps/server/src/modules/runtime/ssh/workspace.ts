@@ -35,6 +35,10 @@ export type WorkspaceInspection = {
   ambiguousDocker: boolean;
   dockerComposeAvailable: boolean;
   nativeServiceUser: string | null;
+  nativeServiceScope: "user" | "system" | null;
+  nativeServiceUnit: string | null;
+  nativeServiceHome: string | null;
+  nativeHermesExecutable: string | null;
 };
 
 type PathState = { exists: boolean; writable: boolean; symlink?: boolean };
@@ -69,6 +73,13 @@ export function parseWorkspaceInspection(output: string): WorkspaceInspection {
     ambiguousDocker: values.docker_ambiguous === "yes",
     dockerComposeAvailable: values.docker_compose === "available",
     nativeServiceUser: values.native_service_user?.trim() || null,
+    nativeServiceScope:
+      values.native_service_scope === "user" || values.native_service_scope === "system"
+        ? values.native_service_scope
+        : null,
+    nativeServiceUnit: values.native_service_unit?.trim() || null,
+    nativeServiceHome: absoluteOrNull(values.native_service_home),
+    nativeHermesExecutable: absoluteOrNull(values.native_executable),
   };
 }
 
@@ -133,8 +144,8 @@ export function buildWorkspaceCandidates(
       raw.push({
         source: "console_managed",
         label: "Dossier géré par la Console",
-        host: "/srv/hermes-console/workdir",
-        hermes: "/srv/hermes-console/workdir",
+        host: "/srv/hermes-console/data/workspace",
+        hermes: "/srv/hermes-console/data/workspace",
       });
     }
   }
@@ -242,6 +253,18 @@ export async function discoverSshWorkspace(
       configRevision: stored.configRevision,
       installation: {
         mode: inspection.mode,
+        manager:
+          inspection.mode === "docker"
+            ? "docker"
+            : inspection.nativeServiceScope === "user"
+              ? "systemd-user"
+              : inspection.nativeServiceScope === "system"
+                ? "systemd-system"
+                : inspection.mode === "native"
+                  ? "native-process"
+                  : "unknown",
+        serviceUnit: inspection.nativeServiceUnit,
+        serviceUser: inspection.nativeServiceUser,
         hermesHome: inspection.hermesHome,
         terminalCwd: inspection.terminalCwd,
         resolvedTerminalCwd: inspection.resolvedTerminalCwd,
@@ -348,7 +371,7 @@ async function activateSshWorkspaceUnlocked(input: {
   });
 }
 
-function workspaceInspectionCommand(user: string) {
+export function workspaceInspectionCommand(user: string) {
   const docker = user === "root" ? "docker" : "sudo -n docker";
   return [
     "set +e",
@@ -364,17 +387,33 @@ function workspaceInspectionCommand(user: string) {
     '  if [ "$terminal_cwd" = "." ]; then resolved_cwd=/opt/data; else resolved_cwd="$terminal_cwd"; fi',
     `  ${docker} inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{printf "mount_type=%s\\nmount_source=%s\\nmount_destination=%s\\nmount_name=%s\\nmount_driver=%s\\n" .Type .Source .Destination .Name .Driver}}{{end}}{{end}}' "$hermes_container" 2>/dev/null`,
     `  if ${docker} compose version >/dev/null 2>&1; then printf "docker_compose=available\\n"; else printf "docker_compose=missing\\n"; fi`,
-    "elif command -v hermes >/dev/null 2>&1; then",
-    '  printf "mode=native\\n"',
-    '  if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet hermes-gateway.service 2>/dev/null; then printf "native_service_user=%s\\n" "$(id -un)"; fi',
-    '  hermes_home="${HERMES_HOME:-$home_dir/.hermes}"',
-    '  printf "hermes_home=%s\\n" "$hermes_home"',
-    '  terminal_cwd="$(hermes config get terminal.cwd 2>/dev/null | tail -n 1)"',
-    '  [ -n "$terminal_cwd" ] || terminal_cwd="."',
-    '  if [ "$terminal_cwd" = "." ]; then resolved_cwd="$home_dir"; elif [ "${terminal_cwd#/}" != "$terminal_cwd" ]; then resolved_cwd="$terminal_cwd"; else resolved_cwd="$home_dir/$terminal_cwd"; fi',
     "else",
-    '  printf "mode=unknown\\n"',
-    '  hermes_home="$home_dir/.hermes"; terminal_cwd="."; resolved_cwd="$home_dir"',
+    '  native_service_scope=""; native_service_unit=""; native_service_user=""; native_service_home=""; native_executable=""; service_env=""',
+    '  if command -v systemctl >/dev/null 2>&1; then',
+    '    for unit in hermes-gateway.service hermes.service; do if systemctl --user is-active --quiet "$unit" 2>/dev/null; then native_service_scope=user; native_service_unit="$unit"; break; fi; done',
+    '    if [ -z "$native_service_unit" ]; then for unit in hermes-gateway.service hermes.service; do if systemctl is-active --quiet "$unit" 2>/dev/null; then native_service_scope=system; native_service_unit="$unit"; break; fi; done; fi',
+    '    if [ -n "$native_service_unit" ]; then',
+    '      if [ "$native_service_scope" = user ]; then systemctl_cmd="systemctl --user"; native_service_user="$(id -un)"; else systemctl_cmd=systemctl; native_service_user="$(systemctl show -p User --value "$native_service_unit" 2>/dev/null | tail -n 1)"; [ -n "$native_service_user" ] || native_service_user=root; fi',
+    '      native_service_home="$(getent passwd "$native_service_user" 2>/dev/null | cut -d: -f6)"; [ -n "$native_service_home" ] || native_service_home="$home_dir"',
+    '      if [ "$native_service_scope" = user ]; then service_env="$(systemctl --user show -p Environment --value "$native_service_unit" 2>/dev/null)"; exec_value="$(systemctl --user show -p ExecStart --value "$native_service_unit" 2>/dev/null)"; else service_env="$(systemctl show -p Environment --value "$native_service_unit" 2>/dev/null)"; exec_value="$(systemctl show -p ExecStart --value "$native_service_unit" 2>/dev/null)"; fi',
+    '      native_executable="$(printf "%s" "$exec_value" | sed -n "s/.*path=\\([^ ;]*\\).*/\\1/p" | head -n 1)"',
+    '    fi',
+    '  fi',
+    '  if [ -n "$native_service_unit" ] || command -v hermes >/dev/null 2>&1; then',
+    '  printf "mode=native\\n"',
+    '  if [ -z "$native_service_user" ]; then native_service_user="$(id -un)"; native_service_home="$home_dir"; fi',
+    '  if [ -z "$native_executable" ]; then native_executable="$(command -v hermes 2>/dev/null)"; fi',
+    '  hermes_home="$(printf "%s" "$service_env" | tr " " "\\n" | sed -n "s/^\\\"\\{0,1\\}HERMES_HOME=//p" | tr -d "\\\"" | head -n 1)"',
+    '  [ -n "$hermes_home" ] || hermes_home="${HERMES_HOME:-$native_service_home/.hermes}"',
+    '  printf "native_service_scope=%s\\nnative_service_unit=%s\\nnative_service_user=%s\\nnative_service_home=%s\\nnative_executable=%s\\n" "$native_service_scope" "$native_service_unit" "$native_service_user" "$native_service_home" "$native_executable"',
+    '  printf "hermes_home=%s\\n" "$hermes_home"',
+    '  if [ -n "$native_executable" ] && [ "$(id -un)" = "$native_service_user" ]; then terminal_cwd="$(HOME="$native_service_home" HERMES_HOME="$hermes_home" "$native_executable" config get terminal.cwd 2>/dev/null | tail -n 1)"; elif [ -n "$native_executable" ] && [ "$(id -u)" = 0 ]; then terminal_cwd="$(runuser -u "$native_service_user" -- env HOME="$native_service_home" HERMES_HOME="$hermes_home" "$native_executable" config get terminal.cwd 2>/dev/null | tail -n 1)"; elif [ -n "$native_executable" ]; then terminal_cwd="$(sudo -n -u "$native_service_user" -H env HOME="$native_service_home" HERMES_HOME="$hermes_home" "$native_executable" config get terminal.cwd 2>/dev/null | tail -n 1)"; fi',
+    '  [ -n "$terminal_cwd" ] || terminal_cwd="."',
+    '  if [ "$terminal_cwd" = "." ]; then resolved_cwd="$native_service_home"; elif [ "${terminal_cwd#/}" != "$terminal_cwd" ]; then resolved_cwd="$terminal_cwd"; else resolved_cwd="$native_service_home/$terminal_cwd"; fi',
+    '  else',
+    '    printf "mode=unknown\\n"',
+    '    hermes_home="$home_dir/.hermes"; terminal_cwd="."; resolved_cwd="$home_dir"',
+    '  fi',
     "fi",
     'printf "terminal_cwd=%s\\nresolved_cwd=%s\\n" "$terminal_cwd" "$resolved_cwd"',
   ].join("\n");
@@ -549,11 +588,8 @@ export async function probeHermesWorkspaceAccess(
   if (inspection.mode === "docker" && inspection.containerName) {
     const docker = sshUser === "root" ? "docker" : "sudo -n docker";
     command = `${docker} exec ${shellQuote(inspection.containerName)} sh -c ${shellQuote(script)}`;
-  } else if (
-    inspection.mode === "native" &&
-    inspection.nativeServiceUser === sshUser
-  ) {
-    command = script;
+  } else if (inspection.mode === "native") {
+    command = `${nativeRunAsPrefix(inspection, sshUser)} sh -c ${shellQuote(script)}`;
   } else {
     throw new HermesRuntimeError(
       "Le contexte utilisateur du processus Hermes n’a pas pu être vérifié.",
@@ -576,8 +612,8 @@ function terminalCwdCommands(inspection: WorkspaceInspection, user: string) {
   const prefix =
     inspection.mode === "docker" && inspection.containerName
       ? `${docker} exec ${shellQuote(inspection.containerName)}`
-      : inspection.mode === "native" && inspection.nativeServiceUser === user
-        ? ""
+      : inspection.mode === "native"
+        ? nativeHermesPrefix(inspection, user)
         : null;
   if (prefix === null) {
     throw new HermesRuntimeError(
@@ -587,9 +623,37 @@ function terminalCwdCommands(inspection: WorkspaceInspection, user: string) {
     );
   }
   return {
-    setCommand: `${prefix ? `${prefix} ` : ""}hermes config set terminal.cwd`,
-    getCommand: `${prefix ? `${prefix} ` : ""}hermes config get terminal.cwd`,
+    setCommand: inspection.mode === "docker"
+      ? `${prefix} hermes config set terminal.cwd`
+      : `${prefix} config set terminal.cwd`,
+    getCommand: inspection.mode === "docker"
+      ? `${prefix} hermes config get terminal.cwd`
+      : `${prefix} config get terminal.cwd`,
   };
+}
+
+function nativeRunAsPrefix(inspection: WorkspaceInspection, sshUser: string) {
+  const serviceUser = inspection.nativeServiceUser;
+  const serviceHome = inspection.nativeServiceHome;
+  const hermesHome = inspection.hermesHome;
+  if (!serviceUser || !serviceHome || !hermesHome) {
+    throw new HermesRuntimeError(
+      "Le contexte utilisateur du service Hermes natif est incomplet.",
+      409,
+      "SSH_HERMES_RUNTIME_CONTEXT_UNVERIFIED",
+    );
+  }
+  const environment = `env HOME=${shellQuote(serviceHome)} HERMES_HOME=${shellQuote(hermesHome)}`;
+  if (serviceUser === sshUser) return environment;
+  if (sshUser === "root") {
+    return `runuser -u ${shellQuote(serviceUser)} -- ${environment}`;
+  }
+  return `sudo -n -u ${shellQuote(serviceUser)} -H ${environment}`;
+}
+
+function nativeHermesPrefix(inspection: WorkspaceInspection, sshUser: string) {
+  const executable = inspection.nativeHermesExecutable ?? "hermes";
+  return `${nativeRunAsPrefix(inspection, sshUser)} ${shellQuote(executable)}`;
 }
 
 async function verifySftpRoundTrip(channel: SshChannel, remoteWorkdir: string) {

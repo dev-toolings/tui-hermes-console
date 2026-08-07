@@ -16,6 +16,10 @@
 >
 > Ces stories restent donc au mieux `IMPLÉMENTÉE`, et aucune ne peut être promue sans rejeu.
 
+> **Extension normative du 06-08-2026.** `US-G2-003..005` couvrent désormais la tâche, ses révisions,
+> ses validations et la matrice des changements sensibles. Cette extension ne modifie pas les preuves
+> historiques : ces nouveaux objets restent non livrés et non prouvés.
+
 ## US-G2-001 — Isoler par site et projet
 
 > En tant qu'administrateur MSP, je veux rattacher toute ressource à un site et éventuellement un
@@ -50,7 +54,7 @@
   P-E2E navigateur, la revue produit/sécurité et la dépendance Gate 1 ne sont pas clôturées.
 - **Preuve datée :** [`2026-08-01-gate-2-rbac.md`](evidence/2026-08-01-gate-2-rbac.md).
 
-## US-G2-003 — Posséder agents, missions, artefacts et connecteurs
+## US-G2-003 — Posséder tâches, agents, missions, preuves et connecteurs
 
 > En tant qu'opérateur, je veux un propriétaire explicite sur chaque ressource métier, afin que
 > création, délégation et révocation soient contrôlables.
@@ -58,6 +62,7 @@
 - **Dépendances :** US-G2-001, US-G2-002.
 - **Acceptation positive :** Étant donné un créateur autorisé, quand il crée ou transfère une
   ressource, alors celle-ci conserve site, projet, propriétaire, auteur et historique avant/après.
+  Une tâche, ses révisions, ses tentatives, ses preuves et ses validations conservent la même portée.
 - **Acceptation négative :** Étant donné un utilisateur hors périmètre, quand il lit, modifie,
   exécute, télécharge ou transfère la ressource, alors toutes les voies API et UI refusent sans fuite.
 - **Preuves :** `P-CODE`, `P-INT`, `P-SEC`, invariants DB, matrice CRUD par ressource et audit de
@@ -78,8 +83,8 @@
 
 - **Dépendances :** US-G2-002, US-G2-003.
 - **Acceptation positive :** Étant donné un requester client, un operator MSP mandaté et un approver,
-  quand ils traitent la même mission, alors chacun voit le sous-ensemble utile et l'audit distingue
-  organisation opératrice et cliente.
+  quand ils traitent la même tâche et ses tentatives, alors chacun voit le sous-ensemble utile et
+  l'audit distingue demandeur, organisation opératrice, organisation cliente et décideur.
 - **Acceptation négative :** Étant donné un opérateur sans mandat ou un client voisin, quand il devine
   une URL/UUID, alors la réponse ne révèle rien, aucun téléchargement/SSE ne démarre et la tentative
   est auditée.
@@ -94,15 +99,20 @@
 
 ## US-G2-005 — Appliquer des policies par ressource
 
-> En tant qu'administrateur de site, je veux borner outils, chemins, connecteurs, modèles et budgets,
-> afin que la délégation reste compatible avec le contrat client.
+> En tant qu'administrateur de site, je veux borner outils, chemins, connecteurs, modèles, budgets et
+> types de changement, afin que la délégation et les validations restent compatibles avec le contrat
+> client.
 
 - **Dépendances :** US-G2-002, US-G2-003, US-G1-004.
 - **Acceptation positive :** Étant donné une mission dans les limites, quand elle s'exécute, alors
-  elle utilise seulement les ressources autorisées et enregistre la version de policy évaluée.
+  elle utilise seulement les ressources autorisées, applique la matrice de validation fonctionnelle
+  et technique, puis enregistre la version de policy évaluée.
 - **Acceptation négative :** Étant donné un outil, chemin, connecteur, modèle ou budget interdit,
-  quand il est demandé, alors la tentative échoue avant effet et produit une décision auditable.
-- **Preuves :** `P-INT`, `P-E2E`, `P-SEC`, cinq cas de refus et tests de conflit entre policies.
+  ou une dépendance, migration, authentification, paiement, infrastructure ou suppression sans
+  approbateur technique, quand il est demandé, alors la tentative échoue avant effet et produit une
+  décision auditable.
+- **Preuves :** `P-INT`, `P-E2E`, `P-SEC`, refus par ressource, matrice des changements sensibles et
+  tests de conflit entre policies.
 - **État initial :** `PROPOSÉE`.
 
 ## US-G2-006 — Qualifier l'identité entreprise

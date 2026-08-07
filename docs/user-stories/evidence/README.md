@@ -6,6 +6,9 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 
 ## Rapports disponibles
 
+- [06-08-2026 — workflow guidé de livraison logicielle](2026-08-06-guided-software-delivery.md) :
+  tâche/révisions, approbations séparées, Bubblewrap + Hermes réels, diff, quatre preuves Bun,
+  retries idempotents, refus fail-closed, captures desktop/320 px et limites d'acceptation.
 - [04-08-2026 — G1-002 Docker et system-wide sur VM](2026-08-04-g1-002-docker-native-pops.md) :
   `READY/0`, digest/commit/checksum figés, séparation admin/service, identités effectives, refus
   sudo/Docker/secrets, loopback, bascule de mode et deuxièmes passages `changed=0`.

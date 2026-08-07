@@ -275,7 +275,7 @@ function RowActions({ mission }: { mission: MissionRow }) {
           Copier l’identifiant
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => router.push("/runs/new")}>
+        <DropdownMenuItem onSelect={() => router.push("/tasks/new")}>
           Nouvelle mission
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -449,7 +449,7 @@ export function MissionsDataTable({ rows }: { rows: MissionRow[] }) {
             fait déjà `ButtonLink`.
           */}
           <Link
-            href="/runs/new"
+            href="/tasks/new"
             className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5 px-2.5")}
           >
             <PlusIcon className="size-4" />

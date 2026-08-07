@@ -201,7 +201,7 @@ export function MissionsKanban({
           Lancez une mission depuis un agent pour peupler l’historique PostgreSQL.
         </p>
         {canCreate ? (
-          <ButtonLink href="/runs/new" variant="primary" className="mt-4 inline-flex">
+          <ButtonLink href="/tasks/new" variant="primary" className="mt-4 inline-flex">
             <PlusIcon className="size-4" />
             Nouvelle mission
           </ButtonLink>
@@ -356,7 +356,7 @@ function BoardColumn({
         {canCreate ? (
           <div className="flex items-center gap-1">
             <ButtonLink
-              href="/runs/new"
+              href="/tasks/new"
               variant="ghost"
               className="size-6 rounded-full p-0 text-muted-foreground"
             >

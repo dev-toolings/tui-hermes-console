@@ -1,9 +1,9 @@
 # PRD — Hermes Console
 
-**Version :** 1.3
-**Date :** 01-08-2026
+**Version :** 1.5
+**Date :** 06-08-2026
 **Statut :** vérité produit auditée — technical preview, non prête pour une offre B2B autonome
-**Produit :** application self-hosted d’exploitation de missions exécutées par Hermes Agent
+**Produit :** console guidée transformant une demande professionnelle en travail logiciel vérifié
 **Périmètre actuel :** une installation, plusieurs sites isolés techniquement, plusieurs comptes Google allowlistés ; rôles et ownership sont implémentés localement mais restent non acceptés avant P-E2E/revue
 **Runtime de référence :** canal officiel Hermes Agent `latest` / branche `main`, API server sur le
 port 8642. Docker résout `:latest` en digest avant l’exécution ; system-wide suit `main` sans
@@ -11,7 +11,7 @@ port 8642. Docker résout `:latest` en digest avant l’exécution ; system-wide
 pour l’audit et le rollback, sans devenir des pins d’entrée. La revue indépendante et le parcours
 P-E2E restent ouverts.
 
-> Ce document décrit l’arbre de travail réel au 31-07-2026, y compris les changements non encore
+> Ce document décrit l’arbre de travail réel au 06-08-2026, y compris les changements non encore
 > publiés. Les capacités sont classées en quatre états : **livré**, **validé statiquement**,
 > **non validé E2E** et **cible**. Une présence dans le code ne vaut pas preuve de production.
 >
@@ -22,27 +22,22 @@ P-E2E restent ouverts.
 
 ## 1. Décision produit
 
-Hermes Console n’est plus positionnée comme « le WebUI professionnel de Hermes » ni comme un
-control plane générique d’agents.
+Hermes Console n’est ni un WebUI alternatif pour Hermes, ni un cockpit DevOps destiné à exposer les
+runtimes, agents et journaux. Hermes reste le moteur. La Console devient la couche produit entre une
+intention professionnelle et une livraison logicielle vérifiée.
 
-Hermes fournit désormais ses propres surfaces Web et desktop, la connexion à des backends distants,
-les projets, les profils, les sessions, les fichiers, les modèles, les credentials et le monitoring.
-En parallèle, Microsoft Foundry, AWS AgentCore, Google Agent Platform, LangSmith et CrewAI occupent
-déjà le terrain des plateformes génériques de runtime, déploiement, identité, observabilité et
-gouvernance.
+La direction retenue est :
 
-La direction retenue est plus étroite :
+> **Décrivez le résultat. Validez le plan. Vérifiez la modification.**
 
-> **Hermes Console est la couche d’exploitation et de gouvernance self-hosted pour les équipes qui
-> opèrent Hermes sur l’infrastructure d’un client.**
+La vue normale ne montre pas Git, un shell, un modèle ou un worktree. Elle parle de demande,
+compréhension, plan, réalisation, vérification et validation. Les mêmes faits techniques restent
+accessibles derrière « Afficher les détails techniques ».
 
-Le wedge initial est une **installation par client ou site**, opérée par une agence d’automatisation,
-un intégrateur ou un MSP. La Console transforme des conversations techniques en travail
-opérationnel relisible : demande, mission, activité, décision humaine, résultat et artefacts.
-
-Cette promesse est une **cible**. Le produit actuel en prouve une partie technique, mais il lui manque
-encore les frontières d’autorisation, l’audit attribué, la durabilité complète et les tests de parcours
-nécessaires pour la vendre comme produit B2B.
+Le socle existant conserve sa valeur : identité, sites, rôles, missions, événements, approbations,
+audit, artefacts et connexion Hermes. Il devient l’infrastructure interne d’un workflow plus précis.
+La chaîne dépôt, sandbox, branche, tests, CI, preview, diff et proposition de modification est une
+cible explicite et ne doit pas être annoncée comme livrée avant preuves.
 
 ---
 
@@ -50,22 +45,24 @@ nécessaires pour la vendre comme produit B2B.
 
 | Dimension | Produit actuel | Cible B2B | Refus |
 |---|---|---|---|
-| Unité métier | Session, mission, résultat, artefact | Mission gouvernée et attribuée | Chat générique |
-| Runtime | Un Hermes direct ou SSH | Plusieurs installations clientes enrôlées | Runtime universel day-1 |
-| Utilisateurs | Emails Google allowlistés, périmètres client/MSP implémentés localement mais non acceptés | Rôles et périmètres par site/projet prouvés E2E | « Multi-user » sans autorisation |
-| Contrôle humain | UI d’approbation dépendante de Hermes | Policy fail-closed avant action sensible | Présenter l’UI actuelle comme barrière |
-| Trace | Événements techniques de run | Audit immuable acteur/action/décision | Refaire Langfuse |
-| Données | Postgres + fichiers locaux/SFTP | Custody, rétention, export et restauration | Promesse de souveraineté absolue |
-| Déploiement | Console Compose, Hermes externe | Appliance par site puis fleet | Hyperscaler agent platform |
-| Canaux | Web en autorité, IMAP typé | Transports vers le même modèle de mission | Rebuild Slack, Teams ou email |
+| Unité métier | Session, mission, résultat, artefact | Tâche guidée, tentatives, preuves et validations | Chat générique |
+| Entrée | Instruction libre ou mention d’agent | Intention, résultat attendu, exclusions et exemple | Issue GitHub imposée au métier |
+| Contrôle humain | Approbation d’outil dépendante de Hermes | Plan validé, puis validations fonctionnelle et technique distinctes | Validation implicite |
+| Exécution | Un Hermes direct ou SSH | Sandbox par tâche, dépôt borné et étapes vérifiables | Shell visible dans la vue normale |
+| Livraison | Texte et artefacts Hermes | Diff, tests, preview, proposition de modification et audit | PR présentée comme seul résultat |
+| Utilisateurs | Rôles site et ownership locaux | Demandeur, développeur, approbateur et auditeur prouvés E2E | Multi-user sans autorisation |
+| Distribution | Web self-hosted et coque Tauri partielle | Connexion projet et runtime assistée, sans `.env` manuel | Promesse « un binaire » non prouvée |
 
 Formulation commerciale à tester :
 
-> **Transformez un Hermes installé chez votre client en service opérationnel gouverné : missions,
-> artefacts, contrôle humain, audit et supervision, sans exposer le serveur ni le CLI.**
+> **Transformez une demande professionnelle en modification logicielle relisible, vérifiée et
+> gouvernée, sans exposer Git, le shell ou le runtime.**
 
 Formulations interdites tant que les preuves manquent :
 
+- « développeur autonome sans supervision » ;
+- « toute demande devient automatiquement du code correct » ;
+- « GitHub, CI et preview intégrés » avant leur implémentation réelle ;
 - « plateforme universelle d’agents » ;
 - « observabilité LLM » ;
 - « meilleur WebUI Hermes » ;
@@ -78,33 +75,34 @@ Formulations interdites tant que les preuves manquent :
 
 ## 3. ICP et job-to-be-done
 
-### 3.1 Wedge prioritaire — agences, intégrateurs et MSP
+### 3.1 Wedge prioritaire — binôme métier et développeur
 
 Profil à tester :
 
-- 3 à 30 opérateurs techniques ;
-- 5 à 50 clients PME ;
-- un Hermes déployé sur VPS ou infrastructure client ;
-- workflows supervisés produisant rapports, analyses ou fichiers ;
-- besoin de donner au client une surface contrôlée sans SSH, terminal ni secrets runtime.
+- une PME ou agence avec un produit logiciel existant ;
+- un demandeur métier capable de décrire le résultat attendu ;
+- un développeur disponible pour les décisions techniques sensibles ;
+- des changements bornés, vérifiables et réversibles ;
+- un besoin de réduire la traduction manuelle entre demande métier et livraison technique.
 
 Job-to-be-done :
 
-> « Je déploie un agent chez mon client, je contrôle ce qu’il peut faire, et je peux prouver qui a
-> demandé quoi, ce qui a été exécuté et ce qui a été livré. »
+> « Je décris ce que je veux obtenir, je valide ce qui sera fait, puis je peux vérifier le résultat
+> sans devoir comprendre la mécanique de développement. »
 
-Une installation par client permet un pilote avant le multi-tenant. Le RBAC, l’ownership et la
-séparation client/MSP existent maintenant localement ; ils ne valent pas encore acceptation B2B tant
-que la P-E2E multi-compte, la P-SEC partenaire et la Gate 1 ne sont pas clôturées.
+Le premier pilote doit porter sur un seul dépôt non sensible, un changement à faible risque et deux
+personnes distinctes pour la validation fonctionnelle et la revue technique. Le RBAC, l’ownership et
+la séparation client/MSP existants restent utiles mais ne valent pas encore preuve du nouveau
+workflow avant P-E2E.
 
-### 3.2 Segment secondaire — IT/Ops de PME
+### 3.2 Segment secondaire — agences et intégrateurs
 
-PME de 50 à 500 personnes, une à cinq automatisations répétables, données ou fichiers devant rester
-sur un VPS/VPC contrôlé, résultats relus par un humain, sans usage à fort impact.
+Équipes opérant plusieurs projets clients et voulant faire participer le demandeur métier sans lui
+ouvrir GitHub, le runtime ou le serveur.
 
 ### 3.3 Segments à ne pas viser maintenant
 
-- particuliers et développeurs solos, mieux servis gratuitement par Hermes Desktop/dashboard ;
+- développeurs solos cherchant uniquement un agent de code ou un terminal augmenté ;
 - grands comptes exigeant SAML, SCIM, SLA, certifications et séparation multi-environnements ;
 - entreprises déjà standardisées sur Microsoft, AWS, Google ou Salesforce ;
 - équipes ML cherchant d’abord tracing, datasets et évaluations ;
@@ -119,48 +117,76 @@ Hermes est un agent personnel puissant, mais sa propre politique de sécurité l
 single-tenant : les appelants autorisés d’une même surface ont le même niveau de confiance. Ses
 surfaces natives résolvent désormais l’onboarding, le chat, les fichiers et l’administration.
 
-Le problème restant n’est donc plus « utiliser Hermes sans CLI ». Pour une équipe qui opère Hermes
-chez un client, il faut :
+Le problème restant n’est plus « utiliser Hermes sans CLI ». Il est de transformer une demande
+souvent ambiguë en contrat de résultat, puis en travail observable sans forcer le métier à devenir
+chef de projet Git.
 
-1. séparer l’opérateur technique, le demandeur, l’approbateur et l’auditeur ;
-2. transformer chaque demande en unité de travail avec état et résultat ;
-3. appliquer une politique avant l’exécution d’actions sensibles ;
-4. conserver une preuve attribuée, exportable et rétentionnée ;
-5. superviser plusieurs installations sans ouvrir leurs réseaux ni déplacer leurs fichiers ;
-6. attribuer coût, qualité et incidents à une version d’agent et de politique.
+Il faut :
 
-Le produit actuel traite correctement le point 2 et une partie du transport/stockage. Les autres
-points constituent la roadmap B2B, pas une capacité acquise.
+1. guider la formulation par intention et poser les questions adaptées ;
+2. figer une compréhension, des exclusions et un plan avant toute exécution ;
+3. séparer validation fonctionnelle, validation technique et approbation d’outil ;
+4. exécuter dans un périmètre isolé et attribué ;
+5. rendre le résultat vérifiable par preuves métier et techniques ;
+6. conserver une trace complète sans exposer cette complexité par défaut.
+
+Le premier slice livre les points 1 et 2 et réutilise une partie du point 6. Il ne lance pas encore
+Hermes : un test réel a confirmé que le workdir de run borne les artefacts mais pas le `terminal.cwd`
+ni les outils de code. L’exécution guidée reste donc fail-closed jusqu’à la sandbox de dépôt. Les
+points 3 à 5 restent partiels ou absents.
 
 ---
 
 ## 5. Principes produit
 
-### 5.1 Mission avant conversation
+### 5.1 Tâche avant conversation
 
-La session facilite l’échange. La mission reste l’unité traçable : instruction, agent figé, modèle,
-statut, activité, résultat, consommation et artefacts.
+La tâche contient la demande, la compréhension, le plan, les tentatives, les preuves et les
+validations. Une mission est une tentative d’exécution de cette tâche. La conversation reste un
+moyen d’interaction, jamais l’unité métier principale.
 
-### 5.2 Hermes exécute, la Console gouverne
+### 5.2 Deux profondeurs, une seule vérité
+
+La vue normale ne montre jamais un shell et décrit seulement le résultat, les étapes et la décision
+attendue. La vue détaillée ne cache jamais ce qui a réellement été exécuté : modèle, outils,
+commandes, fichiers, événements, consommation et limites.
+
+### 5.3 Hermes exécute, la Console gouverne
 
 La Console ne réimplémente ni la boucle agentique, ni les skills, ni la mémoire, ni les modèles de
-Hermes. Elle possède l’identité produit, l’autorisation, le ledger de mission et la custody des
-artefacts.
+Hermes. Elle possède la tâche, la spécification, l’autorisation, le ledger et la custody des preuves.
 
-### 5.3 Vérité explicite
+### 5.4 Vérité explicite et installation assistée
 
-Une donnée mesurée est affichée comme telle. Une limite du protocole reste visible. Une UI
-d’approbation qui n’intercepte pas l’action n’est jamais décrite comme une protection.
-
-### 5.4 Installation existante d’abord
-
-Un Hermes existant doit pouvoir être connecté avant toute migration. Le transport direct couvre les
-réseaux joignables ; SSH couvre le pilote distant. Un futur Edge/Relay ne sera introduit qu’après
-validation de la demande fleet et avec un contrat d’enrôlement explicite.
+Une donnée mesurée est affichée comme telle. Une limite reste visible dans les détails. Une UI
+d’approbation qui n’intercepte pas l’action n’est jamais décrite comme une protection. Un Hermes
+existant doit pouvoir être connecté avant toute migration, mais l’objectif d’installation reste un
+assistant sans édition manuelle de `.env` pour l’utilisateur final.
 
 La Console, Postgres et les artefacts peuvent vivre dans l’infrastructure client, mais les prompts
 et résultats sortent de ce périmètre si le modèle est externe. Traces et évaluations seront
 exportées vers OpenTelemetry/OpenInference : la Console ne reconstruira pas un outil spécialisé.
+
+### 5.5 Workspace, mobile et adaptateurs de canal
+
+Le workspace durable est une projection de la tâche et du projet : demande, révisions validées,
+humains, agents, tentatives, activité lisible, preuves et décisions. La Console reste l'autorité de
+ces objets ; elle ne reconstruit pas channels, sous-channels, DMs, voice ou présence.
+
+Le Web mobile fait partie du parcours cœur et doit permettre création, consultation du résultat et
+décision à 320 px et sur appareil tactile. Une application native Console n'est pas promise dans le
+périmètre actuel.
+
+Telegram et Buzz sont des adaptateurs optionnels de Gate 0 :
+
+- Telegram peut transformer texte, pièce jointe ou vocal en brouillon attribué ; il ne lance jamais
+  automatiquement une mission ;
+- Buzz peut lier un channel à une tâche, projeter ses événements et faciliter la reprise humaine ;
+- aucune réaction, aucun message et aucun agent externe ne peut valider un plan, une action sensible
+  ou une livraison sans identité, policy et audit côté Console.
+
+Le parcours cœur reste donc utilisable et testable sans dépendre de la disponibilité ou de la
+maturité mobile d'un canal tiers.
 
 ---
 
@@ -170,6 +196,7 @@ exportées vers OpenTelemetry/OpenInference : la Console ne reconstruira pas un 
 
 | Surface | État réel |
 |---|---|
+| Tâche guidée | PostgreSQL, six intentions, projet/dépôt, révisions immuables, plan, risques, tentatives, preuves et décisions attribuées |
 | Agents | CRUD PostgreSQL, provider, modèle, reasoning effort, archive/restauration et suppression |
 | Sessions | Threads persistés, historique, suppression, source chat ou mission |
 | Missions | Un run par message, états, streaming, annulation, retry, inactivité, résultat et usage |
@@ -180,8 +207,8 @@ exportées vers OpenTelemetry/OpenInference : la Console ne reconstruira pas un 
 | Distant | Transport direct ou tunnel SSH, clé/agent ou mot de passe, SFTP/scp |
 | Connecteurs | Secrets IMAP typés et chiffrés, test de connexion |
 | Auth | Google OIDC allowlisté, PKCE, state, nonce, JWKS, sessions opaques et CSRF |
-| Setup | Login, connexion/test runtime, création ou saut du premier agent |
-| Clients | SPA Vite/React/TanStack dans le navigateur ; coque Tauri avec sidecar local |
+| Setup | Login, connexion/test runtime, création ou saut du premier agent ; le cadrage guidé fonctionne sans agent configuré |
+| Clients | SPA Vite/React/TanStack dans le navigateur ; coque Tauri avec sidecar local ; parcours 320 px complet non prouvé |
 | Production | Image Bun non-root, migration one-shot, PostgreSQL, Console et Caddy |
 
 ### 6.2 Parcours réel
@@ -198,34 +225,27 @@ exportées vers OpenTelemetry/OpenInference : la Console ne reconstruira pas un 
          │ config runtime · test capabilities
          ▼
 ┌──────────────────┐
-│ Agent local      │
+│ Tâche guidée     │
 └────────┬─────────┘
-         │ snapshot agent · modèle · instructions
+         │ demande · exclusions · plan validé
          ▼
 ┌──────────────────┐
-│ Thread · Mission │
-└────────┬─────────┘
-         │ HTTP/SSE · instruction · fichiers
-         ▼
-┌──────────────────┐
-│ Hermes externe   │
-└────────┬─────────┘
-         │ événements · résultat · usage
-         ▼
-┌──────────────────┐
-│ Ledger Console   │
+│ Mise en attente  │
+│ sandbox requise  │
 └──────────────────┘
 ~~~
 
 Légende : chaque flèche porte le protocole ou le type de donnée réellement échangé.
-Composants : compte, setup global, agent local, thread/run, runtime Hermes, ledger Postgres.
+Composants : compte, setup global, tâche guidée et garde fail-closed.
 
 Routes utilisateur principales :
 
 | Route | Fonction |
-|---|---|
 | /setup | Authentification et mise en service globale |
-| / | Aperçu réel des missions et de l’activité |
+| / | Redirection vers la création guidée |
+| /tasks/new | Intention, demande, résultat attendu, plan et validation avant exécution |
+| /tasks/:taskId | Tâche durable, révisions, tentative, preuves et décisions attribuées |
+| /overview | Aperçu réel des missions et de l’activité |
 | /agents, /agents/new, /agents/:id | Cycle de vie des agents locaux |
 | /runs, /runs/new, /runs/:id | Liste, création et suivi des missions |
 | /chat, /chat/new, /chat/:id | Surface de sessions persistantes |
@@ -239,6 +259,13 @@ Routes utilisateur principales :
 Précisions :
 
 - La mention @agent existe sur /chat/new et crée une mission dédiée.
+- Une tâche guidée persiste ses propres tentatives : l’API refuse le lancement avant plan courant,
+  approbation d’outil et éventuelle validation technique. Elle gèle dépôt, commit et révision avant
+  de créer un worktree Bubblewrap.
+- Le brouillon, chaque correction et chaque décision ont une clé d'idempotence et restent repris par
+  l'identifiant durable de tâche après fermeture ou rechargement.
+- Aucun adaptateur Telegram ou Buzz n'est livré. Le navigateur 320 px est prouvé localement ;
+  l'appareil physique et la coupure radio restent ouverts.
 - Un thread existant conserve son snapshot d’agent ; il n’a pas de changement d’agent en cours de vie.
 - Les commandes de session passent par POST /api/threads/:id/commands.
 - /runs/new n’accepte pas encore les pièces jointes. Le composer d’un thread réel accepte du
@@ -246,8 +273,14 @@ Précisions :
 - Les routes run_* de démonstration rejouent encore des fixtures en lecture seule ; elles ne prouvent
   pas le parcours réel thr_*.
 
-### 6.3 Capacités absentes
+### 6.3 Capacités absentes ou non acceptées
 
+- connexion GitHub distante, création de PR, statut CI et déploiement de preview ; le dépôt local,
+  la branche/worktree, le diff et la preview textuelle sont livrés ;
+- capture ou démonstration visuelle automatisée du logiciel modifié ; les preuves diff/fichiers/tests
+  et les captures de la Console existent ;
+- matrice de politique sensible configurable par projet ; la matrice produit fixe couvre déjà auth,
+  suppression, dépendances, migration, paiements et infrastructure ;
 - séparation organisationnelle MSP/client, mandats site/projet et affectations individuelles :
   implémentés côté backend/DB/UI et vérifiés localement, avec snapshot et annulation des runs actifs
   lors d’une révocation ; non acceptés avant P-E2E multi-compte, P-SEC partenaire et revue ; la
@@ -266,6 +299,9 @@ Précisions :
 - budgets, quotas de coût, refacturation et alertes ;
 - planification/jobs Hermes dans la Console ;
 - webhook ou API de service pour déclencher une mission ;
+- capture Telegram texte/fichier/vocal vers un brouillon attribué et idempotent ;
+- adaptateur Buzz liant workspace/channel, projet et tâche sans déplacer l'autorité de décision ;
+- parcours Web mobile complet sur appareil réel avec coupure/reprise réseau ;
 - OpenTelemetry/OpenInference, datasets et évaluations ;
 - politique de rétention appliquée et restauration testée ;
 - E2E navigateur et tests d’intégration runtime/SSH/SFTP ;
@@ -284,8 +320,8 @@ Précisions :
               ▼
 ╔══════════════════════════════════════════════╗
 ║ apps/server · Hono sur Bun                   ║
-║ Auth · Setup · Agents · Threads · Runs       ║
-║ Artefacts · Connecteurs · Runtime · SPA      ║
+║ Auth · Tasks guidées · Threads · Runs        ║
+║ Décisions · Preuves · Runtime · SPA          ║
 ╚═══════╤══════════════╤═══════════════╤═══════╝
         │ SQL produit  │ HTTP/SSE      │ SSH tunnel · SFTP
         ▼              ▼               ▼
@@ -298,6 +334,20 @@ Précisions :
                    ┌──────────────┐     ┌──────────────┐
                    │ Workdir local│     │ Workdir VPS  │
                    └──────────────┘     └──────────────┘
+
+┌──────────────────┐  commit gelé + branche  ┌────────────────────┐  prompt borné  ┌────────────┐
+│ Dépôt Git vérifié│ ───────────────────────▶ │ Worktree Bubblewrap│ ──────────────▶ │ Hermes CLI │
+└──────────────────┘                          └─────────┬──────────┘                └────────────┘
+                                                      │ argv bun/bunx · réseau coupé
+                                                      ▼
+                                            ┌──────────────────────┐
+                                            │ Diff · tests · cleanup│
+                                            └──────────┬───────────┘
+                                                       │ JSON · SHA-256
+                                                       ▼
+                                                 ┌──────────────┐
+                                                 │ PostgreSQL   │
+                                                 └──────────────┘
 
 ╔════════════════════════════╗
 ║ Compose livré              ║
@@ -314,7 +364,8 @@ Précisions :
 
 Légende : les boîtes doubles regroupent les clients, le control plane et le déploiement Compose ;
 les boîtes simples sont des services ou stockages. Chaque flèche est libellée par son flux.
-Composants : SPA/Tauri, serveur Hono/Bun, Postgres, runtime direct ou SSH, workdirs, Compose.
+Composants : SPA/Tauri, serveur Hono/Bun, Postgres, runtime direct ou SSH, dépôt Git, sandbox
+Bubblewrap, Hermes CLI, preuves et Compose.
 
 ### 7.1 Stack
 
@@ -330,8 +381,9 @@ avec une cible serverless.
 
 ### 7.2 Source de vérité
 
-PostgreSQL conserve agents, configuration runtime, comptes/sessions, setup, connecteurs, threads,
-runs, messages, événements et métadonnées d’artefacts. Hermes exécute et ne devient pas la source de
+PostgreSQL conserve agents, configuration runtime, comptes/sessions, setup, connecteurs, tâches,
+révisions, tentatives, décisions, preuves, threads, runs, messages, événements et métadonnées
+d’artefacts. Hermes exécute et ne devient pas la source de
 vérité produit.
 
 ### 7.3 Protocoles Hermes
@@ -657,22 +709,22 @@ contrôles organisationnels dépassent la Console.
 
 ~~~text
 ╔══════════════════════╗
-║ Gate 0 · Design      ║
-║ partners payants    ║
+║ Gate 0 · Parcours    ║
+║ demande · résultat ║
 ╚══════════╤═══════════╝
-           │ preuve de workflow et volonté de payer
+           │ preuve P-E2E · métier comprend et vérifie
            ▼
 ╔══════════════════════╗
-║ Gate 1 · Sécurité    ║
-║ durabilité · policy ║
+║ Gate 1 · Livraison   ║
+║ sandbox · preuves  ║
 ╚══════════╤═══════════╝
-           │ reprise testée et contrôle fail-closed
+           │ diff · tests · reprise · contrôle fail-closed
            ▼
 ╔══════════════════════╗
-║ Gate 2 · Équipe      ║
-║ rôles · audit       ║
+║ Gate 2 · Validation  ║
+║ métier · technique ║
 ╚══════════╤═══════════╝
-           │ séparation opérateur · client prouvée
+           │ décisions sensibles attribuées et auditées
            ▼
 ╔══════════════════════╗
 ║ Gate 3 · Fleet       ║
@@ -686,20 +738,32 @@ contrôles organisationnels dépassent la Console.
 ╚══════════════════════╝
 ~~~
 
-Légende : chaque flèche est un critère de sortie obligatoire ; une gate non franchie bloque la
-suivante.
-Composants : validation commerciale, sécurité, collaboration, fleet, qualité.
+Légende : P-E2E = preuve de bout en bout ; chaque flèche indique le critère de sortie obligatoire.
+Composants : parcours guidé, livraison isolée, validations humaines, Edge/Relay, qualité.
 
-### Gate 0 — validation commerciale
+### Gate 0 — validation du parcours guidé
 
-- recruter trois agences ou intégrateurs ;
-- déployer un workflow étroit chez un client par partenaire ;
+- recruter trois PME, agences ou intégrateurs réunissant demandeur métier et développeur ;
+- faire formuler une tâche réelle par un demandeur métier sans Git, shell ni agent à configurer ;
+- prouver la reformulation, les exclusions, le plan et la validation avant exécution ;
+- persister la tâche, son projet, ses révisions et ses tentatives ;
+- fournir un résultat que le demandeur peut vérifier sans lire une pull request ;
+- prouver création, résultat et décision depuis le Web mobile ;
+- déployer ce workflow étroit chez un client par partenaire ;
 - rester sur des tâches supervisées et peu risquées ;
-- mesurer installation, taux terminal, reprises manuelles, coût et valeur livrée ;
+- mesurer cadrage, temps jusqu'au résultat vérifiable, taux terminal, corrections, reprises manuelles,
+  coût et valeur livrée ;
 - obtenir un engagement payant avant la fleet.
 
-### Gate 1 — contrat d’exploitation
+La capture Telegram et la projection Buzz sont des expériences optionnelles : leur absence ne bloque
+pas la décision Gate 0 tant que le parcours cœur Web est accepté.
 
+### Gate 1 — livraison logicielle sûre
+
+- figer la révision de spécification et le commit de base ;
+- isoler chaque tentative dans une sandbox et une branche attribuées ;
+- produire diff, tests, fichiers modifiés et preuve métier vérifiable ;
+- préparer une proposition de modification sans présenter la PR comme seul résultat ;
 - corriger et tester la persistance des artefacts Compose ;
 - pinner et confiner Hermes ;
 - ajouter un avertissement d’interaction IA et d’exécution de commandes ;
@@ -710,7 +774,7 @@ Composants : validation commerciale, sécurité, collaboration, fleet, qualité.
 - E2E du parcours critique ;
 - tests réels du tunnel et de la synchronisation distante.
 
-### Gate 2 — équipe et client
+### Gate 2 — validations métier et technique
 
 - site/projet comme frontière minimale ;
 - rôles admin, operator, requester, approver, auditor ;
@@ -718,6 +782,10 @@ Composants : validation commerciale, sécurité, collaboration, fleet, qualité.
   acceptation P-E2E encore requise) ;
 - OIDC générique, puis SAML/SCIM seulement sur demande qualifiée ;
 - séparation opérateur MSP et client final ;
+- validation fonctionnelle du résultat par le demandeur ;
+- validation technique séparée pour dépendance, migration, authentification, paiement, infrastructure
+  ou suppression de données ;
+- mise en attente compréhensible lorsque l’approbateur technique manque ;
 - politiques par outil, chemin, connecteur, modèle et budget.
 
 ### Gate 3 — Edge/Relay et fleet

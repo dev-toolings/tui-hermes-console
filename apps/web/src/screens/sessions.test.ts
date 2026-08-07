@@ -15,6 +15,7 @@ const thread = (overrides: Partial<ThreadListItemDto> = {}): ThreadListItemDto =
   id: "thr_1",
   title: "Préparer le rapport mensuel",
   source: "mission",
+  workflow: "general",
   agentName: "Analyste",
   provider: "openai",
   model: "gpt-5.6",

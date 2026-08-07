@@ -29,6 +29,8 @@ import type {
 } from "@console/core/modules/runs/types";
 import type { RuntimeProbeDto } from "@console/core/modules/runtime/probe";
 import type { AuditEntryDto } from "@console/core/modules/audit/types";
+import type { GuidedTaskDraft } from "@console/core/modules/guided-task/spec";
+import type { GuidedTaskDto } from "@console/core/modules/guided-task/task";
 
 export class ApiError extends Error {
   constructor(
@@ -234,6 +236,106 @@ export const fetchStorage = () =>
 
 export const fetchRuntimeProbe = () =>
   getJson<{ probe: RuntimeProbeDto }>("/api/runtime/probe").then((r) => r.probe);
+
+export type GuidedRepositorySummary = {
+  projectId: string;
+  projectName: string;
+  configured: boolean;
+  rootPath: string | null;
+  baseRef: string | null;
+  testCommands: string[][];
+  networkPolicy: "none" | "host" | null;
+};
+
+export const fetchGuidedRepositories = () =>
+  getJson<{ repositories: GuidedRepositorySummary[] }>("/api/guided/repositories")
+    .then((response) => response.repositories);
+
+export const saveGuidedRepository = (
+  projectId: string,
+  input: {
+    rootPath: string;
+    baseRef: string;
+    testCommands: string[][];
+    networkPolicy: "none" | "host";
+  },
+) => getJson<{ repository: unknown }>(
+  `/api/guided/repositories/${encodeURIComponent(projectId)}`,
+  {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-Hermes-Toast": "0" },
+    body: JSON.stringify(input),
+  },
+).then((response) => response.repository);
+
+export const createGuidedRepositoryProject = (input: {
+  projectName: string;
+  rootPath: string;
+  baseRef: string;
+  testCommands: string[][];
+  networkPolicy: "none" | "host";
+}) => getJson<{ repository: { projectId: string } }>("/api/guided/repositories", {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "X-Hermes-Toast": "0" },
+  body: JSON.stringify(input),
+}).then((response) => response.repository);
+
+export const fetchGuidedTask = (taskId: string) =>
+  getJson<{ task: GuidedTaskDto }>(`/api/guided/tasks/${encodeURIComponent(taskId)}`)
+    .then((response) => response.task);
+
+export const createGuidedTask = (input: {
+  projectId: string;
+  draft: GuidedTaskDraft;
+  idempotencyKey: string;
+}) => getJson<{ task: GuidedTaskDto }>("/api/guided/tasks", {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "X-Hermes-Toast": "0" },
+  body: JSON.stringify(input),
+}).then((response) => response.task);
+
+export const createGuidedRevision = (
+  taskId: string,
+  input: { draft: GuidedTaskDraft; validate: boolean; idempotencyKey: string },
+) => getJson<{ task: GuidedTaskDto }>(
+  `/api/guided/tasks/${encodeURIComponent(taskId)}/revisions`,
+  {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Hermes-Toast": "0" },
+    body: JSON.stringify(input),
+  },
+).then((response) => response.task);
+
+export const decideGuidedTask = (
+  taskId: string,
+  input: {
+    revisionId: string;
+    attemptId?: string | null;
+    kind: "technical" | "tool" | "functional";
+    outcome: "approved" | "rejected";
+    idempotencyKey: string;
+    reason?: string | null;
+  },
+) => getJson<{ task: GuidedTaskDto }>(
+  `/api/guided/tasks/${encodeURIComponent(taskId)}/decisions`,
+  {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Hermes-Toast": "0" },
+    body: JSON.stringify(input),
+  },
+).then((response) => response.task);
+
+export const startGuidedAttempt = (
+  taskId: string,
+  input: { revisionId: string; idempotencyKey: string },
+) => getJson<{ task: GuidedTaskDto }>(
+  `/api/guided/tasks/${encodeURIComponent(taskId)}/attempts`,
+  {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Hermes-Toast": "0" },
+    body: JSON.stringify(input),
+  },
+).then((response) => response.task);
 
 /**
  * Les deux seules mutations qu'une mission accepte depuis une liste.

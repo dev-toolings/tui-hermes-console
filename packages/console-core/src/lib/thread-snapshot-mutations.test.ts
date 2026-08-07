@@ -10,6 +10,7 @@ const baseSnapshot = {
   id: "thr_1",
   title: "t",
   source: "mission" as const,
+  workflow: "general" as const,
   agentName: "a",
   instructions: "i",
   model: "m",

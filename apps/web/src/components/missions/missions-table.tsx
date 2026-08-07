@@ -76,7 +76,7 @@ export function MissionsTable({
           <p className="mt-1 text-[0.75rem] text-muted-foreground">
             Lancez une mission depuis un agent pour peupler l’historique PostgreSQL.
           </p>
-          <ButtonLink href="/runs/new" variant="primary" className="mt-4 inline-flex">
+          <ButtonLink href="/tasks/new" variant="primary" className="mt-4 inline-flex">
             <PlusIcon className="size-4" />
             Nouvelle mission
           </ButtonLink>

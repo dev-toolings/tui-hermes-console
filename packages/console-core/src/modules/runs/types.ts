@@ -1,4 +1,5 @@
 import type { MessageContent, Usage } from "../../types/domain";
+import type { ThreadWorkflow } from "../../types/domain";
 
 export type ProductRunStatus =
   | "pending"
@@ -78,6 +79,7 @@ export type ThreadSnapshot = {
   id: string;
   title: string;
   source: ThreadSource;
+  workflow: ThreadWorkflow;
   agentName: string;
   instructions: string;
   provider?: string | null;
@@ -110,6 +112,7 @@ export type ThreadListItemDto = {
   id: string;
   title: string;
   source: ThreadSource;
+  workflow: ThreadWorkflow;
   agentName: string;
   provider: string | null;
   model: string;

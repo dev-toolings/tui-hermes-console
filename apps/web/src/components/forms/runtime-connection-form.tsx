@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@boardui/ui";
+import { ToggleGroup, ToggleGroupItem } from "@boardui/ui";
 import {
   CableIcon,
   CheckCircle2Icon,
@@ -13,10 +13,13 @@ import {
 } from "lucide-react";
 import type { RuntimePublicDto } from "@console/core/types/api";
 import { SshRuntimeSetup } from "@/components/forms/ssh-runtime-setup";
+import { DirectWorkspaceSetup } from "@/components/forms/direct-workspace-setup";
 import { HermesTokenGuide } from "@/components/settings/hermes-token-guide";
 import { useRuntimeMutation } from "@/components/settings/runtime-mutation-provider";
-import { Button } from "@/components/ui/boardui";
+import { Button, Card, CardSurface } from "@/components/ui/boardui";
+import { cn } from "@/lib/cn";
 import { useRouter } from "@/lib/router";
+import type { RuntimeSection } from "@/lib/runtime/settings-navigation";
 import { canReuseDirectRuntimeToken } from "@/lib/runtime-secret-reuse";
 import {
   getRuntimePublicClient,
@@ -32,9 +35,11 @@ type FormStatus =
 
 export function RuntimeConnectionForm({
   mode,
+  section = "connection",
   onRuntimeChange,
 }: {
   mode?: Transport;
+  section?: RuntimeSection;
   onRuntimeChange?: (runtime: RuntimePublicDto) => void;
 } = {}) {
   const router = useRouter();
@@ -80,7 +85,7 @@ export function RuntimeConnectionForm({
   }, [onRuntimeChange]);
 
   function changeTransport(next: Transport) {
-    router.replace(`/settings/runtime?mode=${next}`);
+    router.replace(`/settings/runtime?mode=${next}&section=connection`);
   }
 
   function publish(next: RuntimePublicDto) {
@@ -121,96 +126,165 @@ export function RuntimeConnectionForm({
     }
   }
 
-  if (loading) return <RuntimeFormSkeleton />;
+  const configurationSection =
+    section === "workspace" || section === "advanced" ? section : "connection";
+  const configurationVisible =
+    section === "connection" || section === "workspace" || section === "advanced";
+
+  if (loading) {
+    return configurationVisible ? (
+      <Card>
+        <CardSurface>
+          <RuntimeFormSkeleton />
+        </CardSurface>
+      </Card>
+    ) : null;
+  }
   if (loadError) {
     return (
-      <p role="alert" className="flex items-center gap-2 text-[0.75rem] text-destructive">
-        <XCircleIcon className="size-4 shrink-0" />
-        {loadError}
-      </p>
+      <Card>
+        <CardSurface>
+          <p role="alert" className="flex items-center gap-2 text-[0.75rem] text-destructive">
+            <XCircleIcon className="size-4 shrink-0" />
+            {loadError}
+          </p>
+        </CardSurface>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <p className="max-w-[70ch] text-[0.6875rem] leading-5 text-muted-foreground">
-        Le serveur de la Console appelle Hermes. Les secrets restent masqués par défaut ; seuls
-        les opérateurs autorisés peuvent les modifier.
-      </p>
-      {showingUnsavedTransport ? (
-        <p
-          role="status"
-          className="rounded-xl border border-info-100 bg-info-soft px-3 py-2 text-[0.6875rem] leading-5 text-info-700"
-        >
-          Le statut ci-dessus concerne le runtime enregistré en {runtime?.transport === "ssh" ? "tunnel SSH" : "accès direct"}. La cible {transport === "ssh" ? "SSH" : "directe"} affichée ici n’est pas encore testée.
-        </p>
-      ) : null}
+    <div
+      className={cn(!configurationVisible && "hidden")}
+      aria-hidden={configurationVisible ? undefined : true}
+    >
+      <Card>
+        <CardSurface>
+          <div className="space-y-6">
+            {configurationSection === "connection" ? (
+              <>
+                <div className="flex flex-col gap-3 border-b border-seam pb-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-[0.8125rem] font-semibold">Mode d’accès</p>
+                    <p className="mt-1 max-w-[65ch] text-[0.6875rem] leading-5 text-muted-foreground">
+                      Choisissez comment le serveur de la Console rejoint l’API Hermes.
+                    </p>
+                  </div>
+                  <ToggleGroup
+                    type="single"
+                    value={transport}
+                    aria-label="Mode d’accès au runtime Hermes"
+                    onValueChange={(next) => {
+                      if (next === "direct" || next === "ssh") changeTransport(next);
+                    }}
+                    className="w-full rounded-full border border-seam bg-inset p-1 sm:w-fit"
+                  >
+                    <ToggleGroupItem
+                      value="direct"
+                      aria-label="Accès direct"
+                      className="min-h-11 flex-1 rounded-full border-0 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-board-xs sm:flex-none"
+                    >
+                      <CableIcon aria-hidden />
+                      Accès direct
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="ssh"
+                      aria-label="Tunnel SSH"
+                      className="min-h-11 flex-1 rounded-full border-0 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-board-xs sm:flex-none"
+                    >
+                      <TerminalIcon aria-hidden />
+                      Tunnel SSH
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
 
-      <Tabs
-        value={transport}
-        onValueChange={(next) => {
-          if (next === "direct" || next === "ssh") changeTransport(next);
-        }}
-      >
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          {/* L'onglet actif du Tabs shadcn ne remplit qu'en `bg-card`, un gris qui se
-              confond avec le fond de la liste en dark. On reprend ici le même
-              remplissage plein `bg-primary` que le toggle d'authentification SSH
-              plus bas, pour un contraste net et cohérent entre les deux contrôles. */}
-          <TabsList className="h-auto w-fit gap-0.5 rounded-full border border-seam bg-inset p-1">
-            <TabsTrigger
-              value="direct"
-              className="rounded-full border-transparent px-3 py-1.5 data-[state=active]:border-transparent data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-board-xs data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground"
-            >
-              <CableIcon aria-hidden />
-              Accès direct
-            </TabsTrigger>
-            <TabsTrigger
-              value="ssh"
-              className="rounded-full border-transparent px-3 py-1.5 data-[state=active]:border-transparent data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-board-xs data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground"
-            >
-              <TerminalIcon aria-hidden />
-              Tunnel SSH
-            </TabsTrigger>
-          </TabsList>
-          <p className="text-[0.6875rem] text-muted-foreground">
-            {transport === "direct"
-              ? "Hermes local, sur VPN ou déjà joignable en HTTP."
-              : "Hermes sur un VPS sans exposer son API sur Internet."}
-          </p>
-        </div>
+                {showingUnsavedTransport ? (
+                  <p
+                    role="status"
+                    className="rounded-xl border border-info-100 bg-info-soft px-3 py-2 text-[0.6875rem] leading-5 text-info-700"
+                  >
+                    Le runtime enregistré utilise {runtime?.transport === "ssh" ? "un tunnel SSH" : "un accès direct"}. Le mode {transport === "ssh" ? "SSH" : "direct"} affiché ici reste un brouillon tant qu’il n’est pas testé et enregistré.
+                  </p>
+                ) : null}
+              </>
+            ) : null}
 
-        <TabsContent value="direct" className="border-t border-seam pt-5">
-          <DirectRuntimeForm runtime={runtime} onRuntimeChange={publish} />
-        </TabsContent>
-        <TabsContent value="ssh" className="border-t border-seam pt-5">
-          <SshRuntimeSetup runtime={runtime} onRuntimeChange={publish} />
-        </TabsContent>
-      </Tabs>
-      {runtime?.configured && runtime.source === "database" ? (
-        <section className="rounded-xl border border-destructive/30 bg-destructive/5 p-4" aria-labelledby="runtime-disconnect-title">
+            {transport === "direct" ? (
+              configurationSection === "connection" ? (
+                <DirectRuntimeForm runtime={runtime} onRuntimeChange={publish} />
+              ) : configurationSection === "workspace" ? (
+                <DirectWorkspaceSetup runtime={runtime} />
+              ) : null
+            ) : (
+              <SshRuntimeSetup
+                runtime={runtime}
+                section={configurationSection}
+                onRuntimeChange={publish}
+              />
+            )}
+
+            {configurationSection === "advanced" ? (
+              <RuntimeDisconnectSection
+                runtime={runtime}
+                disconnecting={disconnecting}
+                disconnectError={disconnectError}
+                onDisconnect={() => void disconnectRuntime()}
+              />
+            ) : null}
+          </div>
+        </CardSurface>
+      </Card>
+    </div>
+  );
+}
+
+function RuntimeDisconnectSection({
+  runtime,
+  disconnecting,
+  disconnectError,
+  onDisconnect,
+}: {
+  runtime: RuntimePublicDto | null;
+  disconnecting: boolean;
+  disconnectError: string | null;
+  onDisconnect: () => void;
+}) {
+  if (runtime?.configured && runtime.source === "database") {
+    return (
+      <section className="border-t border-seam pt-6" aria-labelledby="runtime-disconnect-title">
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 id="runtime-disconnect-title" className="text-[0.8125rem] font-semibold">
-                Déconnecter ce runtime
+                Zone dangereuse
               </h3>
               <p className="mt-1 max-w-[62ch] text-[0.6875rem] leading-5 text-muted-foreground">
                 Supprime la cible {runtime.transport === "ssh" ? "SSH" : "directe"}, ses secrets chiffrés et le tunnel SSH actif.
               </p>
             </div>
-            <Button type="button" variant="secondary" disabled={disconnecting} onClick={() => void disconnectRuntime()}>
+            <Button type="button" variant="danger" disabled={disconnecting} onClick={onDisconnect}>
               {disconnecting ? <LoaderCircleIcon className="size-4 animate-spin" /> : <XCircleIcon className="size-4" />}
               {disconnecting ? "Déconnexion…" : "Déconnecter le runtime"}
             </Button>
           </div>
           {disconnectError ? <p role="alert" className="mt-3 text-[0.6875rem] text-destructive">{disconnectError}</p> : null}
-        </section>
-      ) : runtime?.configured && runtime.source === "env" ? (
-        <p role="status" className="rounded-xl border border-info-100 bg-info-soft px-3 py-2 text-[0.6875rem] leading-5 text-info-700">
-          Ce runtime vient des variables d’environnement du serveur ; retirez-les dans la configuration du serveur pour le déconnecter.
-        </p>
-      ) : null}
-    </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (runtime?.configured && runtime.source === "env") {
+    return (
+      <p role="status" className="rounded-xl border border-info-100 bg-info-soft px-3 py-2 text-[0.6875rem] leading-5 text-info-700">
+        Ce runtime vient des variables d’environnement du serveur. Retirez-les dans la configuration du serveur pour le déconnecter.
+      </p>
+    );
+  }
+
+  return (
+    <p className="text-[0.6875rem] text-muted-foreground">
+      Aucune configuration runtime enregistrée ne peut être supprimée.
+    </p>
   );
 }
 

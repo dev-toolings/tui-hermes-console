@@ -10,6 +10,7 @@ import {
   threads,
   type MessageContent,
   type ThreadSource,
+  type ThreadWorkflow,
   type Usage,
 } from "@/db/schema";
 import type {
@@ -73,7 +74,9 @@ export class ProductRepositoryError extends Error {
       | "RUN_ALREADY_ACTIVE"
       | "RUN_ALREADY_TERMINAL"
       | "RUN_NOT_AWAITING_APPROVAL"
-      | "AGENT_IN_CHAT",
+      | "AGENT_IN_CHAT"
+      | "TECHNICAL_APPROVAL_REQUIRED"
+      | "GUIDED_EXECUTION_NOT_ISOLATED",
     message: string,
   ) {
     super(message);
@@ -83,6 +86,7 @@ export class ProductRepositoryError extends Error {
 
 export async function createThreadWithRun(context: SiteRequestContext, input: {
   source: ThreadSource;
+  workflow?: ThreadWorkflow;
   agentId?: string | null;
   agentName: string;
   instructions: string;
@@ -129,6 +133,7 @@ export async function createThreadWithRun(context: SiteRequestContext, input: {
       projectId,
       title: makeTitle(input.message),
       source: input.source,
+      workflow: input.workflow ?? "general",
       agentId: input.agentId ?? null,
       agentName: input.agentName,
       instructions: input.instructions,
@@ -1063,6 +1068,7 @@ export async function getThreadSnapshot(
     id: thread.id,
     title: thread.title,
     source: thread.source,
+    workflow: thread.workflow,
     agentName: thread.agentName,
     instructions: thread.instructions,
     provider: thread.provider,
@@ -1204,6 +1210,7 @@ export async function listThreads(scope: SiteRequestContext, options?: {
     id: thread.id,
     title: thread.title,
     source: thread.source,
+    workflow: thread.workflow,
     agentName: thread.agentName,
     provider: thread.provider,
     model: thread.model,

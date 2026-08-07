@@ -1,7 +1,12 @@
 import { z } from "zod";
+import { guidedTechnicalApprovalRequired } from "@console/core/modules/guided-task/spec";
 import { apiErrorResponse } from "@/modules/api/errors";
 import { requireActiveAgent, resolveActiveAgentRef } from "@/modules/agents/repository";
-import { createThreadWithRun, listThreads } from "@/modules/runs/repository";
+import {
+  createThreadWithRun,
+  listThreads,
+  ProductRepositoryError,
+} from "@/modules/runs/repository";
 import { startRun } from "@/modules/runs/runner";
 import { resolveAvailableRuntimeModelSelection } from "@/modules/runtime/available-model-selection";
 import type { ThreadSource } from "@/db/schema";
@@ -32,6 +37,14 @@ const createThreadSchema = z.object({
   message: z.string().trim().min(1).max(100_000),
   agentId: z.string().trim().min(1).max(200).optional(),
   agentRef: z.string().trim().min(1).max(200).optional(),
+  guided: z.object({
+    touchesAuthentication: z.boolean(),
+    deletesData: z.boolean(),
+    allowsDependencies: z.boolean(),
+    changesDatabase: z.boolean(),
+    touchesPayments: z.boolean(),
+    touchesInfrastructure: z.boolean(),
+  }).strict().optional(),
 }).strict();
 
 function parseThreadSource(value: string | null): ThreadSource | undefined {
@@ -58,8 +71,20 @@ export async function POST(
   try {
     return await dependencies.withConsent(request, async () => {
       const input = createThreadSchema.parse(await request.json());
-    await assertNoBlockingStorageMigration();
-    await assertNoBlockingRuntimeUpdate();
+      if (input.guided && guidedTechnicalApprovalRequired(input.guided)) {
+        throw new ProductRepositoryError(
+          "TECHNICAL_APPROVAL_REQUIRED",
+          "Cette tâche touche à l’authentification, aux permissions ou aux données. Une validation technique doit être ajoutée avant son lancement.",
+        );
+      }
+      if (input.guided) {
+        throw new ProductRepositoryError(
+          "GUIDED_EXECUTION_NOT_ISOLATED",
+          "Le plan est validé, mais la réalisation reste en attente : aucune sandbox de dépôt vérifiée n’est encore disponible pour cette tâche.",
+        );
+      }
+      await assertNoBlockingStorageMigration();
+      await assertNoBlockingRuntimeUpdate();
       const releaseRunStart = acquireRunStartLease();
       try {
         await assertRuntimeWorkspaceReady();
@@ -73,6 +98,7 @@ export async function POST(
         const resolved = agent
           ? {
               source: "mission" as const,
+              workflow: "general" as const,
               agentId: agent.id,
               agentName: agent.name,
               instructions: agent.instructions,
@@ -88,6 +114,7 @@ export async function POST(
               });
               return {
                 source: "chat" as const,
+                workflow: "general" as const,
                 agentId: null,
                 agentName: "Chat libre",
                 instructions: FREE_CHAT_INSTRUCTIONS,

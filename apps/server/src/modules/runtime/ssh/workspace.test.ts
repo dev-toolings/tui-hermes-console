@@ -4,11 +4,21 @@ import {
   buildWorkspaceCandidates,
   parseWorkspaceInspection,
   probeHermesWorkspaceAccess,
+  workspaceInspectionCommand,
   withTerminalCwdRollback,
 } from "./workspace";
 import type { SshChannel } from "./types";
 
 describe("SSH workspace discovery", () => {
+  test("keeps the remote Docker and systemd inspection shell-valid", async () => {
+    const child = Bun.spawn(["sh", "-n"], {
+      stdin: new TextEncoder().encode(workspaceInspectionCommand("root")),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(await child.exited).toBe(0);
+  });
+
   test("maps a Docker bind mount to distinct host and Hermes paths", () => {
     const inspection = parseWorkspaceInspection([
       "mode=docker",
@@ -74,6 +84,30 @@ describe("SSH workspace discovery", () => {
     );
     expect(candidates.some(({ remoteWorkdir }) => remoteWorkdir === "/home/hermes")).toBe(false);
   });
+
+  test("attributes a system-wide native service to its real service user", () => {
+    const inspection = parseWorkspaceInspection([
+      "mode=native",
+      "home=/root",
+      "hermes_home=/srv/hermes-console/data",
+      "terminal_cwd=/srv/hermes-console/data/workspace",
+      "resolved_cwd=/srv/hermes-console/data/workspace",
+      "native_service_scope=system",
+      "native_service_unit=hermes-gateway.service",
+      "native_service_user=hermes",
+      "native_service_home=/var/lib/hermes",
+      "native_executable=/srv/hermes-console/native/current/venv/bin/hermes",
+    ].join("\n"));
+
+    expect(inspection).toMatchObject({
+      mode: "native",
+      nativeServiceScope: "system",
+      nativeServiceUnit: "hermes-gateway.service",
+      nativeServiceUser: "hermes",
+      nativeServiceHome: "/var/lib/hermes",
+      nativeHermesExecutable: "/srv/hermes-console/native/current/venv/bin/hermes",
+    });
+  });
 });
 
 function dockerInspection() {
@@ -113,6 +147,36 @@ describe("Hermes-side workspace proof", () => {
     ).rejects.toMatchObject({ code: "SSH_HERMES_WORKSPACE_NOT_WRITABLE" });
     expect(commands[0]).toContain("sudo -n docker exec 'hermes-runtime' sh -c");
     expect(commands[0]).toContain("/opt/data/workspace");
+  });
+
+  test("runs a system-wide native proof as the actual service user", async () => {
+    const commands: string[] = [];
+    const channel = execOnly(async (command) => {
+      commands.push(command);
+      return { code: 0, stdout: "", stderr: "" };
+    });
+    const inspection = parseWorkspaceInspection([
+      "mode=native",
+      "home=/root",
+      "hermes_home=/srv/hermes-console/data",
+      "terminal_cwd=/srv/hermes-console/data/workspace",
+      "resolved_cwd=/srv/hermes-console/data/workspace",
+      "native_service_scope=system",
+      "native_service_unit=hermes-gateway.service",
+      "native_service_user=hermes",
+      "native_service_home=/var/lib/hermes",
+      "native_executable=/srv/hermes-console/native/current/venv/bin/hermes",
+    ].join("\n"));
+
+    await probeHermesWorkspaceAccess(
+      channel,
+      inspection,
+      "/srv/hermes-console/data/workspace",
+      "root",
+    );
+
+    expect(commands[0]).toContain("runuser -u 'hermes'");
+    expect(commands[0]).toContain("HERMES_HOME='/srv/hermes-console/data'");
   });
 });
 

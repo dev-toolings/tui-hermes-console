@@ -56,9 +56,9 @@ export function MissionsScreen({
               <ToggleGroupItem value="table">Tableau</ToggleGroupItem>
             </ToggleGroup>
             {canCreate ? (
-              <ButtonLink href="/runs/new" variant="primary">
+              <ButtonLink href="/tasks/new" variant="primary">
                 <PlusIcon className="size-4" />
-                Nouvelle mission
+                Nouvelle tâche
               </ButtonLink>
             ) : null}
           </div>

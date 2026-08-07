@@ -12,6 +12,9 @@ import { LifecycleExportError } from "@/modules/retention/export";
 import { ArtifactIntegrityError } from "@/modules/artifacts/integrity";
 import { HermesPolicyError } from "@/modules/policy/hermes-approval";
 import { describeError, log } from "@/observability/log";
+import { GuidedTaskRepositoryError } from "@/modules/guided-task/repository";
+import { GuidedSandboxError } from "@/modules/guided-task/sandbox";
+import { GuidedTaskContractError } from "@console/core/modules/guided-task/task";
 
 /**
  * `context` sert au seul appelant qui connaît la requête (`app.onError`) : le
@@ -71,6 +74,28 @@ export function apiErrorResponse(
         ? 404
         : 409;
     return Response.json({ error: { code: error.code, message: error.message } }, { status });
+  }
+
+  if (error instanceof GuidedTaskRepositoryError) {
+    return Response.json(
+      { error: { code: error.code, message: error.message } },
+      { status: error.status },
+    );
+  }
+
+  if (error instanceof GuidedSandboxError) {
+    const status = error.code === "GUIDED_REPOSITORY_INVALID" ? 400 : 409;
+    return Response.json(
+      { error: { code: error.code, message: error.message } },
+      { status },
+    );
+  }
+
+  if (error instanceof GuidedTaskContractError) {
+    return Response.json(
+      { error: { code: error.code, message: error.message } },
+      { status: 409 },
+    );
   }
 
   if (error instanceof AgentRepositoryError) {

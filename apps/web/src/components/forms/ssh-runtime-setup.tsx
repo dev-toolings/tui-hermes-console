@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangleIcon,
   CheckCircle2Icon,
@@ -65,9 +65,11 @@ type HostKey = {
 
 export function SshRuntimeSetup({
   runtime,
+  section = "connection",
   onRuntimeChange,
 }: {
   runtime: RuntimePublicDto | null;
+  section?: "connection" | "workspace" | "advanced";
   onRuntimeChange: (runtime: RuntimePublicDto) => void;
 }) {
   const [sshHost, setSshHost] = useState(runtime?.sshHost ?? "");
@@ -87,6 +89,7 @@ export function SshRuntimeSetup({
   const [manualHermesPath, setManualHermesPath] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [storageMigrationBusy, setStorageMigrationBusy] = useState(false);
+  const workspaceAutoRevisionRef = useRef<number | null>(null);
   const { runMutation } = useRuntimeMutation();
 
   useEffect(() => {
@@ -247,7 +250,7 @@ export function SshRuntimeSetup({
     }
   }
 
-  async function discoverWorkspace(expectedRevision = runtime?.configRevision) {
+  const discoverWorkspace = useCallback(async (expectedRevision = runtime?.configRevision) => {
     setWorkspaceStatus({ kind: "loading", label: "Recherche de la configuration Hermes sur le VPS…" });
     setDiscovery(null);
     setSelected(null);
@@ -283,7 +286,21 @@ export function SshRuntimeSetup({
     } catch (reason) {
       setWorkspaceStatus({ kind: "error", message: errorMessage(reason) });
     }
-  }
+  }, [runMutation, runtime?.configRevision]);
+
+  useEffect(() => {
+    const revision = runtime?.configRevision ?? null;
+    if (
+      section !== "workspace" ||
+      !connectionSaved ||
+      revision === null ||
+      workspaceAutoRevisionRef.current === revision
+    ) {
+      return;
+    }
+    workspaceAutoRevisionRef.current = revision;
+    void discoverWorkspace(revision);
+  }, [connectionSaved, discoverWorkspace, runtime?.configRevision, section]);
 
   async function checkManualWorkspace() {
     if (!manualHostPath.trim()) {
@@ -369,7 +386,8 @@ export function SshRuntimeSetup({
 
   return (
     <div className="space-y-7">
-      <section aria-labelledby="ssh-step-1-title" className="space-y-5">
+      {section === "connection" ? (
+        <section aria-labelledby="ssh-step-1-title" className="space-y-5">
         <StepHeading
           number={1}
           title="Connexion SSH et Hermes"
@@ -558,9 +576,11 @@ export function SshRuntimeSetup({
             La cible affichée diffère de la configuration enregistrée. Relancez « Tester SSH + enregistrer » avant la recherche du dossier.
           </p>
         ) : null}
-      </section>
+        </section>
+      ) : null}
 
-      <section aria-labelledby="ssh-step-2-title" className="space-y-5 border-t border-seam pt-6">
+      {section === "workspace" ? (
+        <section aria-labelledby="ssh-step-2-title" className="space-y-5">
         <StepHeading
           number={2}
           title="Dossier de travail Hermes"
@@ -590,7 +610,7 @@ export function SshRuntimeSetup({
                 leadingIcon={busy ? SpinnerIcon : FolderSearchIcon}
                 onClick={() => void discoverWorkspace()}
               >
-                Rechercher sur le VPS
+                {workspaceBusy ? "Analyse…" : "Relancer"}
               </Button>
             </div>
 
@@ -653,7 +673,7 @@ export function SshRuntimeSetup({
                   <input
                     value={manualHostPath}
                     onChange={(event) => setManualHostPath(event.target.value)}
-                    placeholder="/srv/hermes/workspace"
+                    placeholder="/srv/hermes-console/data/workspace"
                     className={inputClass}
                   />
                 </Field>
@@ -695,18 +715,21 @@ export function SshRuntimeSetup({
             ) : null}
           </>
         )}
-      </section>
+        </section>
+      ) : null}
 
-      <section aria-labelledby="ssh-step-3-title" className="border-t border-seam pt-6">
-        <AdvancedProvisioning
-          target={{ host: sshHost, port: Number(sshPort), user: sshUser, auth: sshAuth, password: sshPassword }}
-          remoteBaseUrl={baseUrl}
-          token={token}
-          defaultWorkdir={selected?.remoteWorkdir ?? manualHostPath}
-          disabled={busy}
-          onRuntimeChange={onRuntimeChange}
-        />
-      </section>
+      {section === "advanced" ? (
+        <section aria-labelledby="ssh-step-3-title">
+          <AdvancedProvisioning
+            target={{ host: sshHost, port: Number(sshPort), user: sshUser, auth: sshAuth, password: sshPassword }}
+            remoteBaseUrl={baseUrl}
+            token={token}
+            defaultWorkdir={selected?.remoteWorkdir ?? manualHostPath}
+            disabled={busy}
+            onRuntimeChange={onRuntimeChange}
+          />
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -900,8 +923,11 @@ function DiscoveryResults({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-[0.6875rem] text-muted-foreground">
         <Badge tone={discovery.installation.mode === "unknown" ? "warning" : "info"}>
-          Hermes {discovery.installation.mode}
+          Hermes {installationManagerLabel(discovery.installation.manager)}
         </Badge>
+        {discovery.installation.serviceUser ? (
+          <span>Service : <code className="font-mono">{discovery.installation.serviceUser}</code></span>
+        ) : null}
         {discovery.installation.resolvedTerminalCwd ? (
           <span>terminal.cwd : <code className="font-mono">{discovery.installation.resolvedTerminalCwd}</code></span>
         ) : null}
@@ -952,6 +978,17 @@ function DiscoveryResults({
       ))}
     </div>
   );
+}
+
+function installationManagerLabel(
+  manager: RuntimeSshWorkspaceDiscoveryDto["installation"]["manager"],
+) {
+  switch (manager) {
+    case "systemd-user": return "systemd utilisateur";
+    case "systemd-system": return "systemd système";
+    case "native-process": return "natif";
+    default: return manager;
+  }
 }
 
 function StorageMigration({

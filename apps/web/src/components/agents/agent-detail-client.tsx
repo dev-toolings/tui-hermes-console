@@ -108,7 +108,7 @@ export function AgentDetailClient({ agent }: { agent: AgentView }) {
         description={agent.description ?? "Sans description"}
         action={
           archived ? null : (
-            <ButtonLink href="/runs/new" variant="primary">
+            <ButtonLink href="/tasks/new" variant="primary">
               Lancer une mission
             </ButtonLink>
           )

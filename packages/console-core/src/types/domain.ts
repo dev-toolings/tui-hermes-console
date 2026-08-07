@@ -62,5 +62,6 @@ export type RuntimeWorkspaceStatus =
 export type ConnectorType = "gmail_imap" | "outlook_imap" | "pro_imap";
 export type ConnectorTestStatus = "unknown" | "healthy" | "failed";
 export type ThreadSource = "chat" | "mission";
+export type ThreadWorkflow = "general" | "software_delivery";
 
 export type ArtifactDirection = "input" | "output";

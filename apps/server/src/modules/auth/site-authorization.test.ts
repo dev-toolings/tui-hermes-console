@@ -74,7 +74,7 @@ describe("site role permission matrix", () => {
 
   test("assigns every current action to the five roles without broadening specialized roles", () => {
     expect(SITE_ROLE_MATRIX_VERSION).toBe("2026-08-01.us-g1-006e.v1");
-    expect(SITE_ACTIONS).toHaveLength(31);
+    expect(SITE_ACTIONS).toHaveLength(37);
 
     for (const action of SITE_ACTIONS) {
       expect(canPerformSiteAction("admin", action)).toBe(true);
@@ -92,9 +92,12 @@ describe("site role permission matrix", () => {
     expect(canPerformSiteAction("operator", "thread.agent.switch")).toBe(true);
     expect(canPerformSiteAction("operator", "ownership.transfer")).toBe(true);
     expect(canPerformSiteAction("operator", "run.approve")).toBe(false);
+    expect(canPerformSiteAction("operator", "guided.task.execute")).toBe(true);
     expect(canPerformSiteAction("operator", "agent.create")).toBe(false);
 
     expect(canPerformSiteAction("requester", "thread.create")).toBe(true);
+    expect(canPerformSiteAction("requester", "guided.task.create")).toBe(true);
+    expect(canPerformSiteAction("requester", "guided.task.execute")).toBe(false);
     expect(canPerformSiteAction("requester", "agent.read")).toBe(true);
     expect(canPerformSiteAction("requester", "connector.read")).toBe(true);
     expect(canPerformSiteAction("requester", "thread.read")).toBe(true);
@@ -106,6 +109,7 @@ describe("site role permission matrix", () => {
     expect(canPerformSiteAction("requester", "run.cancel")).toBe(false);
 
     expect(canPerformSiteAction("approver", "run.approve")).toBe(true);
+    expect(canPerformSiteAction("approver", "guided.task.decide")).toBe(true);
     expect(canPerformSiteAction("approver", "run.read")).toBe(true);
     expect(canPerformSiteAction("approver", "artifact.read")).toBe(true);
     expect(canPerformSiteAction("approver", "agent.read")).toBe(false);

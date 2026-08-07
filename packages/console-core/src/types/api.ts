@@ -286,6 +286,9 @@ export type RuntimeSshWorkspaceDiscoveryDto = {
   configRevision: number;
   installation: {
     mode: "native" | "docker" | "unknown";
+    manager: "docker" | "systemd-user" | "systemd-system" | "native-process" | "unknown";
+    serviceUnit: string | null;
+    serviceUser: string | null;
     /** Répertoire de données Hermes vu par Hermes. Jamais son contenu. */
     hermesHome: string | null;
     terminalCwd: string | null;
@@ -302,6 +305,42 @@ export type RuntimeSshWorkspaceDiscoveryDto = {
   storageMigration?: RuntimeSshStorageMigrationAvailabilityDto;
   checkedAt: string;
 };
+
+export type RuntimeDirectWorkspaceProofLevel =
+  | "verified"
+  | "console_only"
+  | "misaligned"
+  | "unavailable";
+
+export type RuntimeDirectWorkspaceDiscoveryDto = {
+  transport: "direct";
+  scope: "local" | "remote";
+  configRevision: number | null;
+  proofLevel: RuntimeDirectWorkspaceProofLevel;
+  reasonCode:
+    | "DIRECT_WORKSPACE_VERIFIED"
+    | "DIRECT_WORKSPACE_CONSOLE_ONLY"
+    | "DIRECT_WORKSPACE_MISALIGNED"
+    | "DIRECT_WORKSPACE_UNAVAILABLE"
+    | "DIRECT_REMOTE_WORKSPACE_UNSUPPORTED";
+  sharedWorkdir: {
+    path: string;
+    source: "env" | "default";
+    exists: boolean;
+    readable: boolean;
+    writable: boolean;
+    symlink: boolean;
+  } | null;
+  hermesTerminalCwd: string | null;
+  warnings: string[];
+  blockers: string[];
+  restartRequired: boolean;
+  checkedAt: string;
+};
+
+export type RuntimeWorkspaceDiscoveryDto =
+  | ({ transport: "ssh" } & RuntimeSshWorkspaceDiscoveryDto)
+  | RuntimeDirectWorkspaceDiscoveryDto;
 
 export type RuntimeProvisionMode = "docker" | "native";
 

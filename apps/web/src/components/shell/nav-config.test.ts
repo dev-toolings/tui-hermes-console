@@ -17,9 +17,9 @@ describe("persona navigation", () => {
       "artifact.read",
     ]);
     expect(navForCapabilities(ALL_NAV, capabilities).map((item) => item.href)).toEqual([
-      "/chat",
       "/sessions",
       "/artifacts",
+      "/chat",
       "/overview",
       "/roadmap",
       "/updates",
@@ -38,11 +38,12 @@ describe("persona navigation", () => {
       "artifact.read",
     ]);
     expect(navForCapabilities(ALL_NAV, capabilities).map((item) => item.href)).toEqual([
-      "/chat",
+      "/tasks/new",
       "/sessions",
       "/agents",
       "/skills",
       "/artifacts",
+      "/chat",
       "/overview",
       "/roadmap",
       "/updates",
@@ -59,11 +60,11 @@ describe("persona navigation", () => {
       "audit.read",
     ]);
     expect(navForCapabilities(ALL_NAV, capabilities).map((item) => item.href)).toEqual([
-      "/chat",
       "/sessions",
       "/agents",
       "/skills",
       "/artifacts",
+      "/chat",
       "/overview",
       "/roadmap",
       "/updates",
@@ -72,8 +73,9 @@ describe("persona navigation", () => {
     ]);
   });
 
-  test("Chat is the default and the operational indexes have explicit metadata", () => {
-    expect(DEFAULT_CONSOLE_PATH).toBe("/chat");
+  test("guided work is the default and the operational indexes have explicit metadata", () => {
+    expect(DEFAULT_CONSOLE_PATH).toBe("/tasks/new");
+    expect(pageMeta("/tasks/new").title).toBe("Nouvelle tâche");
     expect(pageMeta("/overview").title).toBe("Vue d’ensemble");
     expect(pageMeta("/sessions").title).toBe("Sessions");
     expect(pageMeta("/skills").title).toBe("Skills");

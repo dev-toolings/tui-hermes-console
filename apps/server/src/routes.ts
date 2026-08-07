@@ -48,6 +48,7 @@ import * as sshHosts from "@/api/runtime/ssh-hosts/route";
 import * as runtimeTest from "@/api/runtime/test/route";
 import * as runtimeSshConnect from "@/api/runtime/ssh/connect/route";
 import * as runtimeSshWorkspaceDiscover from "@/api/runtime/ssh/workspace/discover/route";
+import * as runtimeWorkspaceDiscover from "@/api/runtime/workspace/discover/route";
 import * as runtimeSshWorkspaceCheck from "@/api/runtime/ssh/workspace/check/route";
 import * as runtimeSshWorkspace from "@/api/runtime/ssh/workspace/route";
 import * as runtimeSshHostKeyScan from "@/api/runtime/ssh/host-key/scan/route";
@@ -79,6 +80,13 @@ import * as siteMandate from "@/api/site/mandates/[mandateId]/route";
 import * as siteMandateAssignments from "@/api/site/mandates/[mandateId]/assignments/route";
 import * as siteMandateAssignment from "@/api/site/mandates/[mandateId]/assignments/[userId]/route";
 import * as ownership from "@/api/ownership/[resourceType]/[resourceId]/route";
+import * as guidedTasks from "@/api/guided/tasks/route";
+import * as guidedTask from "@/api/guided/tasks/[taskId]/route";
+import * as guidedTaskRevisions from "@/api/guided/tasks/[taskId]/revisions/route";
+import * as guidedTaskDecisions from "@/api/guided/tasks/[taskId]/decisions/route";
+import * as guidedTaskAttempts from "@/api/guided/tasks/[taskId]/attempts/route";
+import * as guidedRepositories from "@/api/guided/repositories/route";
+import * as guidedRepository from "@/api/guided/repositories/[projectId]/route";
 import type { SiteAction } from "@/modules/auth/site-authorization";
 
 export type RouteModule = Record<string, unknown>;
@@ -160,6 +168,43 @@ export const ROUTES: RouteDefinition[] = [
     path: "/api/ownership/:resourceType/:resourceId",
     module: ownership,
     access: siteAccess({ PUT: "ownership.transfer" }),
+  },
+
+  {
+    path: "/api/guided/repositories",
+    module: guidedRepositories,
+    access: siteAccess({ GET: "guided.task.read", POST: "guided.repository.manage" }),
+  },
+  {
+    path: "/api/guided/repositories/:projectId",
+    module: guidedRepository,
+    access: siteAccess({ PUT: "guided.repository.manage" }),
+  },
+  {
+    path: "/api/guided/tasks",
+    module: guidedTasks,
+    access: siteAccess({ GET: "guided.task.read", POST: "guided.task.create" }),
+  },
+  {
+    path: "/api/guided/tasks/:taskId",
+    module: guidedTask,
+    access: siteAccess({ GET: "guided.task.read" }),
+  },
+  {
+    path: "/api/guided/tasks/:taskId/revisions",
+    module: guidedTaskRevisions,
+    access: siteAccess({ POST: "guided.task.update" }),
+  },
+  {
+    path: "/api/guided/tasks/:taskId/decisions",
+    module: guidedTaskDecisions,
+    access: siteAccess({ POST: "guided.task.decide" }),
+  },
+  {
+    path: "/api/guided/tasks/:taskId/attempts",
+    module: guidedTaskAttempts,
+    access: siteAccess({ POST: "guided.task.execute" }),
+    requiresAiConsent: { POST: true },
   },
 
   {
@@ -296,6 +341,7 @@ export const ROUTES: RouteDefinition[] = [
   { path: "/api/runtime/ssh-hosts", module: sshHosts, access: installationAccess },
   { path: "/api/runtime/test", module: runtimeTest, access: installationAccess },
   { path: "/api/runtime/ssh/connect", module: runtimeSshConnect, access: installationAccess },
+  { path: "/api/runtime/workspace/discover", module: runtimeWorkspaceDiscover, access: installationAccess },
   { path: "/api/runtime/ssh/workspace/discover", module: runtimeSshWorkspaceDiscover, access: installationAccess },
   { path: "/api/runtime/ssh/workspace/check", module: runtimeSshWorkspaceCheck, access: installationAccess },
   { path: "/api/runtime/ssh/workspace", module: runtimeSshWorkspace, access: installationAccess },

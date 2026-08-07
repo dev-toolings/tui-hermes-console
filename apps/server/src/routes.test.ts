@@ -35,6 +35,7 @@ describe("route authorization inventory", () => {
       "/api/runtime/ssh-hosts",
       "/api/runtime/test",
       "/api/runtime/ssh/connect",
+      "/api/runtime/workspace/discover",
       "/api/runtime/ssh/workspace/discover",
       "/api/runtime/ssh/workspace/check",
       "/api/runtime/ssh/workspace",
@@ -95,13 +96,14 @@ describe("route authorization inventory", () => {
     ).toEqual({ boundary: "site", actions: { POST: "data.lifecycle.purge" } });
   });
 
-  test("declares exactly the three AI-start routes in the mounted manifest", () => {
+  test("declares every AI-start route in the mounted manifest", () => {
     const consentRoutes = ROUTES.flatMap((route) =>
       Object.entries(route.requiresAiConsent ?? {})
         .filter(([, required]) => required)
         .map(([method]) => `${method} ${route.path}`),
     );
     expect(consentRoutes).toEqual([
+      "POST /api/guided/tasks/:taskId/attempts",
       "POST /api/runs/:runId/retry",
       "POST /api/threads",
       "POST /api/threads/:threadId/messages",

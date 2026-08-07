@@ -12,7 +12,9 @@ const STATUS_LABELS: Record<GateStatus, { label: string; tone: "success" | "info
 };
 
 const FOUNDATION = [
-  "Agents, missions, sessions et artefacts (SHA-256, quotas, chemins durcis)",
+  "Demande guidée par intention, résultat attendu, exclusions et plan validé",
+  "Contrat de progression métier prêt pour les futures exécutions isolées",
+  "Missions, sessions et artefacts (SHA-256, quotas, chemins durcis)",
   "Runtime direct ou tunnel SSH, credentials chiffrés, connecteurs IMAP typés",
   "Approbations, annulation, retry, réconciliation et détection d'inactivité",
   "Journal d'audit append-only, export expurgé et rétention",
@@ -30,24 +32,29 @@ type Gate = {
 const GATES: Gate[] = [
   {
     id: 0,
-    title: "Validation commerciale",
-    status: "target",
+    title: "Validation du parcours guidé",
+    status: "in-progress",
     summary:
-      "Prouver le wedge avant de construire la fleet : un workflow étroit déployé chez un client, par partenaire.",
+      "Prouver qu’un demandeur métier peut cadrer puis vérifier une modification sans comprendre Git, le shell ou Hermes.",
     items: [
       "Recruter trois agences ou intégrateurs partenaires",
-      "Un workflow étroit déployé chez un client par partenaire",
+      "Demande, exclusions et plan compris puis validés avant exécution",
+      "Résultat vérifiable sans imposer une pull request au demandeur",
+      "Un workflow réel déployé chez un client par partenaire",
       "Mesurer installation, taux terminal, reprises manuelles, coût et valeur livrée",
       "Engagement payant avant toute fleet",
     ],
   },
   {
     id: 1,
-    title: "Contrat d'exploitation",
+    title: "Livraison logicielle sûre",
     status: "in-progress",
     summary:
       "Rendre le produit exploitable et défendable en production. La Gate reste ouverte sur les preuves E2E.",
     items: [
+      "Révision de spécification et commit de base figés par tentative",
+      "Sandbox, branche et périmètre de dépôt attribués",
+      "Diff, tests, fichiers modifiés et preuve métier consultables",
       "Persistance et durabilité des artefacts en production",
       "Confinement du runtime Hermes (pinning, isolation OS)",
       "Policy fail-closed hors process agent avec approbations signées et attribuées",
@@ -58,21 +65,24 @@ const GATES: Gate[] = [
   },
   {
     id: 2,
-    title: "Équipe et client",
+    title: "Validations métier et technique",
     status: "in-progress",
     summary:
-      "Séparer opérateur et client final. Les rôles, l'ownership et les politiques sont implémentés localement ; l'acceptation E2E reste à faire.",
+      "Attribuer séparément la validation du résultat et celle des décisions techniques sensibles.",
     items: [
       "Site ou projet comme frontière minimale",
       "Rôles admin, operator, requester, approver et auditor",
       "Ownership sur agents, missions, artefacts et connecteurs",
+      "Validation fonctionnelle par le demandeur métier",
+      "Validation technique pour dépendance, migration, auth, paiement, infrastructure ou suppression",
+      "Mise en attente compréhensible lorsqu’un approbateur technique manque",
       "OIDC générique, puis SAML/SCIM sur demande qualifiée",
       "Politiques par outil, chemin, connecteur, modèle et budget",
     ],
   },
   {
     id: 3,
-    title: "Edge / Relay et fleet",
+    title: "Distribution Edge / Relay",
     status: "target",
     summary:
       "Étendre l'agent à plusieurs sites et à plusieurs runtimes, sans ouvrir le socket Docker.",

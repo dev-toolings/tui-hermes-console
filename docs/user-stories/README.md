@@ -1,10 +1,10 @@
 # User stories normatives — Hermes Console
 
-**Version :** 1.0
+**Version :** 1.2
 
-**Date :** 31-07-2026
+**Date :** 06-08-2026
 
-**Source :** [`../PRD.md`](../PRD.md) v1.2
+**Source :** [`../PRD.md`](../PRD.md) v1.5
 
 **Périmètre :** Gates 0 à 3
 
@@ -15,7 +15,7 @@ contrat d'acceptation de la livraison.
 
 ~~~text
 ╔══════════════════╗
-║ PRD v1.2         ║
+║ PRD v1.5         ║
 ║ vérité produit   ║
 ╚════════╤═════════╝
          │ exigences · Gates 0–3
@@ -51,6 +51,8 @@ suivante. Composants : PRD, contrats d'acceptation, rapport de preuve.
 
 - Les Gates sont séquentielles. Une Gate ne passe que si toutes ses stories obligatoires sont
   `ACCEPTÉES` ou si une dérogation datée, bornée et approuvée est jointe au rapport.
+- Une story explicitement marquée `OPTIONNELLE POUR GATE 0` ne bloque pas la décision de Gate. Elle
+  reste toutefois non livrée tant que ses scénarios, preuves et reviewers ne sont pas satisfaits.
 - La persistance des artefacts, le confinement OS, le refus fail-closed, la confiance de clé d'hôte,
   l'absence de fallback d'authentification, le chemin admin/recovery et la révocation effective ne
   sont pas dérogeables. Une Gate qui manque l'un de ces contrôles reste `BLOQUÉE`.

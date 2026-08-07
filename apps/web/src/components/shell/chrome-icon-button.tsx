@@ -20,7 +20,7 @@ export function ChromeIconButton({ className, type, ...props }: ComponentProps<"
     <button
       type={type ?? "button"}
       className={cn(
-        "inline-flex size-8 shrink-0 items-center justify-center rounded-md",
+        "inline-flex size-11 shrink-0 items-center justify-center rounded-md",
         "text-muted-foreground transition-colors hover:bg-muted",
         className,
       )}
