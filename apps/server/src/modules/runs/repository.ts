@@ -1051,6 +1051,7 @@ export async function getThreadSnapshot(
         sizeBytes: artifacts.sizeBytes,
         checksumSha256: artifacts.checksumSha256,
         createdAt: artifacts.createdAt,
+        deletedAt: artifacts.deletedAt,
       })
       .from(artifacts)
       .innerJoin(runs, eq(artifacts.runId, runs.id))
@@ -1098,6 +1099,7 @@ export async function getThreadSnapshot(
       sizeBytes: row.sizeBytes,
       checksumSha256: row.checksumSha256,
       createdAt: row.createdAt.toISOString(),
+      deletedAt: row.deletedAt?.toISOString() ?? null,
     })),
     cursor: eventRows.at(-1)?.cursor ?? 0,
   };

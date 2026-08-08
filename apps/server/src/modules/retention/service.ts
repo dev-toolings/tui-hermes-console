@@ -391,16 +391,16 @@ export async function findLifecycleCandidates(
           coalesce((SELECT max(r.ended_at) FROM runs r WHERE r.site_id = t.site_id AND r.thread_id = t.id), t.updated_at),
           coalesce((SELECT max(r.last_event_at) FROM runs r WHERE r.site_id = t.site_id AND r.thread_id = t.id), t.updated_at),
           coalesce((SELECT max(re.occurred_at) FROM run_events re JOIN runs r ON r.id = re.run_id WHERE r.site_id = t.site_id AND r.thread_id = t.id), t.updated_at),
-          coalesce((SELECT max(a.created_at) FROM artifacts a JOIN runs r ON r.id = a.run_id WHERE a.site_id = t.site_id AND r.site_id = t.site_id AND r.thread_id = t.id), t.updated_at)
+          coalesce((SELECT max(a.created_at) FROM artifacts a JOIN runs r ON r.id = a.run_id WHERE a.site_id = t.site_id AND a.deleted_at IS NULL AND r.site_id = t.site_id AND r.thread_id = t.id), t.updated_at)
         ) AS activity_at,
         (SELECT count(*)::int FROM runs r WHERE r.site_id = t.site_id AND r.thread_id = t.id) AS run_count,
         (SELECT count(*)::int FROM messages m WHERE m.thread_id = t.id) AS message_count,
-        (SELECT count(*)::int FROM artifacts a JOIN runs r ON r.id = a.run_id WHERE a.site_id = t.site_id AND r.site_id = t.site_id AND r.thread_id = t.id) AS artifact_count,
-        coalesce((SELECT sum(a.size_bytes)::bigint FROM artifacts a JOIN runs r ON r.id = a.run_id WHERE a.site_id = t.site_id AND r.site_id = t.site_id AND r.thread_id = t.id), 0)::bigint AS artifact_bytes,
+        (SELECT count(*)::int FROM artifacts a JOIN runs r ON r.id = a.run_id WHERE a.site_id = t.site_id AND a.deleted_at IS NULL AND r.site_id = t.site_id AND r.thread_id = t.id) AS artifact_count,
+        coalesce((SELECT sum(a.size_bytes)::bigint FROM artifacts a JOIN runs r ON r.id = a.run_id WHERE a.site_id = t.site_id AND a.deleted_at IS NULL AND r.site_id = t.site_id AND r.thread_id = t.id), 0)::bigint AS artifact_bytes,
         coalesce((SELECT jsonb_agg(r.id ORDER BY r.id) FROM runs r WHERE r.site_id = t.site_id AND r.thread_id = t.id), '[]'::jsonb) AS run_ids,
         coalesce((SELECT jsonb_agg(h.checksum_sha256 ORDER BY h.checksum_sha256)
                   FROM (SELECT DISTINCT a.checksum_sha256
-                        FROM artifacts a JOIN runs r ON r.id = a.run_id WHERE a.site_id = t.site_id AND r.site_id = t.site_id AND r.thread_id = t.id) h), '[]'::jsonb) AS artifact_hashes
+                        FROM artifacts a JOIN runs r ON r.id = a.run_id WHERE a.site_id = t.site_id AND a.deleted_at IS NULL AND r.site_id = t.site_id AND r.thread_id = t.id) h), '[]'::jsonb) AS artifact_hashes
       FROM threads t
       WHERE t.site_id = ${siteId}
         AND EXISTS (SELECT 1 FROM runs r WHERE r.site_id = t.site_id AND r.thread_id = t.id)

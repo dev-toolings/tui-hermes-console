@@ -8,6 +8,7 @@ import { getConsoleArtifactRoot } from "@/modules/artifacts/paths";
 import { assertSameOriginMutation } from "@/modules/api/same-origin";
 import type { AuthenticatedRouteContext } from "@/modules/api/route-context";
 import { z } from "zod";
+import { deleteArtifactEverywhere } from "@/modules/artifacts/delete-artifact";
 
 export async function GET(
   request: Request,
@@ -62,6 +63,25 @@ export async function GET(
         { status: error.status },
       );
     }
+    return apiErrorResponse(error);
+  }
+}
+
+export async function DELETE(
+  _request: Request,
+  context: AuthenticatedRouteContext<{ fileId: string }>,
+  dependencies: { delete: typeof deleteArtifactEverywhere } = {
+    delete: deleteArtifactEverywhere,
+  },
+) {
+  try {
+    const { fileId: rawFileId } = await context.params;
+    const fileId = z.string().trim().min(1).max(200).parse(rawFileId);
+    return Response.json({
+      deleted: true,
+      ...(await dependencies.delete(context.siteContext, fileId)),
+    });
+  } catch (error) {
     return apiErrorResponse(error);
   }
 }

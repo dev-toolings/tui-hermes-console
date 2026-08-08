@@ -1,6 +1,7 @@
 "use client";
 
 import type { ComponentProps } from "react";
+import { PanelLeftIcon } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -9,7 +10,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarTrigger,
+  useSidebar,
 } from "@boardui/ui";
 import { Link } from "@/lib/router";
 import { NavFooter } from "./nav-footer";
@@ -17,6 +18,7 @@ import { NavMain } from "./nav-main";
 import { NavSecondary } from "./nav-secondary";
 import { NavUser } from "./nav-user";
 import { RuntimeStatusCard } from "./runtime-status-card";
+import { ChromeIconButton } from "./chrome-icon-button";
 import { DEFAULT_CONSOLE_PATH } from "./nav-config";
 
 export function AppSidebar({
@@ -25,10 +27,12 @@ export function AppSidebar({
 }: ComponentProps<typeof Sidebar> & {
   capabilities: ReadonlySet<string>;
 }) {
+  const { toggleSidebar } = useSidebar();
+
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader>
-        <div className="flex items-center gap-1">
+      <SidebarHeader className="h-12 shrink-0 justify-center px-2 py-0 group-data-[collapsible=icon]:px-0">
+        <div className="flex items-center gap-1 group-data-[collapsible=icon]:justify-center">
           <SidebarMenu className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
             <SidebarMenuItem>
               <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5!">
@@ -45,11 +49,14 @@ export function AppSidebar({
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
-          <SidebarTrigger
+          <ChromeIconButton
+            onClick={toggleSidebar}
             aria-label="Basculer la barre latérale"
             title="Basculer la barre latérale"
-            className="size-8 shrink-0"
-          />
+            className="size-8 cursor-pointer hover:bg-sidebar-accent"
+          >
+            <PanelLeftIcon className="size-4" aria-hidden />
+          </ChromeIconButton>
         </div>
       </SidebarHeader>
 

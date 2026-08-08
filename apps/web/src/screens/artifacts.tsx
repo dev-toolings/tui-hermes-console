@@ -1,12 +1,19 @@
+"use client";
+
 import { Link } from "@/lib/router";
+import { useRouter } from "@/lib/router";
 import { DownloadIcon, FileIcon, FolderOpenIcon } from "lucide-react";
 import { Badge, Card, CardSurface, PageShell, SectionHeading } from "@/components/ui/boardui";
 import { formatBytes } from "@console/core/lib/format-bytes";
 import type { ArtifactsData } from "@/loaders";
+import { DeleteArtifactButton } from "@/components/artifacts/delete-artifact-button";
+import { readPersonaCapabilities } from "@/lib/persona-capabilities";
 
 
 export function ArtifactsScreen({ data }: { data: ArtifactsData }) {
   const rows = data.artifacts;
+  const router = useRouter();
+  const canDelete = readPersonaCapabilities().has("artifact.delete");
 
   return (
     <PageShell>
@@ -70,6 +77,14 @@ export function ArtifactsScreen({ data }: { data: ArtifactsData }) {
                     >
                       <DownloadIcon className="size-4" />
                     </a>
+                    {canDelete ? (
+                      <DeleteArtifactButton
+                        compact
+                        artifactId={artifact.id}
+                        filename={artifact.filename}
+                        onDeleted={router.refresh}
+                      />
+                    ) : null}
                   </span>
                 </div>
               ))

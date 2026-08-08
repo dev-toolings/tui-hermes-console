@@ -226,7 +226,9 @@ export function buildThreadMessagesFromSnapshot(snapshot: ThreadSnapshot): Threa
         id: artifact.id,
         type: artifact.mimeType?.startsWith("image/") ? "image" : "document",
         name: artifact.filename,
-        contentType: artifact.mimeType ?? undefined,
+        contentType: artifact.deletedAt
+          ? "application/x-hermes-deleted"
+          : artifact.mimeType ?? undefined,
         status: { type: "complete" },
         content: [],
       },
@@ -241,7 +243,9 @@ export function buildThreadMessagesFromSnapshot(snapshot: ThreadSnapshot): Threa
       message.role === "user" && message.runId
         ? inputArtifactsByRun.get(message.runId) ?? []
         : [];
-    const attachmentKey = attachments.map((attachment) => attachment.id).join("\0");
+    const attachmentKey = attachments
+      .map((attachment) => `${attachment.id}:${attachment.contentType ?? ""}`)
+      .join("\0");
 
     const cached = convertedMessages.get(message);
     if (

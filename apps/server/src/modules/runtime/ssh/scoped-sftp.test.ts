@@ -27,6 +27,9 @@ function fakeSftp(calls: string[]): SftpOps {
     async download(remotePath, localPath, maxBytes) {
       calls.push(`download:${remotePath}:${localPath}:${maxBytes}`);
     },
+    async remove(remotePath) {
+      calls.push(`remove:${remotePath}`);
+    },
   };
 }
 
@@ -77,6 +80,7 @@ describe("createScopedSftp", () => {
       "/tmp/local-output.part",
       100,
     );
+    await scoped.remove(`${ROOT}/runs/run-1/in/input.txt`);
 
     expect(calls).toEqual([
       `mkdirp:${ROOT}/runs/run-1/in`,
@@ -84,6 +88,7 @@ describe("createScopedSftp", () => {
       `stat:${ROOT}/runs/run-1/out/report.txt`,
       `upload:/tmp/local-input.txt:${ROOT}/runs/run-1/in/input.txt:644`,
       `download:${ROOT}/runs/run-1/out/report.txt:/tmp/local-output.part:100`,
+      `remove:${ROOT}/runs/run-1/in/input.txt`,
     ]);
   });
 

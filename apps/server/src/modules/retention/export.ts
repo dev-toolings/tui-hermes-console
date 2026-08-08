@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { getDatabase } from "@/db/client";
 import {
@@ -271,7 +271,11 @@ export async function createLifecycleExport(
       ? await tx
           .select()
           .from(artifacts)
-          .where(and(eq(artifacts.siteId, context.siteId), inArray(artifacts.runId, runIds)))
+          .where(and(
+            eq(artifacts.siteId, context.siteId),
+            inArray(artifacts.runId, runIds),
+            isNull(artifacts.deletedAt),
+          ))
           .orderBy(asc(artifacts.runId), asc(artifacts.id))
       : [];
 

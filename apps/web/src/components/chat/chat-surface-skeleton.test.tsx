@@ -20,6 +20,9 @@ describe("ChatSurfaceSkeleton", () => {
     const html = renderToStaticMarkup(<ChatSurfaceSkeleton />);
 
     expect(html).toContain('data-slot="chat-conversation-skeleton"');
+    expect(html).toContain("bg-background");
+    expect(html).not.toContain("#efeae2");
+    expect(html).not.toContain("#f4f1ea");
     expect(html).not.toContain('data-slot="chat-home-fallback"');
   });
 });

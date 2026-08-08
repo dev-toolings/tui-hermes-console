@@ -206,6 +206,9 @@ export function createSystemSshChannel(target: SshTarget): SshChannel {
       async download(remotePath: string, localPath: string, maxBytes: number) {
         await downloadBounded(remotePath, localPath, maxBytes);
       },
+      async remove(remotePath: string) {
+        await run(["rm", "-f", "--", shellQuote(remotePath)]);
+      },
     };
   }
 

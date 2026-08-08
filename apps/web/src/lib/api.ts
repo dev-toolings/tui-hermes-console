@@ -193,6 +193,119 @@ export const fetchArtifacts = (limit = 50) =>
     (r) => r.artifacts,
   );
 
+export const deleteArtifact = (fileId: string) =>
+  getJson<{
+    deleted: true;
+    artifactId: string;
+    runId: string;
+    filename: string;
+    deletedAt: string;
+    cleanupPending: boolean;
+  }>(`/api/files/${encodeURIComponent(fileId)}`, {
+    method: "DELETE",
+    headers: { "X-Hermes-Toast": "deleted" },
+  });
+
+export type LifecyclePolicyDto = {
+  siteId: string;
+  version: number;
+  retentionDays: number;
+  legalHoldEnabled: boolean;
+  legalHoldReason: string | null;
+  updatedByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LifecyclePreviewItemDto = {
+  resourceId: string;
+  activityAt: string;
+  runCount: number;
+  messageCount: number;
+  artifactCount: number;
+  artifactBytes: number;
+  runIds: string[];
+  artifactHashes: string[];
+};
+
+export type LifecyclePreviewDto = {
+  id: string;
+  siteId: string;
+  policyVersion: number;
+  retentionDays: number;
+  cutoffAt: string;
+  manifestSha256: string;
+  createdByUserId: string;
+  createdAt: string;
+  items: LifecyclePreviewItemDto[];
+};
+
+export const fetchLifecyclePolicy = () =>
+  getJson<{ policy: LifecyclePolicyDto }>("/api/settings/data-lifecycle").then(
+    (response) => response.policy,
+  );
+
+export const saveLifecyclePolicy = (input: {
+  retentionDays: number;
+  legalHoldEnabled: boolean;
+  legalHoldReason: string | null;
+  expectedVersion: number;
+}) =>
+  getJson<{ policy: LifecyclePolicyDto }>("/api/settings/data-lifecycle", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-Hermes-Toast": "0" },
+    body: JSON.stringify(input),
+  }).then((response) => response.policy);
+
+export const createLifecyclePreview = () =>
+  getJson<{ preview: LifecyclePreviewDto }>("/api/settings/data-lifecycle/previews", {
+    method: "POST",
+    headers: { "X-Hermes-Toast": "0" },
+  }).then((response) => response.preview);
+
+export const purgeLifecyclePreview = (previewId: string) =>
+  getJson<{
+    purge: {
+      previewId: string;
+      purgedAt: string;
+      purgedThreadCount: number;
+      purgedRunCount: number;
+      purgedArtifactCount: number;
+      cleanupPending: boolean;
+    };
+  }>("/api/settings/data-lifecycle/purges", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Hermes-Toast": "deleted" },
+    body: JSON.stringify({ previewId }),
+  }).then((response) => response.purge);
+
+export async function downloadLifecycleExport(previewId: string) {
+  await awaitServerReady();
+  const response = await fetch("/api/settings/data-lifecycle/exports", {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json", "X-Hermes-Toast": "0" },
+    body: JSON.stringify({ previewId }),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as
+      | { error?: { code?: string; message?: string } }
+      | null;
+    throw new ApiError(
+      response.status,
+      body?.error?.code ?? null,
+      body?.error?.message ?? "L’export de rétention a échoué.",
+    );
+  }
+  const blob = await response.blob();
+  const href = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = "hermes-console-data-lifecycle-export.json";
+  anchor.click();
+  URL.revokeObjectURL(href);
+}
+
 export const fetchHermesUpdates = (limit = 20) =>
   getJson<{
     releases: Array<{

@@ -24,14 +24,14 @@ export function ChatSurfaceSkeleton({ home }: { home?: ReactNode }) {
     <div
       role={showHome ? undefined : "status"}
       aria-label={showHome ? undefined : "Chargement de la conversation"}
-      className="oc-chat-shell flex h-full min-h-0 w-full bg-[var(--oc-shell-bg,#f4f1ea)] dark:bg-background"
+      className="oc-chat-shell flex h-full min-h-0 w-full bg-background"
     >
       {!showHome ? <span className="sr-only">Chargement</span> : null}
 
       <div
         role={showHome ? "status" : undefined}
         aria-label={showHome ? "Chargement des threads" : undefined}
-        className="hidden h-full w-[17.5rem] shrink-0 flex-col border-r border-border bg-[var(--oc-sidebar-bg,#efeae2)] md:flex dark:bg-background"
+        className="hidden h-full w-[17.5rem] shrink-0 flex-col border-r border-border bg-background md:flex"
       >
         {showHome ? <span className="sr-only">Chargement des threads</span> : null}
         {/* L'identité du produit n'attend rien du serveur : elle reste peinte. */}

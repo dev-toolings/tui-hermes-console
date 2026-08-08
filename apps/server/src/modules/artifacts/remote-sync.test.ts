@@ -13,6 +13,7 @@ import type { SftpOps } from "@/modules/runtime/ssh";
 import {
   pullRunOutputsFromWorkspace,
   pushRunInputsToWorkspace,
+  removeArtifactFromWorkspace,
 } from "./remote-sync";
 import { runInputDir, runOutputDir } from "./paths";
 
@@ -23,6 +24,7 @@ function workspace(sftp: Partial<SftpOps>, root = "/srv/hermes-console") {
     stat: async () => ({ size: 2, type: "file" }),
     upload: async () => undefined,
     download: async () => undefined,
+    remove: async () => undefined,
     ...sftp,
   };
   return {
@@ -32,6 +34,19 @@ function workspace(sftp: Partial<SftpOps>, root = "/srv/hermes-console") {
 }
 
 describe("remote artifact sync", () => {
+  test("supprime la copie distante dans le dossier exact du run", async () => {
+    const removed: string[] = [];
+    await removeArtifactFromWorkspace(
+      "run_delete",
+      "input",
+      "brief.pdf",
+      workspace({ remove: async (remote) => void removed.push(remote) }),
+    );
+    expect(removed).toEqual([
+      "/srv/hermes-console/runs/run_delete/in/brief.pdf",
+    ]);
+  });
+
   test("publishes remote inputs with a mode readable by the Hermes runtime", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "hermes-remote-sync-"));
     const uploads: Array<{ remote: string; mode?: number }> = [];

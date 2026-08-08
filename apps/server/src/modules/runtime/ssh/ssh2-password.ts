@@ -199,6 +199,17 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
           createWriteStream(localPath, { flags: "wx", mode: 0o600 }),
         );
       },
+      async remove(remotePath: string) {
+        await new Promise<void>((resolve, reject) => {
+          handle.unlink(remotePath, (error) => {
+            if (!error || Number((error as { code?: unknown }).code) === 2) {
+              resolve();
+              return;
+            }
+            reject(mapSshError(error));
+          });
+        });
+      },
     };
   }
 

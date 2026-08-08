@@ -73,8 +73,8 @@ describe("site role permission matrix", () => {
   });
 
   test("assigns every current action to the five roles without broadening specialized roles", () => {
-    expect(SITE_ROLE_MATRIX_VERSION).toBe("2026-08-01.us-g1-006e.v1");
-    expect(SITE_ACTIONS).toHaveLength(37);
+    expect(SITE_ROLE_MATRIX_VERSION).toBe("2026-08-07.artifact-delete.v2");
+    expect(SITE_ACTIONS).toHaveLength(38);
 
     for (const action of SITE_ACTIONS) {
       expect(canPerformSiteAction("admin", action)).toBe(true);
@@ -87,6 +87,7 @@ describe("site role permission matrix", () => {
 
     expect(canPerformSiteAction("operator", "thread.create")).toBe(true);
     expect(canPerformSiteAction("operator", "thread.delete")).toBe(true);
+    expect(canPerformSiteAction("operator", "artifact.delete")).toBe(true);
     expect(canPerformSiteAction("operator", "run.cancel")).toBe(true);
     expect(canPerformSiteAction("operator", "run.retry")).toBe(true);
     expect(canPerformSiteAction("operator", "thread.agent.switch")).toBe(true);
@@ -103,6 +104,7 @@ describe("site role permission matrix", () => {
     expect(canPerformSiteAction("requester", "thread.read")).toBe(true);
     expect(canPerformSiteAction("requester", "thread.message")).toBe(true);
     expect(canPerformSiteAction("requester", "artifact.create")).toBe(true);
+    expect(canPerformSiteAction("requester", "artifact.delete")).toBe(true);
     expect(canPerformSiteAction("requester", "thread.command")).toBe(true);
     expect(canPerformSiteAction("requester", "thread.agent.switch")).toBe(false);
     expect(canPerformSiteAction("requester", "thread.delete")).toBe(false);
@@ -112,6 +114,7 @@ describe("site role permission matrix", () => {
     expect(canPerformSiteAction("approver", "guided.task.decide")).toBe(true);
     expect(canPerformSiteAction("approver", "run.read")).toBe(true);
     expect(canPerformSiteAction("approver", "artifact.read")).toBe(true);
+    expect(canPerformSiteAction("approver", "artifact.delete")).toBe(false);
     expect(canPerformSiteAction("approver", "agent.read")).toBe(false);
     expect(canPerformSiteAction("approver", "connector.read")).toBe(false);
     expect(canPerformSiteAction("approver", "storage.read")).toBe(false);
@@ -119,6 +122,7 @@ describe("site role permission matrix", () => {
     expect(canPerformSiteAction("approver", "thread.message")).toBe(false);
 
     expect(canPerformSiteAction("auditor", "artifact.read")).toBe(true);
+    expect(canPerformSiteAction("auditor", "artifact.delete")).toBe(false);
     expect(canPerformSiteAction("auditor", "thread.command")).toBe(true);
     expect(canPerformSiteAction("auditor", "audit.read")).toBe(true);
     expect(canPerformSiteAction("auditor", "audit.export")).toBe(true);
@@ -164,11 +168,11 @@ describe("site role permission matrix", () => {
       reasonCode: "ROLE_PERMISSION_DENIED",
       beforeState: {
         role: "requester",
-        matrixVersion: "2026-08-01.us-g1-006e.v1",
+        matrixVersion: "2026-08-07.artifact-delete.v2",
       },
       afterState: {
         role: "requester",
-        matrixVersion: "2026-08-01.us-g1-006e.v1",
+        matrixVersion: "2026-08-07.artifact-delete.v2",
       },
       correlationId: "req_requester",
     });

@@ -3,6 +3,7 @@
 import { Dialog } from "@/components/ui/dialog";
 import { DownloadIcon, FileWarningIcon, LoaderCircleIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DeleteArtifactButton } from "@/components/artifacts/delete-artifact-button";
 
 export type FilePreviewKind = "pdf" | "image" | "word" | "excel" | "unsupported";
 
@@ -35,6 +36,8 @@ type FilePreviewDialogProps = {
   fileId: string;
   name: string;
   contentType?: string;
+  canDelete?: boolean;
+  onDeleted?: () => void;
 };
 
 type PreviewState =
@@ -48,6 +51,8 @@ export function FilePreviewDialog({
   fileId,
   name,
   contentType,
+  canDelete = false,
+  onDeleted,
 }: FilePreviewDialogProps) {
   const kind = filePreviewKind(name, contentType);
   const fileUrl = `/api/files/${encodeURIComponent(fileId)}`;
@@ -95,14 +100,26 @@ export function FilePreviewDialog({
       description="Aperçu de la pièce jointe"
       className="h-[min(88dvh,900px)] max-w-6xl"
       footer={
-        <a
-          href={fileUrl}
-          download={name}
-          className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        >
-          <DownloadIcon className="size-4" aria-hidden />
-          Télécharger
-        </a>
+        <>
+          {canDelete ? (
+            <DeleteArtifactButton
+              artifactId={fileId}
+              filename={name}
+              onDeleted={() => {
+                closePreview();
+                onDeleted?.();
+              }}
+            />
+          ) : null}
+          <a
+            href={fileUrl}
+            download={name}
+            className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <DownloadIcon className="size-4" aria-hidden />
+            Télécharger
+          </a>
+        </>
       }
     >
       <div className="flex h-full min-h-80 items-center justify-center overflow-auto rounded-lg bg-background">

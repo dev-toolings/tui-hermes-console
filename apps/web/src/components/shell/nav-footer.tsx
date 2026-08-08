@@ -72,10 +72,17 @@ export function NavFooter({ capabilities }: { capabilities: ReadonlySet<string> 
               <SidebarMenuButton asChild tooltip={updateStatus.label} isActive={false}>
                 <Link href={updateHref} className="text-muted-foreground">
                   {hermesIsUpToDate ? (
-                    <Badge tone="success">
-                      <CircleCheckIcon className="size-3" aria-hidden="true" />
-                      Hermes est à jour
-                    </Badge>
+                    <>
+                      {/* Rail icon : icône seule (le Badge large cassait le centrage). */}
+                      <CircleCheckIcon
+                        className="hidden text-pos-700 group-data-[collapsible=icon]:block"
+                        aria-hidden="true"
+                      />
+                      <Badge tone="success" className="group-data-[collapsible=icon]:hidden">
+                        <CircleCheckIcon className="size-3" aria-hidden="true" />
+                        Hermes est à jour
+                      </Badge>
+                    </>
                   ) : (
                     <>
                       <updateStatus.Icon className={updateStatus.iconClassName} aria-hidden="true" />

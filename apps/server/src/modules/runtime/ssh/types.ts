@@ -26,6 +26,8 @@ export type SftpOps = {
     localPath: string,
     maxBytes: number,
   ): Promise<void>;
+  /** Supprime un fichier distant. L'absence du fichier est un succès. */
+  remove(remotePath: string): Promise<void>;
 };
 
 export type SshExecResult = {

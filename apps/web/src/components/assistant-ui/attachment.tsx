@@ -6,9 +6,11 @@ import {
   MessagePrimitive,
   useAuiState,
 } from "@assistant-ui/react";
-import { FileIcon, XIcon } from "lucide-react";
+import { FileIcon, FileX2Icon, XIcon } from "lucide-react";
 import { useState } from "react";
 import { FilePreviewDialog } from "./file-preview-dialog";
+import { readPersonaCapabilities } from "@/lib/persona-capabilities";
+import { useRouter } from "@/lib/router";
 
 export function ComposerAddAttachment() {
   return null;
@@ -39,6 +41,9 @@ function UserMessageAttachment() {
   const name = useAuiState((state) => state.attachment.name);
   const contentType = useAuiState((state) => state.attachment.contentType);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const router = useRouter();
+  const deleted = contentType === "application/x-hermes-deleted";
+  const canDelete = readPersonaCapabilities().has("artifact.delete");
   const content = (
     <>
       <FileIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
@@ -50,7 +55,14 @@ function UserMessageAttachment() {
 
   return (
     <AttachmentPrimitive.Root className="aui-attachment-root min-w-0 max-w-full">
-      {id.startsWith("file_") ? (
+      {deleted ? (
+        <span className="flex h-8 min-w-0 items-center gap-2 rounded-lg bg-muted/60 px-2 text-xs text-muted-foreground">
+          <FileX2Icon className="size-3.5 shrink-0" aria-hidden />
+          <span className="min-w-0 truncate"><AttachmentPrimitive.Name /></span>
+          <span aria-hidden>·</span>
+          <span>supprimé</span>
+        </span>
+      ) : id.startsWith("file_") ? (
         <>
           <button
             type="button"
@@ -66,6 +78,8 @@ function UserMessageAttachment() {
             fileId={id}
             name={name}
             contentType={contentType}
+            canDelete={canDelete}
+            onDeleted={router.refresh}
           />
         </>
       ) : (

@@ -1296,6 +1296,7 @@ export const artifacts = pgTable(
     sizeBytes: integer("size_bytes").notNull(),
     checksumSha256: text("checksum_sha256").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (table) => [
     uniqueIndex("artifacts_site_id_idx").on(table.siteId, table.id),

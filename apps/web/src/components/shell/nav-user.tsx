@@ -175,7 +175,7 @@ export function NavUser() {
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              className="h-auto cursor-pointer rounded-xl border-2 border-transparent bg-muted py-2 pl-2.5 pr-3 transition-colors hover:border-border hover:bg-muted data-open:border-border data-open:bg-muted data-open:text-foreground"
+              className="h-auto cursor-pointer rounded-xl bg-muted py-2 pl-2.5 pr-3 transition-colors hover:bg-neutral-200 data-open:bg-neutral-200 data-open:text-foreground group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0! group-data-[collapsible=icon]:hover:bg-sidebar-accent group-data-[collapsible=icon]:data-open:bg-sidebar-accent dark:hover:bg-neutral-800 dark:data-open:bg-neutral-800"
             >
               <Avatar className="size-8 rounded-full">
                 <AvatarFallback className="rounded-full bg-primary/12 text-[0.6875rem] font-semibold text-primary">

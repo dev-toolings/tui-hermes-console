@@ -11,6 +11,12 @@ export type PersonaCapability =
   | "run.read"
   | "run.approve"
   | "artifact.read"
+  | "artifact.delete"
+  | "data.lifecycle.read"
+  | "data.lifecycle.manage"
+  | "data.lifecycle.preview"
+  | "data.lifecycle.export"
+  | "data.lifecycle.purge"
   | "membership.manage"
   | "audit.read";
 

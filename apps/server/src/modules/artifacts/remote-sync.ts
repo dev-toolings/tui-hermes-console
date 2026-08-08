@@ -29,6 +29,7 @@ export class RemoteSyncError extends Error {
       | "list_local_inputs"
       | "validate_local_input"
       | "upload_input"
+      | "delete_remote_artifact"
       | "list_remote_outputs"
       | "stat_remote_output"
       | "validate_remote_output"
@@ -73,6 +74,41 @@ export async function pushRunInputs(runId: string): Promise<void> {
     channel: workspace.channel,
     root: workspace.hostRoot,
   });
+}
+
+/** Supprime la copie de travail distante d'un artefact. No-op en mode direct. */
+export async function removeRemoteArtifact(
+  runId: string,
+  direction: "input" | "output",
+  filename: string,
+): Promise<void> {
+  const workspace = await getRemoteWorkspace();
+  if (!workspace) return;
+  await removeArtifactFromWorkspace(runId, direction, filename, {
+    channel: workspace.channel,
+    root: workspace.hostRoot,
+  });
+}
+
+export async function removeArtifactFromWorkspace(
+  runId: string,
+  direction: "input" | "output",
+  filename: string,
+  workspace: RemoteWorkspace,
+): Promise<void> {
+  if (sanitizeFilename(filename) !== filename) {
+    throw new RemoteSyncError(
+      runId,
+      "delete_remote_artifact",
+      "nom d’artefact distant invalide",
+    );
+  }
+  const remote = remoteRunPaths(workspace.root, runId);
+  const directory = direction === "input" ? remote.input : remote.output;
+  const sftp = await openScopedSftp(runId, workspace);
+  await correlated(runId, "delete_remote_artifact", () =>
+    sftp.remove(`${directory}/${filename}`),
+  );
 }
 
 export async function pushRunInputsToWorkspace(

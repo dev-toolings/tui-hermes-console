@@ -4,7 +4,7 @@ import { appendAuditEntry } from "@/modules/audit/service";
 import { AuthError, type SiteRequestContext } from "./service";
 import { describeError, log } from "@/observability/log";
 
-export const SITE_ROLE_MATRIX_VERSION = "2026-08-01.us-g1-006e.v1";
+export const SITE_ROLE_MATRIX_VERSION = "2026-08-07.artifact-delete.v2";
 
 export const SITE_ACTIONS = [
   "agent.read",
@@ -34,6 +34,7 @@ export const SITE_ACTIONS = [
   "run.approve",
   "artifact.read",
   "artifact.create",
+  "artifact.delete",
   "storage.read",
   "membership.manage",
   "audit.read",
@@ -64,6 +65,7 @@ const REQUEST_ACTIONS: readonly SiteAction[] = [
   "thread.create",
   "thread.message",
   "artifact.create",
+  "artifact.delete",
   "guided.task.create",
   "guided.task.update",
 ];
@@ -104,6 +106,7 @@ export const SITE_ROLE_PERMISSIONS: Readonly<
     "run.read",
     "artifact.read",
     "artifact.create",
+    "artifact.delete",
   ]),
   approver: new Set([
     "thread.read",

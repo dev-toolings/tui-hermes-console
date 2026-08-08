@@ -232,6 +232,7 @@ describe("thread-messages", () => {
           sizeBytes: 42,
           checksumSha256: "abc",
           createdAt: "2026-01-01T00:00:00.000Z",
+          deletedAt: null,
         },
       ],
       cursor: 0,
@@ -255,6 +256,67 @@ describe("thread-messages", () => {
         content: [],
       },
     ]);
+  });
+
+  test("conserve un tombstone lisible après suppression d’une pièce jointe", () => {
+    const snapshot = {
+      id: "thr_deleted",
+      title: "t",
+      source: "chat" as const,
+      workflow: "general" as const,
+      agentName: "Hermes",
+      instructions: "",
+      model: "test",
+      effectiveModel: "test",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      messages: [{
+        id: "msg_1",
+        role: "user" as const,
+        content: [{ type: "text" as const, text: "analyse" }],
+        runId: "run_deleted",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }],
+      runs: [{
+        id: "run_deleted",
+        status: "completed" as const,
+        input: "analyse",
+        output: "ok",
+        usage: null,
+        error: null,
+        hermesResponseId: null,
+        runtimeSession: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        startedAt: null,
+        endedAt: null,
+        lastEventAt: null,
+      }],
+      events: [],
+      artifacts: [{
+        id: "file_deleted",
+        runId: "run_deleted",
+        direction: "input" as const,
+        filename: "secret.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 42,
+        checksumSha256: "abc",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        deletedAt: "2026-01-02T00:00:00.000Z",
+      }],
+      cursor: 0,
+    } satisfies ThreadSnapshot;
+
+    const before = buildThreadMessagesFromSnapshot({
+      ...snapshot,
+      artifacts: snapshot.artifacts.map((artifact) => ({ ...artifact, deletedAt: null })),
+    });
+    const after = buildThreadMessagesFromSnapshot(snapshot);
+    expect(after[0]).not.toBe(before[0]);
+    expect(after[0]?.attachments?.[0]).toMatchObject({
+      id: "file_deleted",
+      name: "secret.pdf",
+      contentType: "application/x-hermes-deleted",
+    });
   });
 
   test("conserve le même message assistant entre terminal live et persistance", () => {

@@ -71,6 +71,7 @@ export type ArtifactDto = {
   sizeBytes: number;
   checksumSha256: string;
   createdAt: string;
+  deletedAt: string | null;
 };
 
 export type ThreadSource = "chat" | "mission";

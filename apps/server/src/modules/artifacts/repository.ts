@@ -342,6 +342,7 @@ export async function listArtifactsForRun(
             isRequesterScope(scope)
               ? eq(artifacts.ownerUserId, scope.userId)
               : undefined,
+            isNull(artifacts.deletedAt),
           )
         : and(
             eq(artifacts.siteId, scope.siteId),
@@ -352,6 +353,7 @@ export async function listArtifactsForRun(
             isRequesterScope(scope)
               ? eq(artifacts.ownerUserId, scope.userId)
               : undefined,
+            isNull(artifacts.deletedAt),
           ),
     )
     .orderBy(desc(artifacts.createdAt));
@@ -369,6 +371,7 @@ export async function listAllArtifacts(scope: SiteRequestContext, limit = 50): P
         ? eq(artifacts.projectId, scope.mandateProjectId)
         : undefined,
       scope.role === "requester" ? eq(artifacts.ownerUserId, scope.userId) : undefined,
+      isNull(artifacts.deletedAt),
     ))
     .orderBy(desc(artifacts.createdAt))
     .limit(limit);
@@ -386,6 +389,7 @@ export async function getArtifact(context: SiteRequestContext, fileId: string) {
         ? eq(artifacts.projectId, context.mandateProjectId)
         : undefined,
       context.role === "requester" ? eq(artifacts.ownerUserId, context.userId) : undefined,
+      isNull(artifacts.deletedAt),
     ))
     .limit(1);
   if (!row) {
@@ -665,6 +669,7 @@ async function insertArtifact(input: {
     sizeBytes: input.sizeBytes,
     checksumSha256: input.checksumSha256,
     createdAt: now.toISOString(),
+    deletedAt: null,
   };
 }
 
@@ -713,6 +718,7 @@ function toDto(row: typeof artifacts.$inferSelect): ArtifactDto {
     sizeBytes: row.sizeBytes,
     checksumSha256: row.checksumSha256,
     createdAt: row.createdAt.toISOString(),
+    deletedAt: row.deletedAt?.toISOString() ?? null,
   };
 }
 

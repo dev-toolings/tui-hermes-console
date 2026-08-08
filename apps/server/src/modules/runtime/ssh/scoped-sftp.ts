@@ -72,6 +72,9 @@ export function createScopedSftp(ops: SftpOps, root: string): SftpOps {
     async download(remotePath, localPath, maxBytes) {
       await ops.download(scoped(remotePath), localPath, maxBytes);
     },
+    async remove(remotePath) {
+      await ops.remove(scoped(remotePath));
+    },
   };
 }
 

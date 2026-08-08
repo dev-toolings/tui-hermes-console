@@ -10,6 +10,7 @@ import { OwnershipRepositoryError } from "@/modules/ownership/repository";
 import { DataLifecycleError } from "@/modules/retention/service";
 import { LifecycleExportError } from "@/modules/retention/export";
 import { ArtifactIntegrityError } from "@/modules/artifacts/integrity";
+import { ArtifactDeletionError } from "@/modules/artifacts/delete-artifact";
 import { HermesPolicyError } from "@/modules/policy/hermes-approval";
 import { describeError, log } from "@/observability/log";
 import { GuidedTaskRepositoryError } from "@/modules/guided-task/repository";
@@ -50,6 +51,12 @@ export function apiErrorResponse(
     );
   }
   if (error instanceof LifecycleExportError || error instanceof ArtifactIntegrityError) {
+    return Response.json(
+      { error: { code: error.code, message: error.message } },
+      { status: error.status },
+    );
+  }
+  if (error instanceof ArtifactDeletionError) {
     return Response.json(
       { error: { code: error.code, message: error.message } },
       { status: error.status },

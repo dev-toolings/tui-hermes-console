@@ -245,25 +245,16 @@ export function ChatSurfaceFrame({ children }: { children: ReactNode }) {
 
   return (
     <ChatSurfaceContext.Provider value={surface}>
-      <div className="oc-chat-shell flex h-full min-h-0 w-full bg-[var(--oc-shell-bg,#f4f1ea)] text-foreground dark:bg-background">
+      <div className="oc-chat-shell flex h-full min-h-0 w-full bg-background text-foreground">
         {/*
-          Cette colonne vit DANS le panneau `inset`, elle doit donc en porter
-          la couleur. En `dark:bg-sidebar` elle valait #171717 — exactement le
-          champ sur lequel le panneau flotte : l'arête arrondie du panneau,
-          pourtant bien découpée, se retrouvait avec la même teinte des deux
-          côtés et disparaissait, et le rail de la Console fusionnait avec la
-          liste de sessions. En prenant le fond du panneau, la silhouette
-          arrondie réapparaît comme sur les autres routes.
-
-          Le filet vers le transcript reste en `border-border` : `border-seam`
-          (#404040) ne sert qu'à rattraper un bord posé SUR une surface haute,
-          où `--border` se confond avec le fond. Ici on est sur `--background`
-          (#121212), où `--border` (#262626) se voit déjà — le seam y tranchait
-          bien trop.
+          La liste des conversations appartient au panneau de chat et utilise
+          donc `background` : blanc en thème clair, graphite en thème sombre.
+          Le rail Console reste, lui, sur le token shadcn `sidebar` neutral.
+          Le filet vers le transcript suffit à distinguer les deux surfaces.
         */}
         <div
           className={cn(
-            "hidden h-full shrink-0 bg-[var(--oc-sidebar-bg,#efeae2)] transition-[width] duration-200 md:flex dark:bg-background",
+            "hidden h-full shrink-0 bg-background transition-[width] duration-200 md:flex",
             // Le filet est porté par la branche dépliée : en surcharge
             // (`border-r` + `border-0`) les deux règles ont la même
             // spécificité et c'est l'ordre de la feuille générée qui tranche —
@@ -295,7 +286,7 @@ export function ChatSurfaceFrame({ children }: { children: ReactNode }) {
               onClick={() => setMobileOpen(false)}
             />
             <div className="absolute inset-y-0 left-0 w-[17.5rem] shadow-xl">
-              <div className="flex h-full flex-col bg-[var(--oc-sidebar-bg,#efeae2)] dark:bg-sidebar">
+              <div className="flex h-full flex-col bg-background">
                 <div className="flex h-12 items-center justify-end px-2">
                   <button
                     type="button"

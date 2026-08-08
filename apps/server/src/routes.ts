@@ -258,7 +258,7 @@ export const ROUTES: RouteDefinition[] = [
   {
     path: "/api/files/:fileId",
     module: fileDetail,
-    access: siteAccess({ GET: "artifact.read" }),
+    access: siteAccess({ GET: "artifact.read", DELETE: "artifact.delete" }),
   },
 
   // Avant `/:runId/…` : « activity » matcherait le motif paramétré.

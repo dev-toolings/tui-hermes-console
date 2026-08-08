@@ -7,6 +7,7 @@
  * clignotement « squelette puis contenu » d'un fetch dans useEffect.
  */
 import {
+  ApiError,
   fetchAchievements,
   fetchAchievementsScanStatus,
   fetchActivity,
@@ -15,6 +16,7 @@ import {
   fetchArtifacts,
   fetchAuditEntries,
   fetchHermesUpdates,
+  fetchLifecyclePolicy,
   fetchRuntime,
   fetchRuntimeProbe,
   fetchSkills,
@@ -101,6 +103,17 @@ export async function loadSupport() {
 export type SupportData = Awaited<ReturnType<typeof loadSupport>>;
 
 export async function loadRetention() {
-  return fetchStorage();
+  const storage = await fetchStorage();
+  if (!readPersonaCapabilities().has("data.lifecycle.read")) {
+    return { ...storage, policy: null };
+  }
+  try {
+    return { ...storage, policy: await fetchLifecyclePolicy() };
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "LIFECYCLE_POLICY_REQUIRED") {
+      return { ...storage, policy: null };
+    }
+    throw error;
+  }
 }
 export type RetentionData = Awaited<ReturnType<typeof loadRetention>>;
