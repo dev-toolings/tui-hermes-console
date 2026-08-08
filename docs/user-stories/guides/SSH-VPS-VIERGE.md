@@ -18,7 +18,7 @@ fleet permanent.
 │ Compte non-root VPS  │
 │ authorized_keys      │
 └──────────╤───────────┘
-           │ SSH clé + empreinte connue · tunnel/SFTP
+           │ SSH clé + empreinte connue · tunnel
            ▼
 ╔══════════════════════╗
 ║ Serveur Console      ║
@@ -36,6 +36,13 @@ Légende : la console fournisseur sert uniquement au bootstrap ; SSH authentifie
 l'empreinte du serveur ; le tunnel expose localement l'API Hermes distante. Composants : console de
 secours, compte dédié, hôte Console, Hermes.
 
+
+> **SFTP retiré le 08-08-2026.** Le transfert de fichiers par SFTP a été supprimé du produit avec
+> les stories `US-G1-SSH-006/007/009`. Les sections de ce guide qui décrivent un aller-retour SFTP,
+> une reprise de transfert ou un test `sftp -b` ne sont plus applicables et ne doivent pas être
+> rejouées. Le répertoire de travail est partagé par bind mount, voir `US-G1-SSH-010`. La clé SSH
+> doit toujours autoriser le port-forwarding, dont dépend le tunnel Hermes.
+
 ## Parcours de livraison et sous-scénarios stables
 
 L'ordre ci-dessous est bloquant : un échec arrête la livraison avant la phase suivante.
@@ -47,7 +54,6 @@ L'ordre ci-dessous est bloquant : un échec arrête la livraison avant la phase 
 | 3 | `SSH-003` | Connexion par clé au compte non-root | deux connexions batch réussies, `id` non-root |
 | 4 | `SSH-004` | Refus d'une clé cliente inconnue/révoquée | exit non nul, aucun effet ni fallback password |
 | 5 | `SSH-005` | Refus d'une empreinte inconnue/modifiée | échec avant authentification |
-| 6 | `SSH-006` | Aller-retour SFTP borné au workdir | hash identique, hors-workdir refusé, nettoyage prouvé |
 | 7 | `SSH-007` | Tunnel vers Hermes loopback | capabilities identiques, port fermé après arrêt |
 | 8 | `SSH-008` | Rotation puis révocation de clé | nouvelle clé seule autorisée, sessions anciennes closes |
 | 9 | `SSH-009` | Reconnexion, concurrence, coupure et quota | pas de fuite, mélange, fichier partiel ou faux succès |

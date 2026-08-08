@@ -1,7 +1,7 @@
 # Gate 1 — Stories SSH détaillées
 
 Ces stories décomposent l'epic US-G1-008. Elles ont chacune un état et une preuve propres ; aucune
-preuve partielle ne permet d'accepter l'epic. Le périmètre SFTP est gelé par décision produit :
+preuve partielle ne permet d'accepter l'epic. Le périmètre SFTP est supprimé par décision produit du 08-08-2026, stories et code compris :
 SSH-006, SSH-007 et SSH-009 ne sont plus des travaux ni des bloqueurs de Gate 1. Le tunnel SSH et
 la gestion d'identité restent dans le scope. Le guide d'exécution associé est
 [`guides/SSH-VPS-VIERGE.md`](guides/SSH-VPS-VIERGE.md).
@@ -36,7 +36,7 @@ recovery, compte SSH de service, transports Hermes, cycle de vie des identités.
 > Terraform/pvecli et Ansible : [preuve VM](evidence/2026-08-04-ssh-003-005-hermes-ephemeral-01.md).
 > SSH-001, SSH-003 et SSH-004 disposent d'une preuve technique ; SSH-002 conserve une réserve sur
 > les empreintes RSA/ECDSA, et SSH-005/008 restent dépendantes d'Hermes réel et de la revue
-> indépendante. SFTP est gelé sur SSH-006/007/009. La [décision de gel historique](evidence/2026-08-04-ssh-001-gel-decision.md)
+> indépendante. SFTP est supprimé, ses stories SSH-006/007/009 avec. La [décision de gel historique](evidence/2026-08-04-ssh-001-gel-decision.md)
 > explique pourquoi la campagne n'avait pas été lancée plus tôt. `US-G1-SSH-010` reste `VÉRIFIÉE`.
 
 ## US-G1-SSH-001 — Bootstrapper un VPS sans notre clé
