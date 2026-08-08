@@ -113,7 +113,9 @@
   décision auditable.
 - **Preuves :** `P-INT`, `P-E2E`, `P-SEC`, refus par ressource, matrice des changements sensibles et
   tests de conflit entre policies.
-- **État initial :** `PROPOSÉE`.
+- **État :** `GELÉE` le 08-08-2026 : périmètre suspendu tant que le premier `ACCEPTÉE` n'est pas obtenu.
+  Aucun travail ni critère de Gate n'est exigé. Retour en `PRÊTE` sur demande explicite d'un
+  design partner qualifié au titre de `US-G0-001`.
 
 ## US-G2-006 — Qualifier l'identité entreprise
 
@@ -129,4 +131,6 @@
   utilisateur désactivé ou claim de rôle forgé, quand une session est demandée, alors elle est
   refusée ou révoquée sans élévation.
 - **Preuves :** `P-INT`, `P-E2E`, `P-SEC`, matrice des claims, tests de tamper et révocation.
-- **État initial :** `PROPOSÉE`.
+- **État :** `GELÉE` le 08-08-2026 : périmètre suspendu tant que le premier `ACCEPTÉE` n'est pas obtenu.
+  Aucun travail ni critère de Gate n'est exigé. Retour en `PRÊTE` sur demande explicite d'un
+  design partner qualifié au titre de `US-G0-001`.

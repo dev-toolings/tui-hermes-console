@@ -5,10 +5,12 @@ runtime [Hermes Agent](https://github.com/NousResearch/hermes-agent) — créer 
 opérationnelle), lui confier une mission traçable, observer l’exécution, récupérer résultats et
 artefacts. Sans CLI, sans imposer Telegram/WhatsApp comme interface client.
 
-**Statut : v0.7 — Phase 3 ✅ + Phase 4 slice fichiers.** Agents, threads, runtime config,
-cancel/retry/approvals, artefacts (`HERMES_SHARED_WORKDIR`). Axe produit v0.6 (généraliste
-dynamique) : Buzz / Multica / hermes-webui = inspiration, pas clones — détail
-[`docs/PRD.md`](docs/PRD.md) + [`PRODUCT.md`](PRODUCT.md).
+**Statut : v0.9 (06-08-2026).** Le parcours de tâche guidée (`/tasks/new`, `/tasks/:taskId`) est
+livré et vérifié localement : demande, plan, dépôt et commit gelés, worktree Bubblewrap, Hermes réel,
+diff, preuves SHA-256 et validations plan/technique/outils/fonctionnelle distinctes. Agents, threads,
+runtime config, cancel/retry/approvals et artefacts (`HERMES_SHARED_WORKDIR`) restent en place. Axe
+produit : Buzz / Multica / hermes-webui sont une inspiration, pas des clones ; détails dans
+[`docs/PRD.md`](docs/PRD.md) et [`PRODUCT.md`](PRODUCT.md).
 
 ```text
 Console = control plane + surface de travail
@@ -30,6 +32,18 @@ Canal    = web d’abord (messaging / workspace = transports futurs)
 - runtime (URL + token chiffré) + test `/health` + `/v1/capabilities`.
 
 Créer un agent sur `/agents/new`, lancer sur `/runs/new`, suivre sur `/runs/thr_*`.
+
+## Tâche guidée
+
+`/tasks/new` capture la demande professionnelle (intention, résultat attendu, exclusions, exemple),
+fait valider la compréhension, puis propose un plan. La tâche persiste sur `/tasks/:taskId` :
+révisions, tentatives, preuves et décisions attribuées. Le lancement gèle le dépôt et le commit de
+base avant de créer un worktree Bubblewrap, exécute Hermes réellement, puis produit un diff et des
+preuves SHA-256. Les décisions de plan, technique, outils et fonctionnelle restent distinctes et
+attribuées, jamais fusionnées dans une approbation générique.
+
+État : livré et vérifié localement. La preuve indépendante, l'appareil physique, la preview déployée
+et l'acceptation Gate restent ouverts, voir [`PRODUCT.md`](PRODUCT.md) et [`docs/PRD.md`](docs/PRD.md).
 
 ## Architecture exécutée
 
@@ -141,7 +155,7 @@ Parcours : `/agents/new` → `/runs/new` → `/runs/thr_*` → composer (± piè
 | Fichier | Contenu |
 |---|---|
 | [`PRODUCT.md`](PRODUCT.md) | Axe produit, anti-références, principes UX |
-| [`docs/PRD.md`](docs/PRD.md) | PRD v0.7 — phases 0–4 + axe généraliste |
+| [`docs/PRD.md`](docs/PRD.md) | PRD v1.5 (06-08-2026), vérité produit auditée : phases 0 à 4 et axe généraliste |
 | [`docs/DESKTOP.md`](docs/DESKTOP.md) | Architecture : SPA Vite, serveur Hono, app Tauri |
 | [`docs/INSTALLATION-UTILISATION.md`](docs/INSTALLATION-UTILISATION.md) | Installation et utilisation : Hermes local, Docker et VPS |
 | [`docs/SPIKE-REPORT.md`](docs/SPIKE-REPORT.md) | Rapport Phase 0 : mesures runtime |

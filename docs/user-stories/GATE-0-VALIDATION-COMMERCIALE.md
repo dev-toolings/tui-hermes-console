@@ -34,8 +34,9 @@ décisions.
   quand l’utilisateur tente de continuer, alors le contrôle reste désactivé et aucune requête de
   création de mission n’est émise.
 - **Tests :** `P-UNIT` du contrat de spec, `P-E2E` navigateur desktop et 320 px.
-- **Preuves attendues :** rapport daté avec parcours Ghostchrome, capture des trois étapes et absence
-  de requête prématurée. La reprise persistante et l'identifiant de tâche relèvent de
+- **Preuves attendues :** rapport daté avec parcours Ghostchrome, description observable des trois
+  étapes et absence de requête prématurée. Les captures ne sont pas versionnées : elles restent hors
+  dépôt et le rapport porte leur empreinte `sha256`, conformément à la décision du 08-08-2026. La reprise persistante et l'identifiant de tâche relèvent de
   `US-G0-TASK-001`.
 - **Reviewer :** responsable produit, avec un demandeur métier distinct de l’implémenteur.
 
@@ -160,7 +161,9 @@ vérifications, sans valoir acceptation produit indépendante.
 > En tant qu'**utilisateur mobile**, je veux envoyer un texte, une pièce jointe ou un vocal depuis
 > Telegram vers le bon projet, afin de préparer une tâche sans déclencher silencieusement du travail.
 
-- **État :** `PROPOSÉE, OPTIONNELLE POUR GATE 0` — aucun connecteur Telegram n'est livré.
+- **État :** `GELÉE` le 08-08-2026 : périmètre suspendu tant que le premier `ACCEPTÉE` n'est pas obtenu.
+  Aucun travail ni critère de Gate n'est exigé. Retour en `PRÊTE` sur demande explicite d'un
+  design partner qualifié au titre de `US-G0-001`. Aucun connecteur Telegram n'est livré.
 - **Dépendances :** US-G0-TASK-001 et identité de canal liée explicitement à un utilisateur/projet.
 - **Scénario positif :** Étant donné un topic Telegram lié à un projet, quand un utilisateur autorisé
   envoie une capture, alors la Console crée un brouillon attribué, conserve la source et demande la
@@ -179,8 +182,10 @@ vérifications, sans valoir acceptation produit indépendante.
 > En tant qu'**équipe projet**, je veux relier un channel Buzz à une tâche Console, afin que humains
 > et agents collaborent dans le workspace sans déplacer l'autorité de décision hors de la Console.
 
-- **État :** `PROPOSÉE, OPTIONNELLE POUR GATE 0` — aucun adaptateur Buzz n'est livré et la Console ne
-  reconstruit pas channels, sous-channels, DMs ou voice.
+- **État :** `GELÉE` le 08-08-2026 : périmètre suspendu tant que le premier `ACCEPTÉE` n'est pas obtenu.
+  Aucun travail ni critère de Gate n'est exigé. Retour en `PRÊTE` sur demande explicite d'un
+  design partner qualifié au titre de `US-G0-001`. Aucun adaptateur Buzz n'est livré et la Console
+  ne reconstruit pas channels, sous-channels, DMs ou voice.
 - **Dépendances :** US-G0-TASK-001 et US-G0-APPROVAL-001.
 - **Scénario positif :** Étant donné un channel lié à un projet et une tâche, quand son état change,
   alors Buzz reçoit un lien et des événements lisibles ; un humain peut reprendre la conversation et
@@ -208,7 +213,7 @@ vérifications, sans valoir acceptation produit indépendante.
   disponible ou cherchant seulement un chat/agent de code, quand il est évalué, alors il n'est pas
   compté parmi les trois partenaires.
 - **Preuves :** `P-COM`, trois fiches expurgées, consentement au pilote, raisons de qualification ou
-  rejet.
+  rejet. Grille de qualification et gabarit de fiche : [guides/G0-001-QUALIFICATION-PARTENAIRE.md](guides/G0-001-QUALIFICATION-PARTENAIRE.md).
 - **État initial :** `PROPOSÉE`.
 
 ## US-G0-002 — Piloter un workflow étroit par partenaire

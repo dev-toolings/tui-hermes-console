@@ -18,10 +18,9 @@ auth.md
 !apps/mobile/assets/images/splash-icon.png
 !apps/mobile/assets/images/android-icon-foreground.png
 !apps/mobile/assets/images/favicon.png
-# Preuve produit expurgée du parcours guidé local.
-!docs/user-stories/evidence/2026-08-05-guided-delivery-plan.png
-!docs/user-stories/evidence/2026-08-06-guided-delivery-result.png
-!docs/user-stories/evidence/2026-08-06-guided-delivery-mobile-320.png
+# Décision du 08-08-2026 : les captures de preuve ne sont plus versionnées. Les rapports
+# d'evidence portent une description observable et l'empreinte `sha256` de la capture,
+# qui reste hors dépôt. Ne pas rouvrir d'exception ici pour docs/user-stories/evidence/.
 .playwright-mcp/
 .impeccable/
 .playwright-cli/

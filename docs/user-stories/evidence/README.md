@@ -109,6 +109,26 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 - [01-08-2026 — parcours critique post-setup G1-007A](2026-08-01-gate-1-g1-007a-post-setup-local.md) :
   Hono inter-process, PostgreSQL scratch, faux Hermes SSE, approbation/CAS/audit, redémarrage et
   artefact vérifié ; installation vierge, Hermes upstream, P-SEC/P-OPS et acceptation Gate restent ouvertes.
+- [01-08-2026 — diagnostic SSH read-only du VPS 187.55.227.55](2026-08-01-gate-1-ssh-vps-18755-diagnostic.md) :
+  empreinte ED25519 concordante hors bande stricte, hôte occupé (Swarm, ports 80/443), aucun compte
+  ni processus Hermes présent, politique SSH non bornée (`permitopen any`) ; `BLOQUÉE`, pas un
+  bootstrap vierge autorisé.
+- [01-08-2026 — isolation par site et projet US-G2-001](2026-08-01-gate-2-site-context.md) : contexte
+  serveur dérivé de la session, listes limitées au site actif, mêmes refus 404 sans fuite d'existence
+  sur identifiant étranger ou aléatoire ; P-E2E navigateur et acceptation Gate 1 restent ouvertes.
+- [04-08-2026 — approbation US-G1-004 contre Hermes local](2026-08-04-g1-004-hermes-local-p-e2e.md) :
+  refus direct et refus via la policy Console tous deux relayés à un Hermes réel, absence d'effet
+  terminal après refus ; ne couvre pas le routeur `respondRunApproval` avec claim PostgreSQL ni la VM 210.
+- [04-08-2026 — route Console réelle US-G1-004D en local](2026-08-04-g1-004-real-console-local.md) :
+  `bun run proof:g1-004-real` positif et négatif, claim PostgreSQL puis enforcer signé puis Hermes
+  réel, `503` sans clés policy, reprise après redémarrage ; rejeu VM 210 et revue P-SEC restent ouverts.
+- [04-08-2026 — préflight runtime Hermes déployé US-G1-004](2026-08-04-g1-004-hermes-runtime-preflight.md) :
+  `/health` et `/v1/capabilities` répondent sur `hermes-ephemeral-01`, mais le run de recette échoue
+  faute de provider d'inférence configuré et n'atteint jamais `waiting_for_approval` ; ne prouve pas
+  la policy pré-effet.
+- [04-08-2026 — décision de gel US-G1-SSH-001](2026-08-04-ssh-001-gel-decision.md) : gel de
+  `US-G1-SSH-001` et de sa chaîne `SSH-002` à `SSH-009` faute d'hôte vierge disponible, critère de
+  dégel explicite, correctif embarqué du script de comparaison d'empreinte multi-clés.
 
 ## Modèle
 

@@ -11,7 +11,9 @@
 - L’API refuse aussi le contournement avec `409 GUIDED_EXECUTION_NOT_ISOLATED` avant l’accès au runtime.
 - Le viewport 320 px reste à rejouer : la commande de redimensionnement Ghostchrome n’a pas persisté sur la session et n’est pas comptée comme preuve.
 
-Capture : [plan guidé et garde fail-closed](2026-08-05-guided-delivery-plan.png).
+Capture retirée du dépôt le 08-08-2026, conservée hors Git : plan guidé et garde fail-closed,
+`sha256 9bc212c9ecedcc34b4a9efeea8785cce880dedf700c01593ed1adc9f230eec37`. Ce rapport est de toute
+façon remplacé par la preuve du 06-08-2026, qui couvre le viewport 320 px resté ouvert ici.
 
 ## Parcours navigateur
 

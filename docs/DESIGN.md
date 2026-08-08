@@ -31,11 +31,17 @@ dark :  #121212  ████  background / panel      ← la nappe
 
 ## 2. Le piège : `--border` == `--card` == `--muted` en dark
 
-`CardSurface` (`components/ui/boardui.tsx`) rend un `bg-card`, soit **#262626 en
-dark**. Or `--border` et `--muted` valent exactement la même chose. Donc :
+Un composant qui rend un `bg-card` brut affiche **#262626 en dark**. Or `--border` et `--muted`
+valent exactement la même chose. Donc :
 
 - `border-border` posé **sur** une card / un dialog → contraste **0**, trait invisible
 - `bg-muted` posé **sur** une card / un dialog → contraste **0**, bloc sans fond
+
+`CardSurface` (`apps/web/src/components/ui/boardui.tsx:65`) applique déjà le correctif : la classe
+`dark:bg-surface` fait gagner #171717 sur le `bg-card` de base. Le piège reste actif là où ce
+correctif n'a pas été repris, par exemple `PagerButton` et `Checkbox`
+(`packages/ui/src/components/ui/boardui.tsx:181,200`), qui rendent un `bg-card` sans correction en
+dark.
 
 En light le problème n'existe pas (`--border` == `--input` == `#ebebeb`,
 `--muted` == `--surface` == `#f7f7f7`), ce qui le rend facile à manquer.

@@ -88,7 +88,8 @@ Un hôte satisfaisant les quatre conditions suivantes, simultanément :
 `run-ssh-001-002.sh` comparait l'empreinte fournisseur à la **première** ligne de `ssh-keyscan`
 (`head -n 1`). Or `ssh-keyscan` scanne les types de clés en parallèle et renvoie un ordre non
 déterministe : les deux runs du 04-08-2026 le démontrent, la RSA sort en tête à 08:47 et l'ED25519 à
-08:44 pour le même hôte.
+08:44 pour le même hôte. Les traces de ces deux runs sont conservées dans
+[le diagnostic d'empreinte d'hôte 18755](2026-08-04-ssh-001-002-18755-diagnostic-hostkey.md).
 
 Une empreinte fournisseur valide pouvait donc être rejetée en `Refus strict`, indistinguable d'une
 véritable substitution d'hôte. Le script compare désormais l'empreinte attendue à **toutes** les clés

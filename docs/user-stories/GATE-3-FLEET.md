@@ -37,7 +37,9 @@ commande. Composants : control plane, frontière de site, runtime.
 - **Acceptation négative :** Étant donné un code expiré, rejoué, altéré ou destiné à un autre site,
   quand l'enrôlement est tenté, alors aucune identité partielle ou orpheline n'est créée.
 - **Preuves :** `P-INT`, `P-SEC`, quatre refus, audit et inventaire avant/après.
-- **État initial :** `PROPOSÉE`.
+- **État :** `GELÉE` le 08-08-2026 : périmètre suspendu tant que le premier `ACCEPTÉE` n'est pas obtenu.
+  Aucun travail ni critère de Gate n'est exigé. Retour en `PRÊTE` sur demande explicite d'un
+  design partner qualifié au titre de `US-G0-001`.
 
 ## US-G3-002 — Authentifier, tourner et révoquer l'installation
 
@@ -52,7 +54,9 @@ commande. Composants : control plane, frontière de site, runtime.
   remise et la tentative est auditée.
 - **Preuves :** `P-INT`, `P-OPS`, `P-SEC`, empreintes publiques, CRL/état de révocation et tests de
   rotation/expiration.
-- **État initial :** `PROPOSÉE`.
+- **État :** `GELÉE` le 08-08-2026 : périmètre suspendu tant que le premier `ACCEPTÉE` n'est pas obtenu.
+  Aucun travail ni critère de Gate n'est exigé. Retour en `PRÊTE` sur demande explicite d'un
+  design partner qualifié au titre de `US-G0-001`.
 
 ## US-G3-003 — Traverser le NAT par connexion sortante
 
@@ -66,7 +70,9 @@ commande. Composants : control plane, frontière de site, runtime.
   expirée ou une coupure réseau, quand un message circule, alors il est refusé ou repris idempotemment
   sans exposition de port ni duplication.
 - **Preuves :** `P-E2E`, `P-OPS`, `P-SEC`, règles réseau, scan externe, reconnexion et déduplication.
-- **État initial :** `PROPOSÉE`.
+- **État :** `GELÉE` le 08-08-2026 : périmètre suspendu tant que le premier `ACCEPTÉE` n'est pas obtenu.
+  Aucun travail ni critère de Gate n'est exigé. Retour en `PRÊTE` sur demande explicite d'un
+  design partner qualifié au titre de `US-G0-001`.
 
 ## US-G3-004 — Inventorier plusieurs runtimes
 
@@ -80,7 +86,9 @@ commande. Composants : control plane, frontière de site, runtime.
   saturé ou un identifiant de site falsifié, quand une nouvelle mission arrive, alors elle est refusée
   ou routée selon policy sans cross-site.
 - **Preuves :** `P-INT`, `P-E2E`, `P-SEC`, inventaire horodaté, routage et quatre cas de refus.
-- **État initial :** `PROPOSÉE`.
+- **État :** `GELÉE` le 08-08-2026 : périmètre suspendu tant que le premier `ACCEPTÉE` n'est pas obtenu.
+  Aucun travail ni critère de Gate n'est exigé. Retour en `PRÊTE` sur demande explicite d'un
+  design partner qualifié au titre de `US-G0-001`.
 
 ## US-G3-005 — Distinguer external, connected et managed
 
@@ -96,7 +104,9 @@ commande. Composants : control plane, frontière de site, runtime.
   sont conservées et aucune suppression n'est implicite.
 - **Preuves :** `P-INT`, `P-E2E`, `P-SEC`, matrice niveaux/actions et test de déconnexion non
   destructive.
-- **État initial :** `PROPOSÉE`.
+- **État :** `GELÉE` le 08-08-2026 : périmètre suspendu tant que le premier `ACCEPTÉE` n'est pas obtenu.
+  Aucun travail ni critère de Gate n'est exigé. Retour en `PRÊTE` sur demande explicite d'un
+  design partner qualifié au titre de `US-G0-001`.
 
 ## US-G3-006 — Exécuter le lifecycle sans socket Docker
 
@@ -112,4 +122,6 @@ commande. Composants : control plane, frontière de site, runtime.
   alors elle est refusée sans mutation partielle ni accès générique à l'hôte.
 - **Preuves :** `P-OPS`, `P-SEC`, journal des quatre opérations, rollback, restauration, inspection des
   mounts et preuve d'absence de socket.
-- **État initial :** `PROPOSÉE`.
+- **État :** `GELÉE` le 08-08-2026 : périmètre suspendu tant que le premier `ACCEPTÉE` n'est pas obtenu.
+  Aucun travail ni critère de Gate n'est exigé. Retour en `PRÊTE` sur demande explicite d'un
+  design partner qualifié au titre de `US-G0-001`.

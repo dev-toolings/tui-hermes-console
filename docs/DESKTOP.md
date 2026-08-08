@@ -60,7 +60,7 @@ de tous les tests. Le sidecar laisse la porte ouverte à un passage progressif
 | Crate Tauri | ✅ | `cargo check` sans warning |
 | Sidecar compilé | ✅ | binaire 65 Mo autonome, sans Node ni Bun |
 | Configuration autonome | ✅ | lue dans `app_config_dir()/console.env`, plus dans un `.env` du dépôt |
-| Tests | ✅ | 158 — 38 core, 80 serveur, 40 console |
+| Tests | ✅ | 158 (38 core, 80 serveur, 40 console), mesure ponctuelle du 31-07-2026 (`git blame`), à rejouer |
 
 Reproduire :
 

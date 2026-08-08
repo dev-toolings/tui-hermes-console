@@ -83,10 +83,36 @@ Validation finale du dépôt :
 - `bun run build` : succès Vite ;
 - `git diff --check` : succès.
 
-## Captures
+## Observations d'interface
 
-- [Résultat desktop et trois décisions](2026-08-06-guided-delivery-result.png)
-- [Résultat à 320 px](2026-08-06-guided-delivery-mobile-320.png)
+Les deux captures d'origine ont été retirées du dépôt le 08-08-2026. Elles sont conservées hors Git,
+avec leur empreinte ci-dessous, pour deux raisons : la règle projet interdit de versionner des
+images, et la capture desktop exposait en clair le nom et l'adresse électronique de l'opérateur,
+ce que la section « Identifiants de corrélation » de [CONVENTIONS.md](../CONVENTIONS.md) interdit.
+
+Ce qui était observable sur le résultat desktop, `sha256
+ab0894d32f66495a96b532de5cf72e6bfdce2338c1e059714800491d51b904fd` :
+
+- en-tête « TÂCHE GUIDÉE », titre de la tâche, mention « Projet relié · révision 5 · préparée par
+  admin » et badge d'état « Terminée » ;
+- les quatre étapes toutes cochées : « 1. Demande cadrée », « 2. Décisions préparées »,
+  « 3. Réalisation isolée », « 4. Résultat vérifié » ;
+- le bloc « Mandat validé » avec Objectif, Résultat attendu et Hors périmètre renseignés ;
+- « Résultat de la tentative 6 » avec le badge « Vérifications réussies », la phrase « La proposition
+  respecte le mandat et toutes les vérifications configurées ont réussi », et le fichier `README.md`
+  comme seul fichier touché ;
+- les trois décisions distinctes en colonne de droite, chacune au statut « Approuvée » : « Validation
+  du plan », « Approbation d'outil » et « Validation fonctionnelle », avec leur libellé métier ;
+- le repli « Détails techniques exhaustifs » fermé par défaut, donc aucun shell exposé en vue normale ;
+- l'état runtime « Connecté · 0.20.0 » sur `127.0.0.1:8642`, avec la mention « Token en place ».
+
+Ce qui était observable sur le rendu à 320 px, `sha256
+2e59e51817b0bbd9d4fb2831d3f49c4342c1e4487457ac3580f2a91959d98183` :
+
+- aucune coupure horizontale ni défilement latéral à 320 px de large ;
+- le titre de la tâche passe sur cinq lignes sans troncature, la ligne de métadonnées se replie ;
+- les quatre étapes s'empilent verticalement, chacune conservant sa coche et son libellé complet ;
+- le bloc « Mandat validé » reste lisible et l'en-tête reste accessible.
 
 ## Nettoyage
 

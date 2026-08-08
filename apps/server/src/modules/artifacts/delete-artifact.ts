@@ -3,10 +3,10 @@ import { lstat, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { and, eq, isNull } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
-import { artifacts, runs } from "@/db/schema";
+import { artifacts, runs, siteDataLifecyclePolicies } from "@/db/schema";
 import type { SiteRequestContext } from "@/modules/auth/service";
 import { auditScopedMiss } from "@/modules/auth/site-access";
-import { appendAuditEntryInTransaction } from "@/modules/audit/service";
+import { appendAuditEntry, appendAuditEntryInTransaction } from "@/modules/audit/service";
 import { describeError, log } from "@/observability/log";
 import {
   assertSafeRegularFile,
@@ -24,6 +24,7 @@ export class ArtifactDeletionError extends Error {
     readonly code:
       | "ARTIFACT_NOT_FOUND"
       | "ARTIFACT_RUN_ACTIVE"
+      | "ARTIFACT_LEGAL_HOLD"
       | "ARTIFACT_STORAGE_INVALID",
     message: string,
     readonly status: number,
@@ -88,6 +89,20 @@ export async function deleteArtifactEverywhere(
 
   try {
     target = await db.transaction(async (tx) => {
+      // US-G1-006 : une rétention légale active refuse toute suppression, comme la purge.
+      const [policy] = await tx
+        .select({ legalHoldEnabled: siteDataLifecyclePolicies.legalHoldEnabled })
+        .from(siteDataLifecyclePolicies)
+        .where(eq(siteDataLifecyclePolicies.siteId, context.siteId))
+        .for("update");
+      if (policy?.legalHoldEnabled) {
+        throw new ArtifactDeletionError(
+          "ARTIFACT_LEGAL_HOLD",
+          "Une rétention légale est active sur ce site, la suppression est refusée.",
+          409,
+        );
+      }
+
       const [row] = await tx
         .select({
           id: artifacts.id,
@@ -177,6 +192,10 @@ export async function deleteArtifactEverywhere(
         resourceId: fileId,
       });
     }
+    // CONVENTIONS.md § mutation sensible : un refus doit rester attribué.
+    if (error instanceof ArtifactDeletionError && error.code !== "ARTIFACT_NOT_FOUND") {
+      await auditDeletionDenied(context, fileId, error.code, now);
+    }
     throw error;
   }
 
@@ -200,6 +219,42 @@ export async function deleteArtifactEverywhere(
     deletedAt: now.toISOString(),
     cleanupPending,
   };
+}
+
+/** Le refus d'une suppression reste une décision attribuée, hors transaction annulée. */
+async function auditDeletionDenied(
+  context: SiteRequestContext,
+  fileId: string,
+  reasonCode: string,
+  occurredAt: Date,
+) {
+  try {
+    await appendAuditEntry({
+      eventId: randomUUID(),
+      actorSiteId: context.siteId,
+      targetSiteId: context.siteId,
+      actorUserId: context.userId,
+      actorRole: context.role,
+      actorOrganizationId: context.actorOrganizationId,
+      clientOrganizationId: context.clientOrganizationId,
+      mandateId: context.mandateId,
+      action: "artifact.delete",
+      resourceType: "artifact",
+      resourceId: fileId,
+      decision: "denied",
+      reasonCode,
+      beforeState: {},
+      afterState: {},
+      correlationId: context.correlationId,
+      occurredAt,
+    });
+  } catch (error) {
+    log.error("Artifact delete: denial audit failed", {
+      artifactId: fileId,
+      reasonCode,
+      ...describeError(error),
+    });
+  }
 }
 
 async function quarantineFiles(

@@ -14,7 +14,7 @@ nomme l'incohérence, la démontre par une citation vérifiable, et dit ce qui e
 
 | Contrôle | Résultat |
 |---|---|
-| Typechecks ciblés | `core`, `server` et `web` verts sur leurs commandes dédiées ; le typecheck agrégé conserve une erreur web préexistante d'import type-only dans `apps/web/src/components/shell/nav-main.tsx` |
+| Typechecks ciblés | `core`, `server` et `web` verts sur leurs commandes dédiées ; le typecheck agrégé conserve une erreur web préexistante d'import type-only dans `apps/web/src/components/shell/nav-main.tsx` (entrée close le 08-08-2026, voir « Ce que ce registre ne dit pas ») |
 | `bun run proof:g1-005c` | 3 tests, 0 fail, 53 expect |
 | Régression du rejeu runtime | 600 tests passés, 3 skips explicites, **0 fail** |
 
@@ -157,6 +157,30 @@ archivé.
 
 ---
 
+## INC-07 : deux échecs serveur intermittents, non identifiés
+
+**Ouverte le 08-08-2026.**
+
+`bun run test` a rapporté `446 pass, 2 fail` sur 451 tests. Trois exécutions complètes lancées
+immédiatement après ont toutes rendu `0 fail`. Les deux tests en cause **n'ont pas été identifiés** :
+le filtre de sortie appliqué à cette exécution était trop étroit et leur nom a été perdu. Il ne s'agit
+pas d'une hypothèse rassurante, c'est une information manquante.
+
+Deux échecs intermittents avaient déjà été observés en début de journée, sur des symptômes de
+contrainte PostgreSQL (`runtime_config_workspace_status_check ... does not exist, skipping`), sans
+qu'il soit établi qu'il s'agisse des mêmes. Ces messages sont des `NOTICE` émis par un
+`DROP CONSTRAINT IF EXISTS` de nettoyage entre tests, donc probablement pas la cause.
+
+Piste privilégiée, non vérifiée : la suite serveur lance désormais plusieurs conteneurs PostgreSQL
+éphémères pour les tests d'intégration, et `bun run test` exécute les workspaces en parallèle. Une
+contention de ressources ou de ports au démarrage de conteneur expliquerait un échec non reproductible.
+
+**Action requise avant toute revue de Gate :** rejouer la suite avec la sortie complète conservée,
+jusqu'à capturer les noms des tests concernés. Une suite dont deux échecs sur 451 restent anonymes ne
+permet pas de signer un rapport d'acceptation de bonne foi.
+
+---
+
 ## Ce que ce registre ne dit pas
 
 - Les chemins cités par la documentation existent : 59 des 63 chemins référencés résolvent, et les 4
@@ -165,6 +189,9 @@ archivé.
   n'existe. Aucune revendication excessive n'a été trouvée de ce côté.
 - Les typechecks ciblés `core`, `server` et `web` ont été rejoués ; le typecheck agrégé conserve
   l'erreur web import type-only déjà signalée dans la vérité terrain ci-dessus.
+- **Close le 08-08-2026.** `bun run --cwd apps/web typecheck` et `bun run typecheck` (agrégé, tous
+  workspaces) passent tous deux sans erreur. L'erreur d'import type-only sur `nav-main.tsx` n'est plus
+  reproductible ; cette entrée est conservée pour l'historique, elle ne décrit plus l'état courant.
 - Les corrections appliquées sont documentées ici et dans les preuves datées ; ce registre conserve
   les constats historiques pour expliquer les changements d'état.
 
