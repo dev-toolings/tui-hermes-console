@@ -8,7 +8,6 @@ MAKEFLAGS += --no-print-directory
 PKG      := bun
 SERVER   := apps/server
 WEB      := apps/web
-MOBILE   := apps/mobile
 SPIKE    := spike
 ENV_FILE := $(SERVER)/.env.local
 ENV_TPL  := $(SERVER)/.env.example
@@ -16,12 +15,6 @@ ENV_TPL  := $(SERVER)/.env.example
 PORT     ?= 3170
 # Port du dev server Vite (apps/web), lancé par `make dev` / `make web`.
 WEB_PORT ?= 1420
-
-# SimDeck — `full` cible 60 fps. La RAM est un réglage AVD Android uniquement.
-SIMDECK_PROFILE ?= full
-SIMDECK_FPS     ?= 60
-SIMDECK_RAM_MB  ?= 6144
-SIMDECK_DEVICE  ?= android:SimDeck_Pixel_CI
 
 # Postgres local — conteneur `infra-postgres` (~/Documents/infra/compose.yml)
 PG_HOST ?= localhost
@@ -64,7 +57,7 @@ help: ## Affiche cette aide
 			printf "\n%sHermes Console%s %s— make <target> [VAR=value]%s\n", bold, reset, dim, reset } \
 		/^##@/ { printf "\n%s%s%s\n", bold, substr($$0, 5), reset } \
 		/^[a-zA-Z0-9_.-]+:.*## / { printf "  %s%-16s%s %s\n", cyan, $$1, reset, $$2 } \
-		END { printf "\n%sVariables:%s PORT=%s PG_DB=%s PG_PORT=%s SIMDECK_FPS=%s SIMDECK_RAM_MB=%s\n\n", dim, reset, "$(PORT)", "$(PG_DB)", "$(PG_PORT)", "$(SIMDECK_FPS)", "$(SIMDECK_RAM_MB)" } \
+		END { printf "\n%sVariables:%s PORT=%s PG_DB=%s PG_PORT=%s\n\n", dim, reset, "$(PORT)", "$(PG_DB)", "$(PG_PORT)" } \
 	' $(MAKEFILE_LIST)
 
 ##@ Setup
@@ -213,75 +206,6 @@ build: ## Build de production du SPA
 start: build ## Sert l'API et le SPA compilé sur un seul port
 	$(call say,Serving the console on http://localhost:$(PORT))
 	@CONSOLE_SERVER_PORT=$(PORT) $(PKG) run start
-
-##@ Application mobile
-
-.PHONY: mobile-dev
-mobile-dev: ## Lance Expo en mode headless sûr pour Linux/SSH
-	$(call say,Starting Hermes Console Mobile without local Chromium DevTools)
-	@$(PKG) run dev:mobile
-
-.PHONY: mobile-build
-mobile-build: ## Exporte les bundles mobile iOS, Android et Web
-	$(call say,Exporting mobile bundles for every platform)
-	@$(PKG) run build:mobile --platform all
-	$(call ok,Mobile bundles exported to $(MOBILE)/dist)
-
-.PHONY: mobile-prebuild
-mobile-prebuild: ## Génère les projets natifs iOS et Android sans installer les pods
-	$(call say,Generating native Expo projects)
-	@cd $(MOBILE) && $(PKG)x expo prebuild --platform all --clean --no-install
-	$(call ok,Native projects generated)
-
-.PHONY: mobile-test
-mobile-test: ## Lance les tests mobile et contrats SimDeck
-	$(call say,Running mobile tests)
-	@$(PKG) run --filter mobile test
-
-.PHONY: mobile-typecheck
-mobile-typecheck: ## Vérifie les types de l'application mobile
-	$(call say,Typechecking mobile app)
-	@$(PKG) run --filter mobile typecheck
-
-.PHONY: mobile-check
-mobile-check: mobile-typecheck mobile-test mobile-build ## Valide types, tests et bundles mobiles
-	$(call ok,Mobile checks passed)
-
-##@ SimDeck
-
-.PHONY: simdeck-check
-simdeck-check: ## Vérifie macOS Apple Silicon et la disponibilité de SimDeck
-	@[ "$$(uname -s)" = "Darwin" ] || { printf "$(RED)✗$(RESET) SimDeck exige macOS Apple Silicon\n" >&2; exit 1; }
-	@[ "$$(uname -m)" = "arm64" ] || { printf "$(RED)✗$(RESET) SimDeck exige une machine arm64\n" >&2; exit 1; }
-	@command -v simdeck >/dev/null 2>&1 || $(PKG)x simdeck --help >/dev/null
-	$(call ok,SimDeck host ready)
-
-.PHONY: simdeck-config
-simdeck-config: simdeck-check ## Configure SimDeck en full 60 fps avec accélération matérielle
-	$(call say,Configuring SimDeck $(SIMDECK_PROFILE) at $(SIMDECK_FPS) fps)
-	@$(PKG)x simdeck service restart \
-		--stream-quality $(SIMDECK_PROFILE) \
-		--local-stream-fps $(SIMDECK_FPS) \
-		--video-codec hardware \
-		--android-gpu host
-	$(call ok,SimDeck stream configured)
-
-.PHONY: simdeck-android-boot
-simdeck-android-boot: simdeck-config ## Démarre l'AVD Android avec 6 Gio de RAM
-	$(call say,Booting $(SIMDECK_DEVICE) with $(SIMDECK_RAM_MB) MiB RAM)
-	@$(PKG)x simdeck boot "$(SIMDECK_DEVICE)" \
-		--android-emulator-arg=-memory \
-		--android-emulator-arg=$(SIMDECK_RAM_MB) \
-		--android-emulator-arg=-gpu \
-		--android-emulator-arg=host
-	@$(PKG)x simdeck use "$(SIMDECK_DEVICE)"
-	$(call ok,Android emulator selected)
-
-.PHONY: simdeck-test
-simdeck-test: simdeck-check ## Exécute le smoke test mobile via SimDeck
-	$(call say,Running SimDeck smoke test)
-	@$(PKG) run --filter mobile test:simdeck
-	$(call ok,SimDeck evidence written to $(MOBILE)/artifacts/simdeck)
 
 ##@ Qualité
 

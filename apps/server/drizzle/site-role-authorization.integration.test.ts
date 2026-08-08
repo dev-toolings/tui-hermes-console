@@ -303,6 +303,13 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
         (id, site_id, run_id, hermes_run_id, approval_request_id, nonce, claim_state, expires_at)
       VALUES
         ('approval-row-role', 'paris', 'run_approval', 'hermes-approval', 'approval_0', 'nonce-role', 'pending', now() + interval '5 minutes');
+      INSERT INTO artifacts
+        (id, site_id, owner_user_id, author_user_id, run_id, direction, filename, storage_path,
+         mime_type, size_bytes, checksum_sha256)
+      VALUES
+        ('file_denied', 'paris', 'usr_admin', 'usr_admin', 'run_denied', 'output', 'denied.txt',
+         ${sqlString(join(artifactRoot, "runs", "run_denied", "out", "denied.txt"))},
+         'text/plain', 6, repeat('0', 64));
     `);
   }, 30_000);
 
@@ -359,6 +366,9 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
         method: "POST",
         body: { message: "/model gpt-5.6" },
       }),
+      authenticatedRequest("auditor", "/api/files/file_denied", {
+        method: "DELETE",
+      }),
     ];
     const responses = await Promise.all(deniedRequests.map((request) => appFetch(request)));
     const bodies = await Promise.all(responses.map(payload));
@@ -376,12 +386,18 @@ describeWithDocker("site role authorization through Hono and PostgreSQL", () => 
         WHERE target_site_id = 'paris'
           AND decision = 'denied'
           AND reason_code = 'ROLE_PERMISSION_DENIED';`),
-    ).toBe("8");
+    ).toBe("9");
     expect(
       psql(`SELECT string_agg(DISTINCT actor_role, ',' ORDER BY actor_role)
         FROM audit_ledger_entries
         WHERE target_site_id = 'paris' AND reason_code = 'ROLE_PERMISSION_DENIED';`),
     ).toBe("approver,auditor,operator,requester");
+    expect(
+      psql(`SELECT actor_role || ':' || decision || ':' || reason_code
+        FROM audit_ledger_entries
+        WHERE action = 'artifact.delete' AND resource_id = 'paris'
+        ORDER BY sequence DESC LIMIT 1;`),
+    ).toBe("auditor:denied:ROLE_PERMISSION_DENIED");
   });
 
   test("self role changes and persistent approvals are denied before effect and audited", async () => {

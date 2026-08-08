@@ -37,10 +37,8 @@ l'empreinte du serveur ; le tunnel expose localement l'API Hermes distante. Comp
 secours, compte dédié, hôte Console, Hermes.
 
 
-> **SFTP retiré le 08-08-2026.** Le transfert de fichiers par SFTP a été supprimé du produit avec
-> les stories `US-G1-SSH-006/007/009`. Les sections de ce guide qui décrivent un aller-retour SFTP,
-> une reprise de transfert ou un test `sftp -b` ne sont plus applicables et ne doivent pas être
-> rejouées. Le répertoire de travail est partagé par bind mount, voir `US-G1-SSH-010`. La clé SSH
+> Le transfert de fichiers distant et ses stories `US-G1-SSH-006/007/009` ont été retirés le
+> 08-08-2026. Le répertoire de travail est partagé par bind mount, voir `US-G1-SSH-010`. La clé SSH
 > doit toujours autoriser le port-forwarding, dont dépend le tunnel Hermes.
 
 ## Parcours de livraison et sous-scénarios stables
@@ -239,11 +237,10 @@ systemctl reload sshd
 ~~~
 
 Si l'unité est `ssh.service`, recharger celle-ci. Ouvrir de **nouvelles** connexions admin et service,
-prouver l'élévation admin puis seulement fermer la session root. Le chemin SFTP nécessite le
-sous-système SFTP de la distribution ; ne pas le désactiver.
+prouver l'élévation admin puis seulement fermer la session root.
 
 Des restrictions supplémentaires via `Match User` ou options `authorized_keys` doivent être testées
-contre le tunnel et SFTP : une clé avec `no-port-forwarding` casserait le transport Hermes.
+contre le tunnel : une clé avec `no-port-forwarding` casserait le transport Hermes.
 
 ## 7. Préparer le workdir partagé avec Hermes
 
@@ -265,26 +262,11 @@ groupe. Ne pas rendre le workdir world-writable et ne pas ajouter `hermes-consol
 
 Cette configuration de permissions n'est **pas** une frontière OS « workdir only » : le transport
 système actuel ouvre un canal de commandes pour `mkdir`, `ls` et `scp`, et l'utilisateur peut encore
-écrire dans les emplacements génériques autorisés par l'OS, notamment `/tmp`. Un `ForceCommand
-internal-sftp` ou un chroot naïf casserait ce transport. US-G1-008 reste donc bloquée jusqu'à ce qu'un
+écrire dans les emplacements génériques autorisés par l'OS, notamment `/tmp`. Un chroot naïf
+casserait ce transport. US-G1-008 reste donc bloquée jusqu'à ce qu'un
 helper/sidecar borné ou une autre frontière OS démontre le refus des écritures hors workdir sans
 casser tunnel et transfert. Le compte DOIT au minimum rester sans sudo, sans groupe Docker et sans
 accès aux secrets ou répertoires des autres services.
-
-Test SFTP manuel avec un fichier synthétique :
-
-~~~sh
-tmp_file="$(mktemp)"
-printf '%s\n' 'hermes-console-sftp-smoke' > "$tmp_file"
-sftp -b - hermes-<site> <<EOF
-put $tmp_file /srv/hermes-console/workdir/in/sftp-smoke.txt
-ls -l /srv/hermes-console/workdir/in/sftp-smoke.txt
-EOF
-rm -f "$tmp_file"
-~~~
-
-La suppression distante du fichier de test fait partie du nettoyage documenté du rapport. Ne jamais
-utiliser un fichier client réel pour le smoke test.
 
 ### Empreintes et overlay Compose
 
@@ -389,8 +371,8 @@ test.
 
 ### Chemin protégé hors workdir
 
-Tenter via SFTP de déposer un fichier synthétique dans un répertoire de test protégé, explicitement
-hors du workdir et non accessible au compte de service. L'opération DOIT échouer et l'inventaire
+Tenter via une commande SSH gérée d'écrire un fichier synthétique dans un répertoire de test protégé,
+explicitement hors du workdir et non accessible au compte de service. L'opération DOIT échouer et l'inventaire
 avant/après DOIT être identique. Tester séparément que les écritures dans `/tmp` et le home sont
 refusées par la frontière retenue ; ne pas les supposer protégées par les permissions du workdir.
 
@@ -414,7 +396,7 @@ les logs d'authentification et tourner tout secret potentiellement exposé. Ne p
 tant que cela empêcherait la récupération contrôlée des fichiers ; appliquer la procédure d'incident.
 
 Retirer une clé n'interrompt pas un `ControlMaster` déjà authentifié. La recette DOIT donc ouvrir un
-tunnel et une session SFTP avec l'ancienne clé avant révocation, fermer côté serveur les connexions de
+tunnel et une commande distante avec l'ancienne clé avant révocation, fermer côté serveur les connexions de
 cette identité, puis prouver que l'ancien canal et toute nouvelle connexion échouent. Elle fixe un SLA
 de révocation mesuré et vérifie que la nouvelle identité reste fonctionnelle.
 
@@ -430,11 +412,9 @@ puis remplacer l'entrée dédiée. `ssh-keygen -R` seul n'est jamais une validat
 - couper le réseau pendant une mission synthétique, puis vérifier état explicite et reconnexion ;
 - changer de cible pendant qu'un tunnel existe et confirmer que l'ancien est fermé ;
 - lancer deux missions synthétiques concurrentes sans mélange de workdirs/artefacts ;
-- interrompre un transfert SFTP, reprendre selon le contrat et vérifier hash/taille ;
 - remplir un quota synthétique et vérifier un refus propre sans fichier partiel.
 
 Chaque test doit suivre [`../evidence/README.md`](../evidence/README.md). Une réussite SSH manuelle seule
 ne suffit pas à accepter US-G1-008.
 
-Les erreurs de tunnel, SFTP, hash, quota ou nettoyage DOIVENT remonter comme échec observable. Un
-chemin qui journalise puis absorbe une erreur ne satisfait ni `SSH-006` ni `SSH-009`.
+Les erreurs de tunnel, commande distante, quota ou nettoyage DOIVENT remonter comme échec observable.

@@ -21,12 +21,11 @@ nomme l'incohérence, la démontre par une citation vérifiable, et dit ce qui e
 Les preuves de régression et de runtime sont datées du rejeu du 04-08-2026 ; les skips restent
 explicitement environnementaux et ne sont pas comptés comme des succès.
 
-## Décision de périmètre : SFTP retiré
+## Décision de périmètre : transfert de fichiers distant retiré
 
-Le transfert SFTP n'est pas retenu pour cette phase produit. `US-G1-SSH-006`, `US-G1-SSH-007` et
-`US-G1-SSH-009` ont d'abord été gelées, puis **supprimées du corpus le 08-08-2026**. Réserve ouverte :
-le code SFTP reste dans l'arbre et a été modifié le 07-08-2026 par `abd52ce`, donc une surface sans
-contrat subsiste. Le tunnel SSH, la confiance d'hôte et la rotation d'identité restent des
+Le transfert de fichiers distant n'est pas retenu pour cette phase produit. `US-G1-SSH-006`,
+`US-G1-SSH-007` et `US-G1-SSH-009` ont d'abord été gelées, puis **supprimées du corpus et du code le
+08-08-2026**. Le tunnel SSH, la confiance d'hôte et la rotation d'identité restent des
 éléments actifs du sous-périmètre SSH.
 
 ---
@@ -62,28 +61,27 @@ US-G1-004 restent des réserves de Gate 1, pas l'INC-01.
 
 ---
 
-## INC-02 — Une fonctionnalité livrée sans story — PARTIELLEMENT RÉSOLUE
+## INC-02 — Une fonctionnalité livrée sans story — RÉSOLUE
 
 Le constat initial portait sur `updates` et `skills`, toutes deux complètes côté back, front,
-migrations et tests. `updates` est maintenant couverte par `US-G1-002D` et une preuve locale/Proxmox
-réelle ; `skills` reste sans story.
+migrations et tests. `updates` est couverte par `US-G1-002D` et une preuve locale/Proxmox réelle ;
+`skills` est désormais couverte par `US-G1-SKILLS-001` et une preuve partielle sur le runtime réel.
 
 | Fonctionnalité | Artefacts constatés |
 |---|---|
 | `updates` | `apps/server/src/modules/updates/{hermes-releases.ts,github-hermes-releases.ts}`, routes `/api/runtime/update`, `/api/runtime/update/[operationId]`, `/api/runtime/update/[operationId]/events`, `/api/updates/hermes`, migrations `0034`/`0035`, entrée de navigation `/updates`, script `apps/server/scripts/sync-hermes-releases.ts` — désormais couverte par `US-G1-002D` et sa preuve du 04-08-2026 |
-| `skills` | `apps/server/src/api/skills/route.ts`, `apps/server/src/api/skills/toggle/route.ts`, `apps/server/src/modules/runtime/hermes-skills-admin.ts` (+ test), écran `apps/web/src/screens/skills.tsx`, entrée de navigation `/skills` |
+| `skills` | `apps/server/src/api/skills/route.ts`, `apps/server/src/api/skills/toggle/route.ts`, `apps/server/src/modules/runtime/hermes-skills-admin.ts` (+ test), écran `apps/web/src/screens/skills.tsx`, entrée de navigation `/skills` — désormais couverte par `US-G1-SKILLS-001` |
 
 **Pourquoi c'est grave ici.** Le dépôt applique une méthode où aucune capacité n'est acceptable sans
 story, scénarios positif et négatif, et preuve datée. `skills` échappe encore au dispositif. `updates`
 reste la cause directe d'INC-01 : elle a introduit deux tables qui ont fait tomber une frontière de
 sécurité prouvée, frontière désormais corrigée.
 
-**Gel.** `skills` ne peut pas être invoquée dans une preuve ni une revue de gate tant qu'une story ne
-la couvre pas. `updates` peut être examinée pour sa partie technique, mais reste `IMPLÉMENTÉE` et non
-`VÉRIFIÉE` jusqu'à la revue indépendante et au P-E2E Gate 1.
-
-**Décision requise.** Le propriétaire produit doit écrire la story `skills` ou la déclarer
-explicitement hors méthode. `US-G1-002D` est le rattachement retenu pour `updates`.
+**Résolution du 08-08-2026.** `US-G1-SKILLS-001` contient rôle, valeur, scénarios positif/négatif,
+preuves attendues et reviewers. L'inventaire réel de 69 skills sur Hermes 0.20.0 et les contrats
+unitaires sont datés. La story reste seulement `PARTIELLEMENT VÉRIFIÉE` tant que le toggle réel avec
+restauration, le refus HTTP et les reviewers ne sont pas obtenus. `US-G1-002D` reste le rattachement
+de `updates`.
 
 ---
 
@@ -158,7 +156,7 @@ archivé.
 
 ---
 
-## INC-07 : deux échecs serveur intermittents, non identifiés
+## INC-07 : deux échecs serveur intermittents — CORRIGÉE
 
 **Ouverte le 08-08-2026.**
 
@@ -202,11 +200,43 @@ supérieur à l'estimation initiale. La suite repasse systématiquement verte à
 livrable DOIT conserver la sortie complète. Filtrer la sortie en direct fait perdre l'information au
 moment précis où elle apparaît, ce qui s'est produit deux fois.
 
-**Action requise avant toute revue de Gate :** capturer les noms des tests concernés. La répétition
-seule ayant échoué sur six exécutions, viser la cause plutôt que l'occurrence : conserver
-systématiquement la sortie complète du harness, et exécuter la suite serveur seule, sans parallélisme
-inter-workspaces, pour déterminer si la contention de conteneurs est bien en jeu. Une suite dont deux
-échecs sur 451 restent anonymes ne permet pas de signer un rapport d'acceptation de bonne foi.
+**Reproduction décisive du 08-08-2026.** La suite serveur seule, sans parallélisme inter-workspaces et
+avec sa sortie complète conservée, a reproduit exactement deux échecs :
+
+```text
+(fail) audit ledger migration on PostgreSQL > 0018 replays and enforces actor snapshots,
+       target ordering, and mutation guards [56.00ms]
+(fail) audit ledger migration on PostgreSQL > appendAuditEntry is idempotent and rejects
+       divergent reuse of an event id [64.00ms]
+```
+
+Les deux erreurs sont identiques : `psql` ne trouve plus
+`/var/run/postgresql/.s.PGSQL.5432`. La sonde du `beforeAll` de
+`audit-ledger-migration.test.ts` acceptait le premier `SELECT 1` réussi, y compris celui du serveur
+PostgreSQL temporaire utilisé pendant l'initialisation de l'image. Le test commençait ensuite pendant
+l'arrêt de ce serveur temporaire, avant le démarrage du serveur final.
+
+**Correction.** Le harness exige désormais les deux signaux déjà utilisés par les tests de migration
+stables du dépôt : le log `PostgreSQL init process complete; ready for start up.` puis un `SELECT 1`
+réussi. Le code applicatif du ledger n'a pas été modifié.
+
+**Validation :**
+
+- test isolé corrigé : `2 pass`, `0 fail`, `16 expect()`, `9,43 s` ;
+- suite serveur complète : `420 pass`, `3 skip` explicites, `0 fail`, `1 890 expect()`, 98 fichiers,
+  `119,47 s` ;
+- les 15 fichiers utilisant une image PostgreSQL ont tous produit leur en-tête de démarrage dans le
+  log de la suite corrigée ;
+- sortie rouge complète hors Git : `server-suite-inc07-full.log`, 68 047 octets, SHA-256
+  `6f694a7ad5ba68900458741a1c630dfbfefb5596a4668f7f9b083be2ac17e738` ;
+- sortie isolée corrigée : `audit-ledger-isolated-after-fix.log`, SHA-256
+  `012b3914970166a03556cc3b5c57d39bffc21143dd938ab8beaf64090fdb9d87` ;
+- sortie verte complète : `server-suite-inc07-after-fix.log`, 65 785 octets, SHA-256
+  `f74eee564e10597f63fda75954c68224dae618956c49b607efee6aaa3367d2ff`.
+
+Les trois fichiers sont conservés sous
+`/home/kev/.codex/artifacts/ux001-20260808/`. `INC-07` est corrigée : les deux noms sont connus, la
+cause est reproduite, la sonde fautive est durcie et la reproduction complète repasse au vert.
 
 ---
 

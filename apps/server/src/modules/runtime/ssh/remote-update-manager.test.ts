@@ -9,7 +9,7 @@ import {
 } from "./remote-update-manager";
 
 describe("remote runtime update manager", () => {
-  test("exposes only the two root operations required by the Console", () => {
+  test("exposes the two runtime update operations required by the Console", () => {
     expect(remoteUpdateManagerInspectCommand()).toBe(
       `sudo -n ${REMOTE_UPDATE_MANAGER_PATH} inspect`,
     );
@@ -39,10 +39,12 @@ describe("remote runtime update manager", () => {
     expect(command).toContain("mode=native");
     expect(command).toContain("runtime_root=/srv/hermes-console/workdir");
     expect(command).toContain(
-      `hermes-console ALL=(root) NOPASSWD: ${REMOTE_UPDATE_MANAGER_PATH} inspect, ${REMOTE_UPDATE_MANAGER_PATH} update`,
+      `hermes-console ALL=(root) NOPASSWD: ${REMOTE_UPDATE_MANAGER_PATH} inspect, ${REMOTE_UPDATE_MANAGER_PATH} update, ${REMOTE_UPDATE_MANAGER_PATH} workspace-get, ${REMOTE_UPDATE_MANAGER_PATH} workspace-set *, ${REMOTE_UPDATE_MANAGER_PATH} workspace-probe *`,
     );
     expect(command).toContain("visudo -cf");
     expect(command).not.toContain("NOPASSWD: ALL");
+    expect(REMOTE_UPDATE_MANAGER_SCRIPT).toContain("validate_workspace_path");
+    expect(REMOTE_UPDATE_MANAGER_SCRIPT).toContain("workspace_inspection=true");
   });
 
   test("encodes the managed Docker topology without broadening privileges", () => {

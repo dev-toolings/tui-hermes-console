@@ -31,8 +31,7 @@ export type SshCommandSession = {
   result: Promise<SshExecResult>;
 };
 
-/** Une connexion SSH partagée : le port-forward HTTP et le SFTP des artefacts
- *  passent par le même canal, donc une seule authentification. */
+/** Une connexion SSH partagée pour le port-forward HTTP et les commandes distantes. */
 export type SshChannel = {
   /** Ouvre (ou réutilise) un forward local et renvoie `http://127.0.0.1:<port>`. */
   forward(remoteHost: string, remotePort: number): Promise<string>;

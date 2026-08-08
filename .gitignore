@@ -13,11 +13,6 @@ auth.md
 !apps/web/src-tauri/icons/**/*.png
 # Visuel d'onboarding généré, référencé par le bundle Vite.
 !apps/web/src/assets/setup-operation-board.png
-# Assets de marque référencés par Expo et requis dans les builds mobiles/CI.
-!apps/mobile/assets/images/icon.png
-!apps/mobile/assets/images/splash-icon.png
-!apps/mobile/assets/images/android-icon-foreground.png
-!apps/mobile/assets/images/favicon.png
 # Décision du 08-08-2026 : les captures de preuve ne sont plus versionnées. Les rapports
 # d'evidence portent une description observable et l'empreinte `sha256` de la capture,
 # qui reste hors dépôt. Ne pas rouvrir d'exception ici pour docs/user-stories/evidence/.

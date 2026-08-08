@@ -1,8 +1,5 @@
-import { createReadStream, createWriteStream } from "node:fs";
 import net from "node:net";
-import { pipeline } from "node:stream/promises";
 import { Client } from "ssh2";
-import { createByteLimit } from "./byte-limit";
 import { mapForwardError, mapSshError, sshHostKeyRejected } from "./errors";
 import {
   configuredKnownHostsPath,
@@ -222,4 +219,3 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
 
   return { forward, exec: execRemote, start: startRemote, close };
 }
-

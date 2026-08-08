@@ -47,14 +47,24 @@ describeWithDocker("audit ledger migration on PostgreSQL", () => {
       "--tmpfs", "/var/lib/postgresql/data:rw,noexec,nosuid,size=256m", "--env",
       "POSTGRES_HOST_AUTH_METHOD=trust", POSTGRES_IMAGE,
     ]);
+    const initCompleteMarker = "PostgreSQL init process complete; ready for start up.";
     for (let attempt = 0; attempt < 60; attempt += 1) {
-      if (spawnSync("docker", ["exec", containerName, "psql", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-Atqc", "SELECT 1;"], { stdio: "ignore" }).status === 0) {
+      const logs = spawnSync("docker", ["logs", containerName], { encoding: "utf8" });
+      const output = `${logs.stdout ?? ""}\n${logs.stderr ?? ""}`;
+      const ready = spawnSync(
+        "docker",
+        ["exec", containerName, "psql", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-Atqc", "SELECT 1;"],
+        { stdio: "ignore" },
+      ).status === 0;
+      if (output.includes(initCompleteMarker) && ready) {
         hostPort = docker(["port", containerName, "5432/tcp"]).split(":").at(-1) ?? "";
         return;
       }
       await Bun.sleep(250);
     }
-    throw new Error("PostgreSQL éphémère indisponible.");
+    throw new Error(
+      "PostgreSQL final n’est pas prêt après 15 secondes pour le test de migration du ledger.",
+    );
   }, 20_000);
 
   afterAll(() => {

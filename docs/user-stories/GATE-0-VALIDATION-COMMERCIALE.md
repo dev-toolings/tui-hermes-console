@@ -5,6 +5,10 @@
 **Critère de sortie :** preuve d'un workflow utile et engagement payant avant tout investissement
 fleet.
 
+**État commercial au 08-08-2026 :** `0/3` fiche partenaire qualifiée, `0` pilote partenaire et
+`0` engagement payant. La Gate 0 ne peut donc pas être déclarée `GO`. L'acceptation locale de
+`US-G0-UX-001` ne lève ni cette condition humaine, ni les dépendances des Gates 1 et 2.
+
 ## Frontière d'expérimentation
 
 La Gate 0 autorise la découverte et des essais supervisés dans une sandbox isolée, avec identifiants
@@ -24,8 +28,9 @@ décisions.
 > En tant que **demandeur métier**, je veux choisir une intention et valider le résultat attendu, les
 > exclusions et le plan, afin qu’aucune réalisation ne commence sur une demande implicite.
 
-- **État :** `VÉRIFIÉE LOCALEMENT, NON ACCEPTÉE` — desktop, persistance et navigateur 320 px prouvés ;
-  reviewer métier indépendant et appareil physique ouverts.
+- **État :** `ACCEPTÉE` — **acceptée sous DER-001, sans revue contradictoire humaine** ; rejeu
+  desktop courant positif/négatif et absence d'exécution prématurée prouvés. Cette décision ne
+  resigne ni la tranche mobile, ni `US-G0-UX-002`, ni `US-G0-APPROVAL-001`.
 - **Dépendances :** auth locale ou session utilisateur valide, capacité `thread.create`.
 - **Scénario positif :** Étant donné un utilisateur sans vocabulaire technique, quand il choisit une
   intention, décrit un objectif, un résultat observable et un hors-périmètre, alors la Console affiche
@@ -39,6 +44,8 @@ décisions.
   dépôt et le rapport porte leur empreinte `sha256`, conformément à la décision du 08-08-2026. La reprise persistante et l'identifiant de tâche relèvent de
   `US-G0-TASK-001`.
 - **Reviewer :** responsable produit, avec un demandeur métier distinct de l’implémenteur.
+- **Dérogation appliquée :** `DER-001`, jusqu'au 08-11-2026 ; rapport d'acceptation et revue
+  adversariale datés du 08-08-2026.
 
 ## US-G0-UX-002 — Refuser une exécution non isolée
 
@@ -171,7 +178,8 @@ vérifications, sans valoir acceptation produit indépendante.
   compté parmi les trois partenaires.
 - **Preuves :** `P-COM`, trois fiches expurgées, consentement au pilote, raisons de qualification ou
   rejet. Grille de qualification et gabarit de fiche : [guides/G0-001-QUALIFICATION-PARTENAIRE.md](guides/G0-001-QUALIFICATION-PARTENAIRE.md).
-- **État initial :** `PROPOSÉE`.
+- **État courant :** `PROPOSÉE` — `0/3` fiche partenaire ; interviews, consentements et signatures
+  sont des actions humaines non simulables par le dépôt.
 
 ## US-G0-002 — Piloter un workflow étroit par partenaire
 

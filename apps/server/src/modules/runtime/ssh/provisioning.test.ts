@@ -69,10 +69,10 @@ describe("SSH provisioning plan", () => {
       "verify",
     ]);
     expect(plan.steps.find((step) => step.id === "dashboard")?.commandPreview).toContain(
-      "-p 127.0.0.1:9119:9119",
+      "--network host",
     );
     expect(plan.steps.find((step) => step.id === "dashboard")?.commandPreview).toContain(
-      "--host 0.0.0.0",
+      "--host 127.0.0.1",
     );
     expect(plan.steps.find((step) => step.id === "hermes-docker")?.commandPreview).toContain(
       "--cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --cap-add SETGID --cap-add SETUID",

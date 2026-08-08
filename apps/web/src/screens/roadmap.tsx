@@ -60,7 +60,7 @@ const GATES: Gate[] = [
       "Policy fail-closed hors process agent avec approbations signées et attribuées",
       "Journal d'audit append-only séparé des événements runtime",
       "Rétention, suppression, export, backup et restauration testés",
-      "E2E du parcours critique et tests réels du tunnel SSH / SFTP",
+      "E2E du parcours critique et tests réels du tunnel SSH",
     ],
   },
   {

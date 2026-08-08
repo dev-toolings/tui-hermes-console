@@ -669,7 +669,7 @@ export function SshRuntimeSetup({
                 <ChevronDownIcon className="size-4 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
               </summary>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <Field icon={FolderCheckIcon} label="Chemin sur le VPS" hint="Chemin absolu accessible par SFTP.">
+                <Field icon={FolderCheckIcon} label="Chemin sur le VPS" hint="Chemin absolu accessible par la Console via SSH.">
                   <input
                     value={manualHostPath}
                     onChange={(event) => setManualHostPath(event.target.value)}
@@ -1167,7 +1167,7 @@ function StorageMigration({
             Migrer le stockage Docker
           </h4>
           <p className="mt-1 text-[0.6875rem] leading-5 text-warn-700">
-            Le volume nommé <code className="font-mono">{availability.sourceVolume ?? "inconnu"}</code> ne peut pas être parcouru proprement par SFTP. La cible déclarative sera <code className="font-mono">{availability.defaultTargetRoot}</code>, montée sur <code className="font-mono">/opt/data</code>.
+            Le volume nommé <code className="font-mono">{availability.sourceVolume ?? "inconnu"}</code> n’expose aucun chemin hôte partagé avec la Console. La cible déclarative sera <code className="font-mono">{availability.defaultTargetRoot}</code>, montée sur <code className="font-mono">/opt/data</code>.
           </p>
         </div>
       </div>
@@ -1283,7 +1283,7 @@ function ManualStorageMigrationGuide() {
         <li>1. Sauvegardez tout <code className="font-mono">/opt/data</code>, puis arrêtez Hermes afin de figer les écritures.</li>
         <li>2. Copiez le volume vers <code className="font-mono">/srv/hermes-console/data</code> en conservant UID, GID, modes et dates ; comparez les manifestes.</li>
         <li>3. Conservez l’ancien conteneur et son volume, puis recréez Hermes avec un bind mount vers <code className="font-mono">/opt/data</code> et le port <code className="font-mono">127.0.0.1:8642</code>.</li>
-        <li>4. Vérifiez health, capabilities, SFTP et une écriture Hermes avant d’activer <code className="font-mono">/srv/hermes-console/data/workspace</code>.</li>
+        <li>4. Vérifiez le bind mount, health, capabilities et une écriture Hermes avant d’activer <code className="font-mono">/srv/hermes-console/data/workspace</code>.</li>
       </ol>
       <a href="/docs/installation-utilisation#migration-dun-volume-docker-vers-un-bind-mount" target="_blank" rel="noreferrer" className="mt-3 inline-block text-[0.6875rem] font-medium text-warn-700 underline underline-offset-2">
         Ouvrir le guide opérateur complet

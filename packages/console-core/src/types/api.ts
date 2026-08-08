@@ -271,7 +271,7 @@ export type RuntimeSshWorkspaceCandidateDto = {
   id: string;
   source: RuntimeSshWorkspaceCandidateSource;
   label: string;
-  /** Chemin du VPS accessible en SFTP par la Console. */
+  /** Chemin du VPS accessible par la Console via SSH. */
   remoteWorkdir: string;
   /** Chemin absolu utilisé dans les prompts et visible par Hermes. */
   remoteHermesWorkdir: string;
@@ -404,7 +404,7 @@ export type RuntimeSshPlanDto = {
   mode: RuntimeProvisionMode;
   /** Identité privilégiée utilisée uniquement pour préparer l'hôte. */
   provisioner: { host: string; port: number; user: string };
-  /** Identité non privilégiée persistée pour tunnel, SFTP et missions. */
+  /** Identité non privilégiée persistée pour le tunnel et les missions. */
   target: { host: string; port: number; user: string };
   remoteBaseUrl: string;
   remoteWorkdir: string;

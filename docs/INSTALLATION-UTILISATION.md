@@ -234,10 +234,11 @@ docker run -d \
 unset HERMES_API_KEY
 ```
 
-Le bind `0.0.0.0` est nécessaire à l’intérieur du conteneur ; le bind publié sur l’hôte reste
-`127.0.0.1`. Pour une installation reproductible, remplacer `:latest` par un digest d’image
-validé par l’équipe. Le Dashboard est un conteneur compagnon distinct : son `restart unless-stopped`
-le rend persistant sans donner à Hermes le socket Docker.
+L’API publie son port conteneur uniquement sur le loopback hôte. Le Dashboard utilise le réseau hôte
+afin de pouvoir écouter directement sur `127.0.0.1` : l’image Hermes refuse désormais un bind
+`0.0.0.0` sans fournisseur d’authentification. Pour une installation reproductible, remplacer
+`:latest` par un digest d’image validé par l’équipe. Le Dashboard est un conteneur compagnon distinct :
+son `restart unless-stopped` le rend persistant sans donner à Hermes le socket Docker.
 
 Vérifier :
 
@@ -319,7 +320,7 @@ la connexion et le dossier de travail :
 4. cliquer sur `Rechercher sur le VPS` pour détecter Hermes natif ou Docker, `terminal.cwd` et
    les bind mounts disponibles ;
 5. choisir un dossier proposé, ou vérifier manuellement les chemins vus par le VPS et par Hermes ;
-6. confirmer l’activation après les tests d’écriture SFTP et dans le contexte réel d’Hermes.
+6. confirmer l’activation après les tests d’écriture via SSH et dans le contexte réel d’Hermes.
 
 La section `Installation ou réparation` reste optionnelle et sépare le compte admin temporaire du
 compte service persisté. Deux modes sont disponibles : Docker tire l’image officielle `:latest`,
@@ -345,7 +346,7 @@ Les valeurs attendues restent :
 | Workdir distant | chemin réel du workdir Hermes sur le VPS |
 
 Le `127.0.0.1` de la Base URL est celui du VPS, pas celui du poste local. La Console crée le
-forward côté serveur et utilise le même canal pour le SFTP des fichiers.
+forward côté serveur et utilise le canal SSH pour ses commandes distantes gérées.
 
 Valider ensuite avec le bouton de test runtime ou :
 
@@ -370,7 +371,7 @@ il n’est ni une interface stable ni un déploiement déclaratif. La cible pris
 ║ │ Runtime, journal et workspace      │ ║
 ║ └─────────────────┬──────────────────┘ ║
 ╚═══════════════════│════════════════════╝
-                    │ SSH · SFTP · progression SSE
+                    │ SSH · commandes · progression SSE
                     ▼
 ╔════════════════════ VPS ═══════════════════════════════════╗
 ║ ┌──────────────────────────────┐  bind mount RW            ║
@@ -384,7 +385,7 @@ il n’est ni une interface stable ni un déploiement déclaratif. La cible pris
 ╚════════════════════════════════════════════════════════════╝
 ~~~
 
-Légende : SSH pilote Docker et SFTP prouve le chemin hôte ; le bind mount expose les mêmes octets à
+Légende : SSH pilote Docker et vérifie le chemin hôte ; le bind mount expose les mêmes octets à
 Hermes. Composants : Console Hono, journal PostgreSQL, stockage durable du VPS, runtime Hermes et
 copie de rollback.
 
@@ -409,19 +410,19 @@ confirmation ou le flux de progression au lieu de perdre l’opération. Après 
 4. renomme l’ancien conteneur sans supprimer son volume et démarre le nouveau déploiement Compose
    avec le même digest et la même clé `API_SERVER_KEY` ;
 5. attend jusqu'à 60 secondes le démarrage borné du gateway, puis vérifie le bind mount, `/health`,
-   `/v1/capabilities`, le tunnel, SFTP et une écriture depuis Hermes ;
+   `/v1/capabilities`, le tunnel et une écriture depuis Hermes ;
 6. persiste seulement alors le workspace hôte `/srv/hermes-console/data/workspace` correspondant à
    `/opt/data/workspace` dans Hermes.
 
 En cas d’échec après l’arrêt, le nouveau conteneur est retiré, l’ancien retrouve son nom et redémarre
 sur le volume nommé. Un état distant ambigu devient `récupération requise` et les missions restent
 bloquées. Le volume, le conteneur renommé et l’archive ne doivent être supprimés qu’après une mission
-réelle, un artefact relu par SFTP et une sauvegarde externe validée.
+réelle, un artefact relu depuis le stockage partagé et une sauvegarde externe validée.
 
 Pour une installation personnalisée, appliquez le même ordre manuellement : préflight sans écriture,
 arrêt, archive, copie avec métadonnées, comparaison des manifestes, conservation de l’ancien
 conteneur, recréation avec `--mount type=bind,src=/srv/hermes-console/data,dst=/opt/data`, puis preuves
-Hermes et SFTP. Si une étape échoue, redémarrez immédiatement l’ancien conteneur ; ne supprimez ni le
+Hermes et du bind mount. Si une étape échoue, redémarrez immédiatement l’ancien conteneur ; ne supprimez ni le
 volume source ni l’archive. La Console pourra ensuite vérifier et activer les deux chemins depuis la
 même route.
 

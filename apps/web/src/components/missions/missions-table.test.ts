@@ -7,7 +7,7 @@ describe("missions table delivery filter", () => {
   test("filters failed delivery independently from runtime failure", () => {
     const row = {
       status: "completed",
-      error: `${ARTIFACT_DELIVERY_ERROR_PREFIX}SFTP indisponible`,
+      error: `${ARTIFACT_DELIVERY_ERROR_PREFIX}stockage distant indisponible`,
     } as MissionRow;
 
     expect(matchesFilter(row, "delivery_failed")).toBe(true);

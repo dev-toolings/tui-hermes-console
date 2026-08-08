@@ -17,6 +17,7 @@ import {
   withRuntimeMutationLease,
   type RuntimeMutationLease,
 } from "@/modules/runs/active-runtime-guard";
+import { REMOTE_UPDATE_MANAGER_PATH } from "./remote-update-manager";
 
 export type WorkspaceInspection = {
   mode: "native" | "docker" | "unknown";
@@ -218,7 +219,7 @@ export async function discoverSshWorkspace(
     }
     if (inspection.dockerMount?.type === "volume") {
       blockers.push(
-        "Le volume Docker /opt/data n’expose aucun chemin hôte utilisable en SFTP. Recréez le conteneur avec un bind mount.",
+        "Le volume Docker /opt/data n’expose aucun chemin hôte partagé avec la Console. Recréez le conteneur avec un bind mount.",
       );
       const eligible =
         inspection.containerName === "hermes-console-runtime" &&
@@ -384,6 +385,12 @@ export function workspaceInspectionCommand(user: string) {
     "set +e",
     'home_dir="${HOME:-$(getent passwd \"$(id -un)\" 2>/dev/null | cut -d: -f6)}"',
     'printf "home=%s\\n" "$home_dir"',
+    ...(user === "root"
+      ? []
+      : [
+          `manager_output="$(sudo -n ${REMOTE_UPDATE_MANAGER_PATH} inspect 2>/dev/null)"`,
+          'if printf "%s\\n" "$manager_output" | grep -qx "workspace_inspection=true"; then printf "%s\\n" "$manager_output"; exit 0; fi',
+        ]),
     `hermes_container=""; docker_ambiguous=no; if ${docker} inspect hermes-console-runtime >/dev/null 2>&1; then hermes_container=hermes-console-runtime; else hermes_containers="$(${docker} ps --format '{{.Image}}|{{.Names}}' 2>/dev/null | awk -F'|' '$1 ~ /nousresearch\\/hermes-agent/ { print $2 }')"; hermes_count="$(printf '%s\\n' "$hermes_containers" | sed '/^$/d' | wc -l | tr -d ' ')"; if [ "$hermes_count" = 1 ]; then hermes_container="$hermes_containers"; elif [ "$hermes_count" -gt 1 ]; then docker_ambiguous=yes; fi; fi`,
     'printf "docker_ambiguous=%s\\n" "$docker_ambiguous"',
     'if [ -n "$hermes_container" ]; then',
@@ -503,7 +510,7 @@ function validateWorkspaceMapping(
   const mount = inspection.dockerMount;
   if (!mount || mount.type !== "bind") {
     throw new HermesRuntimeError(
-      "Le conteneur Hermes doit monter /opt/data depuis un chemin hôte avant l’activation SFTP.",
+      "Le conteneur Hermes doit monter /opt/data depuis un chemin hôte avant l’activation du workspace partagé.",
       409,
       "SSH_DOCKER_BIND_MOUNT_REQUIRED",
     );
@@ -593,8 +600,9 @@ export async function probeHermesWorkspaceAccess(
   const script = `set -eu; : > ${shellQuote(marker)}; rm -f -- ${shellQuote(marker)}`;
   let command: string;
   if (inspection.mode === "docker" && inspection.containerName) {
-    const docker = sshUser === "root" ? "docker" : "sudo -n docker";
-    command = `${docker} exec ${shellQuote(inspection.containerName)} sh -c ${shellQuote(script)}`;
+    command = sshUser === "root"
+      ? `docker exec ${shellQuote(inspection.containerName)} sh -c ${shellQuote(script)}`
+      : `sudo -n ${REMOTE_UPDATE_MANAGER_PATH} workspace-probe ${shellQuote(remoteHermesWorkdir)}`;
   } else if (inspection.mode === "native") {
     command = `${nativeRunAsPrefix(inspection, sshUser)} sh -c ${shellQuote(script)}`;
   } else {
@@ -616,6 +624,12 @@ export async function probeHermesWorkspaceAccess(
 
 function terminalCwdCommands(inspection: WorkspaceInspection, user: string) {
   const docker = user === "root" ? "docker" : "sudo -n docker";
+  if (inspection.mode === "docker" && inspection.containerName && user !== "root") {
+    return {
+      setCommand: `sudo -n ${REMOTE_UPDATE_MANAGER_PATH} workspace-set`,
+      getCommand: `sudo -n ${REMOTE_UPDATE_MANAGER_PATH} workspace-get`,
+    };
+  }
   const prefix =
     inspection.mode === "docker" && inspection.containerName
       ? `${docker} exec ${shellQuote(inspection.containerName)}`

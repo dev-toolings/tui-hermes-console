@@ -84,7 +84,7 @@ export function buildRemoteUpdateManagerInstallCommand(options: InstallOptions) 
 
   const sudo = options.sudo ? `${options.sudo} ` : "";
   const managerBase64 = Buffer.from(REMOTE_UPDATE_MANAGER_SCRIPT).toString("base64");
-  const sudoers = `${options.serviceUser} ALL=(root) NOPASSWD: ${REMOTE_UPDATE_MANAGER_PATH} inspect, ${REMOTE_UPDATE_MANAGER_PATH} update`;
+  const sudoers = `${options.serviceUser} ALL=(root) NOPASSWD: ${REMOTE_UPDATE_MANAGER_PATH} inspect, ${REMOTE_UPDATE_MANAGER_PATH} update, ${REMOTE_UPDATE_MANAGER_PATH} workspace-get, ${REMOTE_UPDATE_MANAGER_PATH} workspace-set *, ${REMOTE_UPDATE_MANAGER_PATH} workspace-probe *`;
   const configLines = [
     `mode=${options.mode}`,
     `runtime_root=${runtimeRoot}`,

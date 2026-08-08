@@ -111,7 +111,40 @@ inspect_docker() {
   validate_docker
   running=$(docker inspect -f '{{.State.Running}}' "$docker_container")
   image=$(docker inspect -f '{{.Config.Image}}' "$docker_container")
-  printf 'mode=docker\nmanaged=true\nactive=%s\nimage_ref=%s\n' "$running" "$image"
+  terminal_cwd=$(docker exec "$docker_container" hermes config get terminal.cwd 2>/dev/null | tail -n 1 || true)
+  [ -n "$terminal_cwd" ] || terminal_cwd=.
+  validate_workspace_path "$terminal_cwd"
+  if [ "$terminal_cwd" = . ]; then resolved_cwd=/opt/data; else resolved_cwd=$terminal_cwd; fi
+  printf 'mode=docker\nworkspace_inspection=true\ndocker_ambiguous=no\nmanaged=true\nactive=%s\nimage_ref=%s\n' "$running" "$image"
+  printf 'container_name=%s\nhermes_home=/opt/data\nterminal_cwd=%s\nresolved_cwd=%s\n' "$docker_container" "$terminal_cwd" "$resolved_cwd"
+  docker inspect -f '{{range .Mounts}}{{if eq .Destination "/opt/data"}}{{printf "mount_type=%s\nmount_source=%s\nmount_destination=%s\nmount_name=%s\nmount_driver=%s\n" .Type .Source .Destination .Name .Driver}}{{end}}{{end}}' "$docker_container"
+  if docker compose version >/dev/null 2>&1; then printf 'docker_compose=available\n'; else printf 'docker_compose=missing\n'; fi
+}
+
+validate_workspace_path() {
+  case "$1" in .|/opt/data/workspace|/opt/data/workspace/*) ;; *) fail invalid_workspace_path ;; esac
+  case "$1" in *..*) fail invalid_workspace_path ;; esac
+  case "$1" in *[!A-Za-z0-9_./-]*) fail invalid_workspace_path ;; esac
+}
+
+workspace_get() {
+  validate_docker
+  value=$(docker exec "$docker_container" hermes config get terminal.cwd 2>/dev/null | tail -n 1 || true)
+  [ -n "$value" ] || value=.
+  validate_workspace_path "$value"
+  printf '%s\n' "$value"
+}
+
+workspace_set() {
+  validate_docker
+  validate_workspace_path "$1"
+  docker exec "$docker_container" hermes config set terminal.cwd "$1"
+}
+
+workspace_probe() {
+  validate_docker
+  validate_workspace_path "$1"
+  docker exec "$docker_container" sh -c 'set -eu; marker="$1/.hermes-runtime-probe-$$"; : > "$marker"; rm -f -- "$marker"' sh "$1"
 }
 
 run_as_service() {
@@ -223,6 +256,21 @@ case "${1:-}" in
   update)
     [ "$#" -eq 1 ] || fail invalid_arguments
     if [ "$mode" = native ]; then update_native; else update_docker; fi
+    ;;
+  workspace-get)
+    [ "$#" -eq 1 ] || fail invalid_arguments
+    [ "$mode" = docker ] || fail invalid_mode
+    workspace_get
+    ;;
+  workspace-set)
+    [ "$#" -eq 2 ] || fail invalid_arguments
+    [ "$mode" = docker ] || fail invalid_mode
+    workspace_set "$2"
+    ;;
+  workspace-probe)
+    [ "$#" -eq 2 ] || fail invalid_arguments
+    [ "$mode" = docker ] || fail invalid_mode
+    workspace_probe "$2"
     ;;
   *) fail invalid_operation ;;
 esac

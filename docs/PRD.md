@@ -202,9 +202,9 @@ maturité mobile d'un canal tiers.
 | Missions | Un run par message, états, streaming, annulation, retry, inactivité, résultat et usage |
 | Événements | Normalisation Hermes, persistance PostgreSQL, curseur, SSE produit, replay |
 | Approbations | Détection et réponse quand Hermes émet une demande |
-| Artefacts | Entrées/sorties, SHA-256, quotas, chemins durcis, copie privée et miroir SFTP |
+| Artefacts | Entrées/sorties, SHA-256, quotas, chemins durcis et stockage partagé |
 | Runtime | Configuration chiffrée, test santé/capabilities, modèles, credentials provider, restart local |
-| Distant | Transport direct ou tunnel SSH, clé/agent ou mot de passe, SFTP/scp |
+| Distant | Transport direct ou tunnel SSH, clé/agent ou mot de passe |
 | Connecteurs | Secrets IMAP typés et chiffrés, test de connexion |
 | Auth | Google OIDC allowlisté, PKCE, state, nonce, JWKS, sessions opaques et CSRF |
 | Setup | Login, connexion/test runtime, création ou saut du premier agent ; le cadrage guidé fonctionne sans agent configuré |
@@ -304,7 +304,7 @@ Précisions :
 - parcours Web mobile complet sur appareil réel avec coupure/reprise réseau ;
 - OpenTelemetry/OpenInference, datasets et évaluations ;
 - politique de rétention appliquée et restauration testée ;
-- E2E navigateur et tests d’intégration runtime/SSH/SFTP ;
+- E2E navigateur et tests d’intégration runtime/SSH ;
 - distribution desktop signée et pipeline de mise à jour.
 
 ---
@@ -323,7 +323,7 @@ Précisions :
 ║ Auth · Tasks guidées · Threads · Runs        ║
 ║ Décisions · Preuves · Runtime · SPA          ║
 ╚═══════╤══════════════╤═══════════════╤═══════╝
-        │ SQL produit  │ HTTP/SSE      │ SSH tunnel · SFTP
+        │ SQL produit  │ HTTP/SSE      │ tunnel SSH
         ▼              ▼               ▼
 ┌──────────────┐  ┌──────────────┐  ┌─────────────────┐
 │ PostgreSQL   │  │ Hermes direct│  │ Hermes distant  │
@@ -524,15 +524,14 @@ Les deux chemins, binaire SSH et ssh2 par mot de passe, vérifient désormais la
 known_hosts. Le chemin binaire impose aussi `BatchMode`, `IdentitiesOnly` et une identité SSH
 déterministe ; le déploiement doit donc fournir le `IdentityFile`/config correspondant en lecture
 seule. Les noms distants sont normalisés et les liens/fichiers spéciaux sont refusés.
-La synchronisation SFTP applique aussi une garde lexicale au workdir configuré (`852cad0`) avant
-`mkdirp`, listing, stat, upload ou download ; cette garde réduit les traversées côté Console mais
-ne constitue pas une frontière OS distante.
+Le workspace Docker doit être exposé par un bind mount déclaré ; un volume nommé sans chemin hôte
+partagé avec la Console est refusé.
 
 Pour un Hermes Docker existant, la Console distingue les bind mounts des volumes nommés. Elle ne
 réutilise jamais `/var/lib/docker/volumes/.../_data` comme chemin produit. Une migration guidée et
 journalisée est disponible uniquement pour le conteneur reconnu `hermes-console-runtime` dans une
 topologie bornée : copie intégrale de `/opt/data` vers `/srv/hermes-console/data`, manifestes,
-Compose épinglé par digest, preuves runtime/SFTP/Hermes, persistance finale par CAS et rollback
+Compose épinglé par digest, preuves du bind mount et du runtime Hermes, persistance finale par CAS et rollback
 automatique. Les installations personnalisées restent connectables mais suivent le guide manuel.
 Une migration active ou ambiguë bloque le démarrage de nouvelles missions et est réconciliée au
 redémarrage de la Console.
@@ -584,7 +583,7 @@ compose.prod.yml livre seulement :
 Il ne livre pas Hermes et ne partage aucun volume avec lui. Le runtime est externe :
 
 - direct : URL privée joignable et contrat de workdir partagé à organiser hors du Compose ;
-- SSH : tunnel vers une machine distante et miroir SFTP. Le fichier optionnel
+- SSH : tunnel vers une machine distante. Le fichier optionnel
   `compose.prod.ssh.yml` monte un dossier SSH dédié en lecture seule à `/home/bun/.ssh` ; il ne
   doit jamais recevoir le `~/.ssh` complet d’un opérateur ni une clé privée suivie par Git.
 
@@ -655,7 +654,7 @@ Ce qui n’est pas prouvé :
 - le harness arrête réellement la Console pendant `awaiting_approval`, redémarre sur la même DB et
   les mêmes racines, puis vérifie la conservation de la demande avant le second redémarrage après
   completion ; cela reste une preuve synthétique locale, pas une reprise Hermes upstream ;
-- aucun test réel SSH/SFTP/tunnel ;
+- aucun test réel du tunnel SSH ;
 - aucun build et démarrage de compose.prod.yml rapporté dans cette passe ;
 - aucun pilote avec un utilisateur tiers.
 

@@ -77,7 +77,7 @@ const migrationSteps: RuntimeSshStorageMigrationPlanDto["steps"] = [
   { id: "backup", label: "Figer et sauvegarder", description: "Arrêter Hermes, créer l’archive locale et calculer le manifeste source.", destructive: true },
   { id: "copy", label: "Copier les données", description: "Copier /opt/data vers le bind mount en conservant métadonnées et contenu.", destructive: true },
   { id: "cutover", label: "Recréer avec Compose", description: "Conserver l’ancien conteneur pour rollback et démarrer le nouveau bind mount.", destructive: true },
-  { id: "verify", label: "Prouver le runtime", description: "Vérifier montage, health, capabilities, SFTP et écriture Hermes.", destructive: false },
+  { id: "verify", label: "Prouver le runtime", description: "Vérifier le montage, health, capabilities et une écriture Hermes.", destructive: false },
   { id: "activate", label: "Activer le workspace", description: "Aligner terminal.cwd et persister le mapping uniquement après toutes les preuves.", destructive: false },
 ];
 

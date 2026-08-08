@@ -13,7 +13,7 @@ describe("mission list delivery status", () => {
       latestRun: {
         id: "run_1",
         status: "completed",
-        error: `${ARTIFACT_DELIVERY_ERROR_PREFIX}SFTP indisponible`,
+        error: `${ARTIFACT_DELIVERY_ERROR_PREFIX}stockage distant indisponible`,
         startedAt: "2026-08-01T09:59:00.000Z",
         endedAt: "2026-08-01T10:00:00.000Z",
         usage: null,

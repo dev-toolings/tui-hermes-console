@@ -17,6 +17,14 @@ describe("SSH workspace discovery", () => {
       stderr: "pipe",
     });
     expect(await child.exited).toBe(0);
+    const serviceCommand = workspaceInspectionCommand("hermes-console");
+    expect(serviceCommand).toContain("hermes-console-runtime-manager inspect");
+    const serviceChild = Bun.spawn(["sh", "-n"], {
+      stdin: new TextEncoder().encode(serviceCommand),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(await serviceChild.exited).toBe(0);
   });
 
   test("maps a Docker bind mount to distinct host and Hermes paths", () => {
@@ -42,7 +50,7 @@ describe("SSH workspace discovery", () => {
     });
   });
 
-  test("blocks a named Docker volume because SFTP has no host path", () => {
+  test("blocks a named Docker volume because the Console has no shared host path", () => {
     const inspection = parseWorkspaceInspection([
       "mode=docker",
       "home=/home/hermes",
@@ -145,7 +153,7 @@ describe("Hermes-side workspace proof", () => {
         "hermes",
       ),
     ).rejects.toMatchObject({ code: "SSH_HERMES_WORKSPACE_NOT_WRITABLE" });
-    expect(commands[0]).toContain("sudo -n docker exec 'hermes-runtime' sh -c");
+    expect(commands[0]).toContain("hermes-console-runtime-manager workspace-probe");
     expect(commands[0]).toContain("/opt/data/workspace");
   });
 

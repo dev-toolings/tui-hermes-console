@@ -6,6 +6,26 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 
 ## Rapports disponibles
 
+- [08-08-2026 — audit de clôture du RAF](2026-08-08-raf-closure-audit.md) : onze exigences
+  recroisées, dix actions closes et condition commerciale humaine maintenue bloquante à `0/3`.
+- [08-08-2026 — acceptation US-G0-UX-001 sous DER-001](2026-08-08-gate-0-ux-001-der-001.md) :
+  rejeu Ghostchrome positif/négatif, absence de tentative/run dans PostgreSQL, captures expurgées
+  hors Git, coût réel `0,15 h` et périmètre borné à la seule story UX-001.
+- [08-08-2026 — revue adversariale US-G0-UX-001](2026-08-08-gate-0-ux-001-adversarial-review.md) :
+  contre-exemples recherchés et limite DER-001 explicite ; aucune indépendance humaine revendiquée.
+- [08-08-2026 — inventaire réel des skills Hermes](2026-08-08-g1-skills-real-runtime.md) :
+  69 skills observés sur Hermes 0.20.0 via le tunnel SSH vers la VM PVE 210 ; toggle/refus/reviewers
+  restent ouverts.
+- [08-08-2026 — décomposition du commit `abd52ce`](2026-08-08-abd52ce-traceability.md) :
+  rattachement setup/workspace et conversation, aperçu chat hors acceptation, transfert distant
+  supprimé, 25 tests ciblés au vert.
+- [08-08-2026 — stockage partagé Hermes sur PVE, arbre courant](2026-08-08-gate-1-ssh-storage-current.md) :
+  provisioning VM 210 à 100 %, API/Dashboard loopback, manager borné, second passage idempotent et
+  round-trip de mission par bind mount sans transfert distant ; VPS historique recontrôlé en lecture.
+- [08-08-2026 — durabilité des artefacts sur l'arbre courant](2026-08-08-gate-1-artifact-durability-current.md) :
+  remplacement réel du conteneur Compose, volume et SHA-256 conservés, refus corruption/absence et
+  nettoyage confirmés ; P-OPS production et reviewer restent ouverts.
+
 - [06-08-2026 — workflow guidé de livraison logicielle](2026-08-06-guided-software-delivery.md) :
   tâche/révisions, approbations séparées, Bubblewrap + Hermes réels, diff, quatre preuves Bun,
   retries idempotents, refus fail-closed, captures desktop/320 px et limites d'acceptation.
@@ -14,11 +34,11 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
   sudo/Docker/secrets, loopback, bascule de mode et deuxièmes passages `changed=0`.
 - [02-08-2026 — migration du stockage Docker Hermes](2026-08-02-gate-1-ssh-storage-migration.md) :
   cutover réel du volume `/opt/data` vers `/srv/hermes-console/data`, manifestes identiques,
-  sauvegarde vérifiable, sondes Hermes/SFTP et rollback automatique réellement déclenché ; reviewer,
+  sauvegarde vérifiable, sondes bind mount/Hermes et rollback automatique réellement déclenché ; reviewer,
   mission avec artefact et sauvegarde externe restent ouverts.
 - [02-08-2026 — connectivité Hermes native, Docker locale et Docker VPS](2026-08-02-gate-1-hermes-runtime-connectivity.md) :
   Console en arrière-plan, probes réels `/health` + `/v1/capabilities` et tunnel créé par le module
-  SSH du projet ; SFTP, compte non-root, confinement et acceptation Gate restent ouverts.
+  SSH du projet ; compte non-root, confinement et acceptation Gate restent ouverts.
 - [04-08-2026 — VM SSH vierge Terraform/Ansible](2026-08-04-ssh-003-005-hermes-ephemeral-01.md) :
   SSH-003/004 vérifiées, SSH-005 négatif vérifié et forward Hermes positif restant à rejouer.
 - [04-08-2026 — preuve SSH-001/002 sur VM vierge](2026-08-04-ssh-001-002-hermes-ephemeral-01.md) :
@@ -51,7 +71,7 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 - [01-08-2026 — séparation MSP/client](2026-08-01-gate-2-msp-client.md) : organisations,
   mandats site/projet, sélection explicite, affectations, audit v2, révocation live et CRUD admin ;
   P-E2E, P-SEC multi-compte et acceptation Gate encore ouverts.
-- [31-07-2026 — diagnostic SSH/SFTP sur VPS existant](2026-07-31-gate-1-ssh-vps-diagnostic.md) :
+- [31-07-2026 — diagnostic SSH sur VPS existant](2026-07-31-gate-1-ssh-vps-diagnostic.md) :
   preuve partielle, US-G1-008 `BLOQUÉE`.
 - [01-08-2026 — export d’audit expurgé](2026-08-01-gate-1-audit-export.md) : préparation code
   locale pour US-G1-005 ; P-SEC/P-E2E et acceptation Gate encore ouvertes.
@@ -82,9 +102,6 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 - [01-08-2026 — notice IA et garde de consentement](2026-08-01-gate-1-ai-disclosure-local.md) :
   notice versionnée, manifeste de routes, persistance PostgreSQL et refus centralisé `423/428` ;
   P-E2E navigateur et revue clavier/lecteur d’écran encore ouverts.
-- [01-08-2026 — garde SFTP locale historique](2026-08-01-gate-1-ssh-sftp-006a-local.md) :
-  US-G1-SSH-006A bornait les chemins distants avant les appels SFTP ; aucune preuve de frontière
-  OS/VPS. Le périmètre SFTP est désormais gelé et ce rapport n'est pas un RAF actif.
 - [01-08-2026 — manifeste Hermes confiné](2026-08-01-gate-1-hermes-confinement-audit.md) :
   préparation locale G1-002A (overlay digesté, UID non-root, rootfs RO, caps/limites/réseau et
   sondes fixture) ; Hermes réel, P-SEC/P-OPS/P-E2E encore ouverts, story `BLOQUÉE`.
@@ -187,7 +204,7 @@ VÉRIFIÉE | BLOQUÉE | REJETÉE
 
 Un rapport SSH conserve : algorithme et empreinte publique de l'hôte, empreintes publiques des clés
 autorisée/inconnue, méthode de bootstrap, utilisateur non-root, version OpenSSH, codes de sortie,
-preuve du tunnel, hash SFTP, refus hors workdir, rotation/révocation et nettoyage. Il ne conserve
+preuve du tunnel, refus hors workdir, rotation/révocation et nettoyage. Il ne conserve
 jamais le contenu d'une clé, même publique, car l'empreinte suffit à la preuve.
 
 ## Revue

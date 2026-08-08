@@ -39,7 +39,7 @@ runtime, opérateur distinct, recette SSH, reviewer sécurité/exploitation et d
 | R1 | Revue indépendante de `US-G1-002` + `US-G1-002D` : code, playbooks, manager, privilèges, preuve PVE 210 | Reviewer sécurité/exploitation distinct | R0 | rapport signé, réserves classées, verdict technique | OUVERT |
 | R2 | Rejouer le parcours `/updates` en local `~/.hermes`, system-wide PVE et Docker PVE | Opérateur 2 / QA | R1 | captures/IDs d'opération, version/health, second passage, état final exclusif | OUVERT |
 | R3 | Exécuter SSH-008 : rotation/révocation de l'identité SSH et fermeture des sessions | Ops + reviewer | SSH-003/005 | [preuve SSH-008 VM 210](evidence/2026-08-04-ssh-008-hermes-ephemeral-01.md), ancienne clé inutilisable, sessions fermées, SLA ~315 ms | TECHNIQUEMENT PASSÉ |
-| R4 | Maintenir SSH-006/007/009 gelées et retirer SFTP de la décision Gate 1 | Produit + responsable Gate | décision produit | traceability avec statut `GELÉE`, aucun scénario SFTP dans le RAF actif | FAIT |
+| R4 | Retirer SSH-006/007/009 et le transfert distant de la décision Gate 1 | Produit + responsable Gate | décision produit | stories et code supprimés, aucun scénario de transfert dans le RAF actif | FAIT |
 | R5 | Brancher et prouver la policy pré-effet Hermes de `US-G1-004` | Responsable sécurité + implémenteur policy | US-G1-002 | [G1-004D](guides/G1-004D-HERMES-PRE-EFFECT.md), [harness route Console réelle](evidence/2026-08-04-g1-004-real-console-local.md), refus avant POST, décision signée corrélée au run | TECHNIQUEMENT PASSÉ — local réel ; PVE 210 provider absent |
 | R6 | Décider Gate 1, puis seulement ouvrir Gate 2 | Responsable sécurité/exploitation + produit | R1 à R5 | rapport `GO`, `NO-GO` ou `PIVOT` et traceability signée | BLOQUANT |
 
@@ -60,12 +60,12 @@ suivants :
 `US-G1-002` et `US-G1-002D` sont **IMPLÉMENTÉES techniquement**, mais pas `VÉRIFIÉES`. Le prochain
 acte concret est R1, confié à une personne distincte de l'implémenteur ; R2 doit ensuite être rejoué
 par un opérateur 2. Les vrais blocages Gate 1 restants sont `US-G1-004` et le sous-périmètre SSH
-actif, notamment `US-G1-SSH-002/008`. SFTP n'est plus un blocage.
+actif, notamment `US-G1-SSH-002/008`. Le transfert de fichiers distant n'est plus un blocage.
 
 ## Annexe — recette SSH détaillée
 
 Les commandes ci-dessous restent le runbook historique des sous-stories SSH ; elles ne remplacent pas
-le rapport daté ni la revue indépendante demandés par R3. Les sections SFTP ne sont plus à exécuter.
+le rapport daté ni la revue indépendante demandés par R3. Les anciennes sections de transfert ne sont plus à exécuter.
 
 ### Commandes de pré-exécution (avant connexion réelle)
 

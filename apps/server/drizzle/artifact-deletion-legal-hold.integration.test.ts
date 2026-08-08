@@ -303,7 +303,6 @@ describeWithDocker("artifact deletion respects an active legal hold", () => {
       );
       const result = await withRoots(roots, () =>
         deleteArtifactEverywhere(context, ARTIFACT, {
-          removeRemote: async () => {},
           now: () => NOW,
         }),
       );
@@ -357,7 +356,7 @@ describeWithDocker("artifact deletion respects an active legal hold", () => {
 
       await expect(
         withRoots(roots, () =>
-          deleteArtifactEverywhere(context, ARTIFACT, { removeRemote: async () => {}, now: () => NOW }),
+          deleteArtifactEverywhere(context, ARTIFACT, { now: () => NOW }),
         ),
       ).rejects.toMatchObject({ code: "ARTIFACT_LEGAL_HOLD", status: 409 });
 
@@ -402,7 +401,7 @@ describeWithDocker("artifact deletion respects an active legal hold", () => {
       // mais DOIT rester tracé : une seconde entrée "denied" distincte, pas une seule.
       await expect(
         withRoots(roots, () =>
-          deleteArtifactEverywhere(context, ARTIFACT, { removeRemote: async () => {}, now: () => NOW }),
+          deleteArtifactEverywhere(context, ARTIFACT, { now: () => NOW }),
         ),
       ).rejects.toMatchObject({ code: "ARTIFACT_LEGAL_HOLD", status: 409 });
 
@@ -424,6 +423,81 @@ describeWithDocker("artifact deletion respects an active legal hold", () => {
         correlationId: context.correlationId,
       });
     } finally {
+      await rmRoots(roots);
+    }
+  });
+
+  test("refuses deletion for an active run against PostgreSQL and leaves both copies untouched", async () => {
+    const roots = await makeRoots();
+    try {
+      const file = await seedFixture(roots, { legalHoldEnabled: false });
+      psql(`UPDATE runs SET status = 'running', ended_at = NULL WHERE id = '${RUN}'`);
+      const before = { row: await artifactRowState(), paths: await pathState(file) };
+      const auditBefore = deniedAuditRows().length;
+
+      await expect(
+        withRoots(roots, () => deleteArtifactEverywhere(context, ARTIFACT, { now: () => NOW })),
+      ).rejects.toMatchObject({ code: "ARTIFACT_RUN_ACTIVE", status: 409 });
+
+      expect(await artifactRowState()).toEqual(before.row);
+      expect(await pathState(file)).toEqual(before.paths);
+      expect(await readFile(file.privateFile, "utf8")).toBe(CONTENT);
+      expect(await readFile(file.workFile, "utf8")).toBe(CONTENT);
+      expect(deniedAuditRows().slice(auditBefore)).toEqual([
+        expect.objectContaining({
+          decision: "denied",
+          reasonCode: "ARTIFACT_RUN_ACTIVE",
+          correlationId: context.correlationId,
+        }),
+      ]);
+    } finally {
+      await rmRoots(roots);
+    }
+  });
+
+  test("restores quarantined files when PostgreSQL rejects the delete before commit", async () => {
+    const roots = await makeRoots();
+    let triggerInstalled = false;
+    try {
+      const file = await seedFixture(roots, { legalHoldEnabled: false });
+      const before = await artifactRowState();
+      const allowedBefore = psql(
+        `SELECT count(*) FROM audit_ledger_entries WHERE target_site_id = '${SITE}' AND action = 'artifact.delete' AND resource_id = '${ARTIFACT}' AND decision = 'allowed'`,
+      );
+      psql(`
+        CREATE FUNCTION reject_artifact_delete_test() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.deleted_at IS NOT NULL THEN
+            RAISE EXCEPTION 'forced artifact delete failure';
+          END IF;
+          RETURN NEW;
+        END;
+        $$;
+        CREATE TRIGGER reject_artifact_delete_test
+          BEFORE UPDATE ON artifacts
+          FOR EACH ROW EXECUTE FUNCTION reject_artifact_delete_test();
+      `);
+      triggerInstalled = true;
+
+      await expect(
+        withRoots(roots, () => deleteArtifactEverywhere(context, ARTIFACT, { now: () => NOW })),
+      ).rejects.toThrow("Failed query");
+
+      expect(await artifactRowState()).toEqual(before);
+      expect(await readFile(file.privateFile, "utf8")).toBe(CONTENT);
+      expect(await readFile(file.workFile, "utf8")).toBe(CONTENT);
+      expect(
+        psql(
+          `SELECT count(*) FROM audit_ledger_entries WHERE target_site_id = '${SITE}' AND action = 'artifact.delete' AND resource_id = '${ARTIFACT}' AND decision = 'allowed'`,
+        ),
+      ).toBe(allowedBefore);
+    } finally {
+      if (triggerInstalled) {
+        psql(`
+          DROP TRIGGER IF EXISTS reject_artifact_delete_test ON artifacts;
+          DROP FUNCTION IF EXISTS reject_artifact_delete_test();
+        `);
+      }
       await rmRoots(roots);
     }
   });
