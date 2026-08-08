@@ -111,42 +111,6 @@ recovery, compte SSH de service, transports Hermes, cycle de vie des identités.
   atteint le runtime Docker sur `127.0.0.1:8642` (`health=ok`). Revue indépendante ouverte.
 - **Preuve :** [G1-002 latest/main et update UI sur VM](evidence/2026-08-04-g1-002-latest-docker-native.md).
 
-## US-G1-SSH-006 — Transférer les artefacts sans faux succès
-
-> En tant qu'opérateur, je veux un aller-retour SFTP borné et vérifié, afin qu'une mission ne soit pas
-> déclarée livrée si ses entrées ou sorties manquent.
-
-- **Dépendance :** US-G1-SSH-003.
-- **Positif :** upload/download dans le workdir durable, taille et SHA-256 identiques, nettoyage selon
-  rétention et état de livraison distinct de l'état runtime.
-- **Négatif :** chemin protégé, symlink, quota, coupure, hash différent ou erreur list/download ;
-  échec visible, corrélé, sans fichier partiel ni état « livré ».
-- **Preuves :** `P-E2E`, `P-SEC`, hashes, inventaires et statuts corrélés.
-- **Préparation code disponible (`3c37900`) :** le mode SSH exige maintenant un workdir distant
-  explicitement fourni, absolu et non situé sous `/tmp`, `/var/tmp`, `/run` ou `/dev/shm`. Aucun
-  chemin de repli transitoire n'est inventé lorsque le champ est absent ou invalide.
-- **Slice local G1-SSH-006A (`852cad0`) :** `createScopedSftp` borne lexicalement `mkdirp`, `list`,
-  `stat`, `upload` et `download` au workdir ; les traversées, racines et sibling-prefix sont
-  refusés avant tout appel et les erreurs restent corrélées au run.
-- **État courant :** `GELÉE` — le périmètre SFTP n'est pas retenu pour cette phase ; aucun scénario,
-  hash, workdir ou frontière OS SFTP ne sera rejoué dans Gate 1.
-- **Décision produit :** rouvrir cette story uniquement par décision explicite, avec un nouveau
-  périmètre et un nouveau RAF.
-
-## US-G1-SSH-007 — Prouver concurrence et reconnexion
-
-> En tant qu'opérateur, je veux des tunnels et transferts réconciliables, afin que les missions
-> concurrentes ou une coupure ne mélangent ni process ni fichiers.
-
-- **Dépendances :** US-G1-SSH-005, US-G1-SSH-006 (SFTP gelé).
-- **Positif :** dix cycles, deux missions concurrentes, coupure/reprise et changement de cible
-  conservent isolation et état explicite.
-- **Négatif :** process/socket résiduel, fichier croisé, retry dupliqué ou succès fabriqué ; test
-  rejeté et nettoyage prouvé.
-- **Preuves :** `P-E2E`, `P-OPS`, inventaires process/socket/workdir et corrélations.
-- **État courant :** `GELÉE` — la partie transfert/fichiers est hors périmètre ; les scénarios de
-  concurrence et reconnexion de tunnel pourront être rouverts séparément si nécessaire.
-
 ## US-G1-SSH-008 — Tourner et révoquer une identité active
 
 > En tant qu'administrateur, je veux tourner et révoquer une clé dans un délai borné, afin qu'une
@@ -163,20 +127,6 @@ recovery, compte SSH de service, transports Hermes, cycle de vie des identités.
   mesuré à environ 315 ms.
 - **État courant :** `VÉRIFIÉE` techniquement — revue indépendante et opérateur 2 restent requis
   avant l'acceptation Gate 1.
-
-## US-G1-SSH-009 — Rejouer le guide de bout en bout
-
-> En tant que responsable release, je veux qu'un second opérateur parte d'un VPS vierge, afin de
-> prouver que le guide est reproductible et ne dépend pas de l'environnement d'un développeur.
-
-- **Dépendances :** US-G1-SSH-001 à US-G1-SSH-008.
-- **Positif :** bootstrap, Hermes résolu depuis le canal officiel, tunnel, refus, rotation, restart
-  et rollback passent avec le déploiement Console de production ; le transfert SFTP est explicitement
-  hors périmètre.
-- **Négatif :** secret manuel implicite, config SSH locale cachée, étape irréversible ou preuve
-  manquante ; l'epic US-G1-008 reste bloquée.
-- **Preuves :** `P-E2E`, `P-OPS`, `P-SEC`, rapport indépendant daté et inventaire de nettoyage.
-- **État courant :** `GELÉE` — le guide E2E complet incluant SFTP ne sera pas rejoué dans cette phase.
 
 ## US-G1-SSH-010 — Migrer le stockage Docker sans perdre `/opt/data`
 

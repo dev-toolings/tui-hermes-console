@@ -21,11 +21,12 @@ nomme l'incohérence, la démontre par une citation vérifiable, et dit ce qui e
 Les preuves de régression et de runtime sont datées du rejeu du 04-08-2026 ; les skips restent
 explicitement environnementaux et ne sont pas comptés comme des succès.
 
-## Décision de périmètre — SFTP gelé
+## Décision de périmètre : SFTP retiré
 
 Le transfert SFTP n'est pas retenu pour cette phase produit. `US-G1-SSH-006`, `US-G1-SSH-007` et
-`US-G1-SSH-009` passent à l'état `GELÉE` : aucun développement, rejeu, preuve ou critère Gate 1 ne
-doit leur être attribué. Le tunnel SSH, la confiance d'hôte et la rotation d'identité restent des
+`US-G1-SSH-009` ont d'abord été gelées, puis **supprimées du corpus le 08-08-2026**. Réserve ouverte :
+le code SFTP reste dans l'arbre et a été modifié le 07-08-2026 par `abd52ce`, donc une surface sans
+contrat subsiste. Le tunnel SSH, la confiance d'hôte et la rotation d'identité restent des
 éléments actifs du sous-périmètre SSH.
 
 ---
@@ -192,6 +193,15 @@ assertion fausse. La piste de contention est donc renforcée, sans être démont
 
 Le second test en échec reste inconnu.
 
+**Fréquence revue à la hausse.** Une nouvelle occurrence isolée a été observée le 08-08-2026 en fin
+de journée, `447 pass, 1 fail`, à nouveau non capturée faute d'avoir conservé la sortie complète. Sur
+la journée : au moins trois exécutions en échec pour une dizaine de passages verts, soit un taux bien
+supérieur à l'estimation initiale. La suite repasse systématiquement verte à l'exécution suivante.
+
+**Règle de conduite à appliquer désormais :** toute exécution de la suite destinée à valider un
+livrable DOIT conserver la sortie complète. Filtrer la sortie en direct fait perdre l'information au
+moment précis où elle apparaît, ce qui s'est produit deux fois.
+
 **Action requise avant toute revue de Gate :** capturer les noms des tests concernés. La répétition
 seule ayant échoué sur six exécutions, viser la cause plutôt que l'occurrence : conserver
 systématiquement la sortie complète du harness, et exécuter la suite serveur seule, sans parallélisme
@@ -204,8 +214,8 @@ inter-workspaces, pour déterminer si la contention de conteneurs est bien en je
 
 - Les chemins cités par la documentation existent : 59 des 63 chemins référencés résolvent, et les 4
   restants sont des noms d'exemple dans des blocs de code, pas des citations.
-- Gate 0 et Gate 3 sont cohérentes : toutes leurs stories sont `PROPOSÉE` et aucun code correspondant
-  n'existe. Aucune revendication excessive n'a été trouvée de ce côté.
+- Gate 0 était cohérente au moment de l'audit : ses stories étaient `PROPOSÉE` et aucun code
+  correspondant n'existait. Gate 3 se trouvait dans le même cas et a été supprimée le 08-08-2026.
 - Les typechecks ciblés `core`, `server` et `web` ont été rejoués ; le typecheck agrégé conserve
   l'erreur web import type-only déjà signalée dans la vérité terrain ci-dessus.
 - **Close le 08-08-2026.** `bun run --cwd apps/web typecheck` et `bun run typecheck` (agrégé, tous

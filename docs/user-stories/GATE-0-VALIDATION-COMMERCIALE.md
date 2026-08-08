@@ -156,49 +156,6 @@ vérifications, sans valoir acceptation produit indépendante.
   mutation corrélés et test de reprise.
 - **Reviewer :** demandeur métier distinct, approbateur distinct et reviewer accessibilité.
 
-## US-G0-CAPTURE-001 — Transformer une capture Telegram en brouillon
-
-> En tant qu'**utilisateur mobile**, je veux envoyer un texte, une pièce jointe ou un vocal depuis
-> Telegram vers le bon projet, afin de préparer une tâche sans déclencher silencieusement du travail.
-
-- **État :** `GELÉE` le 08-08-2026 : périmètre suspendu tant que le premier `ACCEPTÉE` n'est pas obtenu.
-  Aucun travail ni critère de Gate n'est exigé. Retour en `PRÊTE` sur demande explicite d'un
-  design partner qualifié au titre de `US-G0-001`. Aucun connecteur Telegram n'est livré.
-- **Dépendances :** US-G0-TASK-001 et identité de canal liée explicitement à un utilisateur/projet.
-- **Scénario positif :** Étant donné un topic Telegram lié à un projet, quand un utilisateur autorisé
-  envoie une capture, alors la Console crée un brouillon attribué, conserve la source et demande la
-  validation du résultat attendu dans l'interface d'autorité.
-- **Scénario négatif :** Étant donné un expéditeur inconnu, un topic ambigu, un événement rejoué ou
-  une transcription incertaine, quand la capture arrive, alors aucun run ni validation n'est créé et
-  le brouillon reste refusé ou en attente de clarification.
-- **Tests :** `P-UNIT` mapping/idempotence, `P-INT` webhook et média, `P-E2E` capture vers brouillon,
-  `P-SEC` signature, rejeu, usurpation et taille de fichier.
-- **Preuves attendues :** événement de canal expurgé, brouillon corrélé, transcription marquée comme
-  telle, absence de run et refus des entrées non autorisées.
-- **Reviewer :** responsable produit et reviewer sécurité.
-
-## US-G0-BUZZ-001 — Relier un workspace Buzz à une tâche Console
-
-> En tant qu'**équipe projet**, je veux relier un channel Buzz à une tâche Console, afin que humains
-> et agents collaborent dans le workspace sans déplacer l'autorité de décision hors de la Console.
-
-- **État :** `GELÉE` le 08-08-2026 : périmètre suspendu tant que le premier `ACCEPTÉE` n'est pas obtenu.
-  Aucun travail ni critère de Gate n'est exigé. Retour en `PRÊTE` sur demande explicite d'un
-  design partner qualifié au titre de `US-G0-001`. Aucun adaptateur Buzz n'est livré et la Console
-  ne reconstruit pas channels, sous-channels, DMs ou voice.
-- **Dépendances :** US-G0-TASK-001 et US-G0-APPROVAL-001.
-- **Scénario positif :** Étant donné un channel lié à un projet et une tâche, quand son état change,
-  alors Buzz reçoit un lien et des événements lisibles ; un humain peut reprendre la conversation et
-  ouvrir la décision correspondante dans la Console.
-- **Scénario négatif :** Étant donné un message, une réaction ou un agent Buzz non habilité, quand il
-  tente de valider un plan, une action sensible ou une livraison, alors la Console refuse toute
-  décision non attribuée par sa propre policy et son propre ledger.
-- **Tests :** `P-UNIT` projection d'événements, `P-INT` adaptateur, `P-E2E` channel vers tâche,
-  `P-SEC` identité, rejeu et décision forgée.
-- **Preuves attendues :** mapping workspace/channel/projet/tâche, événements corrélés, lien de reprise
-  humaine et refus d'une décision forgée côté canal.
-- **Reviewer :** responsable produit, développeur intégration et reviewer sécurité.
-
 ## US-G0-001 — Qualifier trois design partners
 
 > En tant que responsable produit, je veux qualifier trois PME, agences ou intégrateurs réunissant un

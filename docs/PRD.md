@@ -727,13 +727,7 @@ contrôles organisationnels dépassent la Console.
            │ décisions sensibles attribuées et auditées
            ▼
 ╔══════════════════════╗
-║ Gate 3 · Fleet       ║
-║ Edge · Relay        ║
-╚══════════╤═══════════╝
-           │ enrôlement révocable et multi-runtime
-           ▼
-╔══════════════════════╗
-║ Gate 4 · Qualité     ║
+║ Gate 3 · Qualité     ║
 ║ coûts · evals       ║
 ╚══════════════════════╝
 ~~~
@@ -788,21 +782,18 @@ pas la décision Gate 0 tant que le parcours cœur Web est accepté.
 - mise en attente compréhensible lorsque l’approbateur technique manque ;
 - politiques par outil, chemin, connecteur, modèle et budget.
 
-### Gate 3 — Edge/Relay et fleet
+### Edge/Relay et fleet, retiré du périmètre le 08-08-2026
 
-- enrôlement court ;
-- identité mTLS, rotation et révocation ;
-- connexion sortante pour les sites derrière NAT ;
-- heartbeat, capabilities, version et capacité ;
-- plusieurs runtimes par organisation ;
-- niveaux external, connected et managed explicites ;
-- restart, upgrade, rollback et backup uniquement sur runtimes managed ;
-- aucun accès direct au socket Docker.
+Ce palier promettait enrôlement court, identité mTLS, connexion sortante derrière NAT, inventaire
+multi-runtime et niveaux external/connected/managed. Aucune ligne de code n'a été écrite et il
+dépendait d'une Gate 2 elle-même non acceptée. Ses six stories sont supprimées, voir la section
+« Périmètre supprimé » de [`docs/user-stories/TRACEABILITY.md`](user-stories/TRACEABILITY.md).
+L'historique Git conserve leur rédaction si le besoin réapparaît.
 
 Le langage et le packaging de l’Edge ne sont pas décidés dans ce PRD. La preuve du besoin et le
 contrat de sécurité précèdent ce choix.
 
-### Gate 4 — qualité et coûts
+### Gate 3 — qualité et coûts
 
 - export OpenTelemetry/OpenInference ;
 - intégration Langfuse, Phoenix, LangSmith ou backend client ;
@@ -819,7 +810,6 @@ Le stade actuel appelle une offre accompagnée, pas un self-service :
 
 - design partner : 1 000 à 3 000 EUR/mois, déploiement et support inclus ;
 - site managé après Gate 2 : hypothèse 299 à 599 EUR/site/mois, BYO LLM ;
-- fleet MSP après Gate 3 : abonnement control plane + prix par runtime ;
 - enterprise : devis annuel seulement après RBAC, audit, SSO, sauvegardes et SLA.
 
 La valeur est l’exploitation sécurisée du site/runtime et le support, pas la revente de tokens.

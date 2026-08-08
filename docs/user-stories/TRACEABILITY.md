@@ -10,18 +10,17 @@ daté seulement après exécution ; `—` signifie « non prouvé », pas « non
 > `US-G1-002D` avec sa preuve locale/Proxmox réelle. Lire ce registre avant
 > d'accorder du crédit à un état `IMPLÉMENTÉE` ou `VÉRIFIÉE` antérieur au 02-08-2026. Les stories
 > `TASK`, `DELIVERY`, `APPROVAL` et la tranche navigateur `MOBILE` disposent désormais d'une preuve
-> locale datée. `CAPTURE` et `BUZZ` restent optionnelles et non implémentées.
+> locale datée.
 
-> **Révision du 08-08-2026.** Trois changements de gouvernance. Les dépendances de contrat et les
-> dépendances de Gate sont désormais séparées, ce qui rend le travail technique de Gate 1 vérifiable
-> sans attendre une signature commerciale. Dix stories hors chemin critique passent `GELÉE` :
-> `US-G0-CAPTURE-001`, `US-G0-BUZZ-001`, `US-G2-005`, `US-G2-006` et les six stories Gate 3. Quatre
-> commits livrés sans story sont consignés en fin de document, dont l'application mobile, gelée.
+> **Révision du 08-08-2026.** Le corpus est réduit au périmètre réellement poursuivi. Les
+> dépendances de contrat et les dépendances de Gate sont séparées, ce qui rend le travail technique
+> de Gate 1 vérifiable sans attendre une signature commerciale. Onze stories hors périmètre sont
+> **supprimées**, voir « Périmètre supprimé » en fin de document. Deux stories sont créées pour
+> régulariser des capacités livrées hors méthode : `US-G1-009` (suppression gouvernée d'un artefact)
+> et `US-G1-010` (exception CSRF du jeton porteur). Quatre commits livrés sans story sont consignés.
 > La dérogation `DER-001` de [CONVENTIONS.md](CONVENTIONS.md) autorise, jusqu'au 08-11-2026 et pour
 > les seules stories Gate 0 sans frontière de sécurité, une acceptation par un implémenteur unique.
-> Deux stories sont créées pour régulariser des capacités livrées hors méthode : `US-G1-009`
-> (suppression gouvernée d'un artefact) et `US-G1-010` (exception CSRF du jeton porteur). Aucune des
-> deux n'est éligible à `DER-001`. Le corpus passe de 44 à 46 stories.
+> Le corpus passe de 44 à **27 stories**.
 
 ## Deux natures de dépendance
 
@@ -46,8 +45,6 @@ change seulement de place.
 | US-G0-DELIVERY-001 | §2, §4, §6.3 — dépôt, sandbox, diff, tests et preview | US-G0-TASK-001, US-G0-UX-001..002 | [preuve guidée E2E 06-08-2026](evidence/2026-08-06-guided-software-delivery.md) | `VÉRIFIÉE LOCALEMENT, NON ACCEPTÉE` — Git/Bubblewrap/Hermes/diff/tests/artefacts/cleanup réels ; preview déployée absente |
 | US-G0-APPROVAL-001 | §2, §4, §6.3 — validations fonctionnelle et technique | US-G0-TASK-001, US-G0-DELIVERY-001 ; fondations RBAC/policy du pilote | [preuve guidée E2E 06-08-2026](evidence/2026-08-06-guided-software-delivery.md) | `IMPLÉMENTÉE, VÉRIFIÉE LOCALEMENT, NON ACCEPTÉE` — quatre décisions distinctes et attribution prouvées ; deux comptes E2E ouverts |
 | US-G0-MOBILE-001 | §5.2, §5.4, §6.3 — parcours cœur Web mobile | US-G0-UX-001..003, US-G0-DELIVERY-001, US-G0-APPROVAL-001 | [preuve guidée E2E 06-08-2026](evidence/2026-08-06-guided-software-delivery.md) | `IMPLÉMENTÉE, PARTIELLEMENT VÉRIFIÉE` — 320 px, touch et retry DB prouvés ; appareil réel et coupure radio ouverts |
-| US-G0-CAPTURE-001 | §5.5, §6.3 — Telegram vers brouillon attribué | US-G0-TASK-001 | — | `GELÉE` depuis le 08-08-2026 : périmètre suspendu. Retour en `PRÊTE` seulement si le premier `ACCEPTÉE` est obtenu ET qu'un design partner qualifié au titre de `US-G0-001` le demande explicitement. Les deux conditions sont cumulatives ; aucun connecteur Telegram livré |
-| US-G0-BUZZ-001 | §5.5, §6.3 — channel Buzz lié à la tâche, Console en autorité | US-G0-TASK-001, US-G0-APPROVAL-001 | — | `GELÉE` depuis le 08-08-2026 : périmètre suspendu. Retour en `PRÊTE` seulement si le premier `ACCEPTÉE` est obtenu ET qu'un design partner qualifié au titre de `US-G0-001` le demande explicitement. Les deux conditions sont cumulatives ; aucun adaptateur Buzz livré |
 | US-G0-001 | §3.1, §13 — trois binômes métier/développeur partenaires | aucune | — | `PROPOSÉE` |
 | US-G0-002 | §3.1, §13 — modification logicielle étroite par partenaire | US-G0-001, US-G0-TASK-001, US-G0-DELIVERY-001, US-G0-APPROVAL-001, US-G0-MOBILE-001 | — | `PROPOSÉE` |
 | US-G0-003 | §13, §15 — métriques de livraison et engagement payant | US-G0-002 | — | `PROPOSÉE` |
@@ -63,20 +60,11 @@ change seulement de place.
 | US-G1-009 | §9.1, §13 — suppression gouvernée d'un artefact | US-G1-006 | [test d'intégration legal hold 08-08-2026](../../apps/server/drizzle/artifact-deletion-legal-hold.integration.test.ts) | `IMPLÉMENTÉE`, preuves incomplètes. Livrée hors méthode par `34f6fa3`, régularisée le 08-08-2026. Garde de rétention légale ajoutée et prouvée par mutation, refus désormais audité. `P-SEC` rôle refusé au niveau HTTP, restauration après erreur forcée et refus run actif contre base réelle restent ouverts. Non éligible à `DER-001` |
 | US-G1-010 | §9.4, §13 — borner l'exception CSRF du jeton porteur | aucune | — | `IMPLÉMENTÉE`, non vérifiée. Livrée hors méthode par `3392d9f`. Aucun test ne couvre la garde d'`index.ts:124`, seul le parseur est testé. `P-SEC` obligatoire avant toute vérification. Non éligible à `DER-001` |
 | US-G1-SSH-001..005,008 | §9.4, §10 — bootstrap, confiance, tunnel et identité SSH | US-G1-008 | [états détaillés](SSH-STORIES.md), [VM vierge Terraform/Ansible 04-08-2026](evidence/2026-08-04-ssh-003-005-hermes-ephemeral-01.md), [preuve latest/main et SSH-005](evidence/2026-08-04-g1-002-latest-docker-native.md), [preuve SSH-001/002](evidence/2026-08-04-ssh-001-002-hermes-ephemeral-01.md), [preuve SSH-008](evidence/2026-08-04-ssh-008-hermes-ephemeral-01.md) | `TECHNIQUEMENT VÉRIFIÉE` — SSH-008 rotation/révocation prouvée ; revue indépendante et opérateur 2 restent ouverts |
-| US-G1-SSH-006/007/009 | §9.4, §10 — transferts SFTP et E2E fichiers | US-G1-008 | [garde SFTP locale 006A historique](evidence/2026-08-01-gate-1-ssh-sftp-006a-local.md) | `GELÉE` — SFTP explicitement hors périmètre produit ; aucune implémentation, preuve P-E2E ou recette n'est demandée dans cette phase |
 | US-G1-SSH-010 | §9.4, §10 — stockage Docker `/opt/data` sans transfert SFTP | US-G1-SSH-005 | [migration Docker P-OPS 2026-08-02](evidence/2026-08-02-gate-1-ssh-storage-migration.md) | `VÉRIFIÉE` techniquement pour le cutover P-OPS ; preuve SFTP retirée du contrat courant, acceptation reviewer restante |
 | US-G2-001 | §6.3, §8, §13 — site/projet | aucune ; « Gate 1 acceptée » est une dépendance de Gate | [preuve site context 2026-08-01](evidence/2026-08-01-gate-2-site-context.md) | `VÉRIFIÉE` |
 | US-G2-002 | §4, §13 — cinq rôles | US-G2-001 | [preuve RBAC 2026-08-01](evidence/2026-08-01-gate-2-rbac.md) | `IMPLÉMENTÉE` |
 | US-G2-003 | §8, §13 — propriété des tâches, révisions, missions, preuves, validations et connecteurs | US-G2-001, US-G2-002 | [preuve ownership 2026-08-01](evidence/2026-08-01-gate-2-ownership.md), [preuve guidée 06-08-2026](evidence/2026-08-06-guided-software-delivery.md) | `IMPLÉMENTÉE` — ownership guidé et scopes site/projet ajoutés ; revue multi-compte ouverte |
 | US-G2-004 | §13 — séparation MSP/client sur une même tâche et ses tentatives | US-G2-002, US-G2-003 | [preuve MSP/client 2026-08-01](evidence/2026-08-01-gate-2-msp-client.md), [refus guidé cross-site 06-08-2026](evidence/2026-08-06-guided-software-delivery.md) | `IMPLÉMENTÉE` techniquement ; E2E MSP/client sur le nouveau parcours encore ouvert |
-| US-G2-005 | §6.3, §13 — policies par ressource et type de changement | US-G2-002, US-G2-003 | — | `GELÉE` depuis le 08-08-2026 : périmètre suspendu. Retour en `PRÊTE` seulement si le premier `ACCEPTÉE` est obtenu ET qu'un design partner qualifié au titre de `US-G0-001` le demande explicitement. Les deux conditions sont cumulatives |
-| US-G2-006 | §6.3, §13 — identité entreprise qualifiée | US-G2-002 | — | `GELÉE` depuis le 08-08-2026 : périmètre suspendu. Retour en `PRÊTE` seulement si le premier `ACCEPTÉE` est obtenu ET qu'un design partner qualifié au titre de `US-G0-001` le demande explicitement. Les deux conditions sont cumulatives |
-| US-G3-001 | §5.4, §13 — enrôlement court | aucune ; « Gate 2 acceptée » est une dépendance de Gate | — | `GELÉE` depuis le 08-08-2026 : périmètre suspendu. Retour en `PRÊTE` seulement si Gate 2 est déclarée `GO`, ce qui est la seule condition atteignable pour ce périmètre ; un design partner pilote un dépôt et ne demandera pas de fleet management |
-| US-G3-002 | §13 — identité, rotation, révocation | US-G3-001 | — | `GELÉE` depuis le 08-08-2026 : périmètre suspendu. Retour en `PRÊTE` seulement si Gate 2 est déclarée `GO`, ce qui est la seule condition atteignable pour ce périmètre ; un design partner pilote un dépôt et ne demandera pas de fleet management |
-| US-G3-003 | §13 — connexion sortante NAT | US-G3-002 | — | `GELÉE` depuis le 08-08-2026 : périmètre suspendu. Retour en `PRÊTE` seulement si Gate 2 est déclarée `GO`, ce qui est la seule condition atteignable pour ce périmètre ; un design partner pilote un dépôt et ne demandera pas de fleet management |
-| US-G3-004 | §13 — inventaire et multi-runtime | US-G3-002, US-G3-003 | — | `GELÉE` depuis le 08-08-2026 : périmètre suspendu. Retour en `PRÊTE` seulement si Gate 2 est déclarée `GO`, ce qui est la seule condition atteignable pour ce périmètre ; un design partner pilote un dépôt et ne demandera pas de fleet management |
-| US-G3-005 | §13 — niveaux de gestion | US-G3-004 | — | `GELÉE` depuis le 08-08-2026 : périmètre suspendu. Retour en `PRÊTE` seulement si Gate 2 est déclarée `GO`, ce qui est la seule condition atteignable pour ce périmètre ; un design partner pilote un dépôt et ne demandera pas de fleet management |
-| US-G3-006 | §9.5, §13 — lifecycle sans socket Docker | US-G3-005 | — | `GELÉE` depuis le 08-08-2026 : périmètre suspendu. Retour en `PRÊTE` seulement si Gate 2 est déclarée `GO`, ce qui est la seule condition atteignable pour ce périmètre ; un design partner pilote un dépôt et ne demandera pas de fleet management |
 
 ## Dépendances de Gate
 
@@ -87,8 +75,7 @@ uniquement le verdict `GO` d'une Gate.
 |---|---|---|
 | Gate 0 | `US-G0-001` produit trois binômes partenaires qualifiés, `US-G0-002` un workflow étroit par partenaire, `US-G0-003` des métriques et un engagement payant | `PROPOSÉE`, aucune action commerciale engagée au 08-08-2026 |
 | Gate 1 | Gate 0 déclarée `GO`, plus revue indépendante des stories portant une frontière de sécurité (`US-G1-002`, `US-G1-004`, `US-G1-005`, `US-G1-SSH-*`) | non levée ; `DER-001` ne couvre pas ces stories |
-| Gate 2 | Gate 1 déclarée `GO` | non levée |
-| Gate 3 | Gate 2 déclarée `GO` | non levée ; toutes les stories Gate 3 sont `GELÉE` |
+| Gate 2 | Gate 1 déclarée `GO` | non levée. Gate 3 est supprimée, il n'y a plus de Gate au-delà |
 
 `US-G0-001` est la seule condition qui ne dépend techniquement de rien et qui peut démarrer
 immédiatement. Elle est aussi la seule qui porte une information sur la survie du produit.
@@ -140,7 +127,7 @@ compte. Le rattachement définitif est une décision de périmètre du propriét
 | `3392d9f` (a) | Spike application mobile Expo | aucun, périmètre non demandé | `GELÉE` |
 | `3392d9f` (b) | Session par jeton porteur et bascule de la garde CSRF/same-origin sur toutes les routes | `US-G1-010` | story de sécurité obligatoire, `P-SEC` exigé. Le rattachement initial « aucun, périmètre non demandé » était **faux** : vrai de `apps/mobile/`, faux du commit |
 | `c69194b` | Ancrage des tours de conversation : `use-live-thread.ts`, `xulux-chat/thread.tsx`, `thread-messages.ts` | `US-G0-UX-003` | confirmé par le diff. **Conséquence :** ce commit est du 07-08 et la preuve visée du 06-08, donc la preuve est antérieure au code courant |
-| `abd52ce` | Aperçu de fichier (`file-preview-dialog.tsx`, 232 lignes neuves), pièces jointes, `runtime/config.ts`, `setup/api-access.ts`, `artifacts/remote-sync`, typage `upload(..., mode?)` dans 5 fichiers SSH. L'intitulé « update chat » ne décrit pas le contenu | **aucun rattachement retenu** | Le rattachement à `US-G1-002D` proposé le 08-08 était infondé : aucun fichier `modules/runtime/update*` n'apparaît dans le diff, la proposition venait du message de commit et non du contenu. À découper. **Point dur :** le volet SSH modifie du code déclaré `GELÉE` (`US-G1-SSH-006/007/009`) ; un gel qui n'empêche pas de modifier le code gelé n'est pas un gel |
+| `abd52ce` | Aperçu de fichier (`file-preview-dialog.tsx`, 232 lignes neuves), pièces jointes, `runtime/config.ts`, `setup/api-access.ts`, `artifacts/remote-sync`, typage `upload(..., mode?)` dans 5 fichiers SSH. L'intitulé « update chat » ne décrit pas le contenu | **aucun rattachement retenu** | Le rattachement à `US-G1-002D` proposé le 08-08 était infondé : aucun fichier `modules/runtime/update*` n'apparaît dans le diff, la proposition venait du message de commit et non du contenu. À découper. **Point dur :** le volet SSH touche la surface SFTP, dont les stories `US-G1-SSH-006/007/009` sont supprimées du périmètre le 08-08-2026. Le code SFTP, lui, reste dans l'arbre et continue d'être modifié sans contrat |
 | `34f6fa3` | Suppression gouvernée d'un artefact : soft delete, quarantaine restaurable, purge SFTP distante, audit `artifact.delete`, bump de `SITE_ROLE_MATRIX_VERSION` | `US-G1-009`, rattachée au périmètre de `US-G1-006` | Mutation destructive, donc intégralement sous le § « Pour toute mutation sensible ». **Régression corrigée le 08-08-2026 :** la suppression ne consultait pas la rétention légale, alors que `GATE-1-CONTRAT-EXPLOITATION.md:210` l'exige et que la purge l'applique déjà (`retention/service.ts:225`). Garde ajoutée, preuve d'intégration en cours |
 
 Les preuves de Gate 0 datent du 06-08-2026 et trois de ces commits sont postérieurs. La mesure 2 de
@@ -158,3 +145,24 @@ incohérences](INCOHERENCES.md) pour l'historique.
 
 Le propriétaire produit doit encore décider du périmètre de `skills` ; cette décision est indépendante
 de l'acceptation de `US-G1-002D`.
+
+## Périmètre supprimé le 08-08-2026
+
+Décision du propriétaire produit : les stories hors du périmètre réellement poursuivi sont retirées
+du corpus plutôt que gelées. Un gel indéfini produit un registre que personne ne lit et fausse toute
+mesure d'avancement. L'historique Git conserve leur rédaction intégrale, elles sont donc récupérables
+si le périmètre rouvre un jour.
+
+| Story supprimée | Périmètre | Motif |
+|---|---|---|
+| `US-G0-CAPTURE-001` | capture Telegram vers brouillon | aucun connecteur livré, hors parcours cœur |
+| `US-G0-BUZZ-001` | channel Buzz lié à une tâche | aucun adaptateur livré, hors parcours cœur |
+| `US-G2-005` | policies par ressource et type de changement | Gate 2 non entamée, aucun code |
+| `US-G2-006` | identité entreprise SAML/SCIM | aucune demande partenaire, aucun code |
+| `US-G3-001` à `US-G3-006` | Edge/Relay et fleet, fichier `GATE-3-FLEET.md` supprimé | aucun code, dépendait d'une Gate 2 elle-même non acceptée |
+| `US-G1-SSH-006`, `US-G1-SSH-007`, `US-G1-SSH-009` | transferts SFTP et rejeu E2E fichiers | SFTP explicitement hors périmètre produit |
+
+**Conséquence à surveiller.** Le code SFTP reste présent dans l'arbre (`modules/runtime/ssh/`) alors
+que son contrat n'existe plus, et le commit `abd52ce` l'a modifié le 07-08-2026. Une surface sans
+contrat est exactement ce que ce registre est censé rendre visible. À trancher : retirer le code, ou
+lui écrire une story.

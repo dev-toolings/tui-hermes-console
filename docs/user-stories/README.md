@@ -43,9 +43,8 @@ suivante. Composants : PRD, contrats d'acceptation, rapport de preuve.
 4. [`GATE-1-CONTRAT-EXPLOITATION.md`](GATE-1-CONTRAT-EXPLOITATION.md) ;
 5. [`SSH-STORIES.md`](SSH-STORIES.md) — décomposition normative de l'epic SSH ;
 6. [`GATE-2-EQUIPE-CLIENT.md`](GATE-2-EQUIPE-CLIENT.md) ;
-7. [`GATE-3-FLEET.md`](GATE-3-FLEET.md) ;
-8. [`guides/SSH-VPS-VIERGE.md`](guides/SSH-VPS-VIERGE.md) — bootstrap et preuve SSH réelle ;
-9. [`evidence/README.md`](evidence/README.md) — format des rapports de preuve.
+7. [`guides/SSH-VPS-VIERGE.md`](guides/SSH-VPS-VIERGE.md) — bootstrap et preuve SSH réelle ;
+8. [`evidence/README.md`](evidence/README.md) — format des rapports de preuve.
 
 ## Règles de gouvernance
 
@@ -65,7 +64,8 @@ suivante. Composants : PRD, contrats d'acceptation, rapport de preuve.
   jamais dans une configuration, une story ou ce guide.
 - Le runtime Hermes reste externe au Compose actuel tant qu'une story ne démontre pas une autre
   topologie. La Console gouverne ; Hermes exécute.
-- Toute gate ultérieure à la Gate 3 est hors périmètre de ce dossier.
+- Le périmètre de ce dossier s'arrête à la Gate 2. La Gate 3 (Edge/Relay et fleet) a été supprimée
+  le 08-08-2026, voir la section « Périmètre supprimé » de [`TRACEABILITY.md`](TRACEABILITY.md).
 
 ## Définition globale de « terminé »
 
