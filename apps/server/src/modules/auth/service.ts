@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { and, asc, count, eq, gt, isNull, lte, lt, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, lte, lt, or, sql } from "drizzle-orm";
 import {
   consoleAuthTransactions,
   consoleMobilePairings,
@@ -176,11 +176,17 @@ export function developmentAuthBypassAvailable() {
   return developmentAuthBypassConfig() !== null;
 }
 
-export function canCreateDevelopmentSession(
+/**
+ * Nombre de sessions les plus anciennes à révoquer pour laisser une place au bypass local.
+ * Le bypass exige un serveur et une origine en loopback, donc ces sessions sont celles du
+ * développeur : les faire tourner vaut mieux que verrouiller le compte pendant la durée du TTL.
+ */
+export function developmentSessionsToRevoke(
   activeSessions: number,
   maximum = MAX_ACTIVE_DEVELOPMENT_SESSIONS,
 ) {
-  return Number.isSafeInteger(activeSessions) && activeSessions >= 0 && activeSessions < maximum;
+  if (!Number.isSafeInteger(activeSessions) || activeSessions < 0) return 0;
+  return Math.max(0, activeSessions - maximum + 1);
 }
 
 /** Une session existante ne doit pas survivre au retrait de son opérateur. */
@@ -833,12 +839,34 @@ export async function completeDevelopmentLogin() {
           gt(consoleSessions.expiresAt, now),
         ),
       );
-    if (!canCreateDevelopmentSession(Number(active?.value ?? 0))) {
-      throw new AuthError(
-        "Trop de sessions actives pour utiliser le bypass local.",
-        429,
-        "DEV_AUTH_SESSION_LIMIT",
-      );
+    const activeCount = Number(active?.value ?? 0);
+    const toRevoke = developmentSessionsToRevoke(activeCount);
+    if (toRevoke > 0) {
+      const stale = await tx
+        .select({ tokenHash: consoleSessions.tokenHash })
+        .from(consoleSessions)
+        .where(
+          and(
+            eq(consoleSessions.userId, user.id),
+            gt(consoleSessions.expiresAt, now),
+          ),
+        )
+        .orderBy(asc(consoleSessions.lastSeenAt), asc(consoleSessions.createdAt))
+        .limit(toRevoke);
+      if (stale.length > 0) {
+        await tx.delete(consoleSessions).where(
+          inArray(
+            consoleSessions.tokenHash,
+            stale.map((row) => row.tokenHash),
+          ),
+        );
+      }
+      log.warn("Bypass local : rotation des sessions les plus anciennes", {
+        userId: user.id,
+        activeCount,
+        revoked: stale.length,
+        maximum: MAX_ACTIVE_DEVELOPMENT_SESSIONS,
+      });
     }
     return createSession(
       user.id,

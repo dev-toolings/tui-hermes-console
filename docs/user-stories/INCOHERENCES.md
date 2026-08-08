@@ -173,9 +173,24 @@ contrainte PostgreSQL (`runtime_config_workspace_status_check ... does not exist
 qu'il soit établi qu'il s'agisse des mêmes. Ces messages sont des `NOTICE` émis par un
 `DROP CONSTRAINT IF EXISTS` de nettoyage entre tests, donc probablement pas la cause.
 
-Piste privilégiée, non vérifiée : la suite serveur lance désormais plusieurs conteneurs PostgreSQL
-éphémères pour les tests d'intégration, et `bun run test` exécute les workspaces en parallèle. Une
-contention de ressources ou de ports au démarrage de conteneur expliquerait un échec non reproductible.
+Piste privilégiée : la suite serveur lance des conteneurs PostgreSQL éphémères dans **15 fichiers de
+test**, chacun avec son propre conteneur nommé. Une contention de ressources au démarrage
+expliquerait un échec non reproductible.
+
+**Un nom capturé le 08-08-2026.** Une septième exécution a produit un échec identifié :
+
+```
+(fail) audit ledger migration on PostgreSQL > 0018 replays and enforces actor snapshots,
+       target ordering, and mutation guards   [5912.09ms]
+apps/server/drizzle/audit-ledger-migration.test.ts
+```
+
+Élément discriminant : ce test passe systématiquement **seul**, en 9 secondes environ, et n'a échoué
+que dans la suite complète, en 5,9 secondes, soit avant son temps nominal. Un échec plus rapide que
+le succès oriente vers un conteneur non prêt au moment de la première requête, pas vers une
+assertion fausse. La piste de contention est donc renforcée, sans être démontrée.
+
+Le second test en échec reste inconnu.
 
 **Action requise avant toute revue de Gate :** capturer les noms des tests concernés. La répétition
 seule ayant échoué sur six exécutions, viser la cause plutôt que l'occurrence : conserver

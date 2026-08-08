@@ -1,6 +1,6 @@
 import { afterEach, expect, mock, test } from "bun:test";
 import {
-  canCreateDevelopmentSession,
+  developmentSessionsToRevoke,
   developmentAuthBypassConfig,
   isGoogleEmailAllowed,
   hasConnectableSiteMembership,
@@ -116,11 +116,18 @@ test("rejects the auth bypass in production or on a non-loopback boundary", () =
   ).toThrow("explicitement autorisé");
 });
 
-test("bounds development sessions without deleting existing OAuth sessions", () => {
-  expect(canCreateDevelopmentSession(0)).toBe(true);
-  expect(canCreateDevelopmentSession(7)).toBe(true);
-  expect(canCreateDevelopmentSession(8)).toBe(false);
-  expect(canCreateDevelopmentSession(-1)).toBe(false);
+test("le bypass local fait tourner les sessions au lieu de verrouiller le compte", () => {
+  // Sous la limite : aucune révocation, le comportement nominal ne change pas.
+  expect(developmentSessionsToRevoke(0)).toBe(0);
+  expect(developmentSessionsToRevoke(7)).toBe(0);
+  // À la limite : une place est libérée, jamais plus que nécessaire.
+  expect(developmentSessionsToRevoke(8)).toBe(1);
+  // Au-delà, cas d'un dépôt hérité d'avant la rotation : on rattrape l'excédent.
+  expect(developmentSessionsToRevoke(12)).toBe(5);
+  // Entrées aberrantes : ne jamais révoquer sur un compteur invalide.
+  expect(developmentSessionsToRevoke(-1)).toBe(0);
+  expect(developmentSessionsToRevoke(Number.NaN)).toBe(0);
+  expect(developmentSessionsToRevoke(1.5)).toBe(0);
 });
 
 test("legacy memberships do not block the first connectable Google operator", () => {
