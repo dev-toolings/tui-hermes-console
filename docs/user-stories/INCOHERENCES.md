@@ -161,10 +161,12 @@ archivé.
 
 **Ouverte le 08-08-2026.**
 
-`bun run test` a rapporté `446 pass, 2 fail` sur 451 tests. Trois exécutions complètes lancées
-immédiatement après ont toutes rendu `0 fail`. Les deux tests en cause **n'ont pas été identifiés** :
-le filtre de sortie appliqué à cette exécution était trop étroit et leur nom a été perdu. Il ne s'agit
-pas d'une hypothèse rassurante, c'est une information manquante.
+`bun run test` a rapporté `446 pass, 2 fail` sur 451 tests. **Six exécutions complètes** lancées
+ensuite, dont trois avec la sortie intégralement conservée, ont toutes rendu `0 fail`. Les deux tests
+en cause **n'ont pas été identifiés** : le filtre de sortie appliqué à l'exécution en échec était trop
+étroit et leur nom a été perdu. Il ne s'agit pas d'une hypothèse rassurante, c'est une information
+manquante. Un taux d'apparition d'environ une exécution sur sept est cohérent avec une condition de
+course, et rend la capture par simple répétition peu efficace.
 
 Deux échecs intermittents avaient déjà été observés en début de journée, sur des symptômes de
 contrainte PostgreSQL (`runtime_config_workspace_status_check ... does not exist, skipping`), sans
@@ -175,9 +177,11 @@ Piste privilégiée, non vérifiée : la suite serveur lance désormais plusieur
 éphémères pour les tests d'intégration, et `bun run test` exécute les workspaces en parallèle. Une
 contention de ressources ou de ports au démarrage de conteneur expliquerait un échec non reproductible.
 
-**Action requise avant toute revue de Gate :** rejouer la suite avec la sortie complète conservée,
-jusqu'à capturer les noms des tests concernés. Une suite dont deux échecs sur 451 restent anonymes ne
-permet pas de signer un rapport d'acceptation de bonne foi.
+**Action requise avant toute revue de Gate :** capturer les noms des tests concernés. La répétition
+seule ayant échoué sur six exécutions, viser la cause plutôt que l'occurrence : conserver
+systématiquement la sortie complète du harness, et exécuter la suite serveur seule, sans parallélisme
+inter-workspaces, pour déterminer si la contention de conteneurs est bien en jeu. Une suite dont deux
+échecs sur 451 restent anonymes ne permet pas de signer un rapport d'acceptation de bonne foi.
 
 ---
 
