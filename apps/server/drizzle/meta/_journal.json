@@ -281,6 +281,13 @@
       "when": 1786129200000,
       "tag": "0039_artifact_deletion",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1786132800000,
+      "tag": "0040_drop_mobile_pairing",
+      "breakpoints": true
     }
   ]
 }

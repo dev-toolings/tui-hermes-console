@@ -3,7 +3,7 @@ import { createSsh2Channel } from "./ssh2-password";
 import { createSystemSshChannel } from "./system-ssh";
 import type { SshChannel, SshTarget } from "./types";
 
-export type { SftpOps, SshAuth, SshChannel, SshTarget } from "./types";
+export type { SshAuth, SshChannel, SshTarget } from "./types";
 export { readSshConfigHosts, type SshConfigHost } from "./ssh-config";
 
 let active: { fingerprint: string; channel: SshChannel } | null = null;
@@ -23,7 +23,7 @@ export function targetFingerprint(target: SshTarget): string {
   return [target.user, target.host, target.port, target.auth, secret].join("|");
 }
 
-/** Canal SSH partagé par le port-forward HTTP et le SFTP des artefacts. */
+/** Canal SSH partagé par le port-forward HTTP et les commandes de contrôle. */
 export function getChannel(target: SshTarget): SshChannel {
   const fingerprint = targetFingerprint(target);
   if (active?.fingerprint === fingerprint) return active.channel;

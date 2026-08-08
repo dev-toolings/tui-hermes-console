@@ -17,7 +17,6 @@ import {
   runOutputDir,
   sanitizeFilename,
 } from "./paths";
-import { removeRemoteArtifact } from "./remote-sync";
 
 export class ArtifactDeletionError extends Error {
   constructor(
@@ -77,13 +76,11 @@ export async function deleteArtifactEverywhere(
   context: SiteRequestContext,
   fileId: string,
   dependencies: {
-    removeRemote?: typeof removeRemoteArtifact;
     now?: () => Date;
   } = {},
 ) {
   const db = getDatabase();
   const now = (dependencies.now ?? (() => new Date()))();
-  const removeRemote = dependencies.removeRemote ?? removeRemoteArtifact;
   let moved: QuarantinedFile[] = [];
   let target: ArtifactDeletionTarget | null = null;
 
@@ -144,7 +141,6 @@ export async function deleteArtifactEverywhere(
         { file: paths.privateFile, root: paths.privateDir },
         { file: paths.workFile, root: paths.workDir },
       ]);
-      await removeRemote(row.runId, row.direction, row.filename);
 
       await tx
         .update(artifacts)

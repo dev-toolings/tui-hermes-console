@@ -11,24 +11,6 @@ export type SshTarget = {
   password?: string;
 };
 
-export type SftpOps = {
-  mkdirp(remotePath: string): Promise<void>;
-  /** Retourne au plus `maxEntries + 1` noms afin que l'appelant détecte le
-   * dépassement sans matérialiser un répertoire distant arbitrairement grand. */
-  list(remotePath: string, maxEntries: number): Promise<string[]>;
-  stat(remotePath: string): Promise<{
-    size: number;
-    type: "file" | "directory" | "symlink" | "other";
-  }>;
-  upload(localPath: string, remotePath: string, mode?: number): Promise<void>;
-  download(
-    remotePath: string,
-    localPath: string,
-    maxBytes: number,
-  ): Promise<void>;
-  /** Supprime un fichier distant. L'absence du fichier est un succès. */
-  remove(remotePath: string): Promise<void>;
-};
 
 export type SshExecResult = {
   stdout: string;
@@ -54,7 +36,6 @@ export type SshCommandSession = {
 export type SshChannel = {
   /** Ouvre (ou réutilise) un forward local et renvoie `http://127.0.0.1:<port>`. */
   forward(remoteHost: string, remotePort: number): Promise<string>;
-  sftp(): Promise<SftpOps>;
   /** Exécute une commande produite côté serveur, jamais une chaîne fournie par le navigateur. */
   exec(command: string): Promise<SshExecResult>;
   /** Exécute une commande distante avec flux et entrée facultative, notamment pour les PTY Hermes. */

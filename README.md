@@ -107,7 +107,9 @@ Variables serveur :
 
 Hermes n'a pas besoin de tourner sur la machine de la Console. Dans **Paramètres → Runtime**,
 mode « Tunnel SSH » : la Console monte un port-forward SSH côté serveur et joint Hermes à travers.
-Le même canal sert au SFTP des pièces jointes et des artefacts. Rien n'est exposé sur le réseau.
+Rien n'est exposé sur le réseau. Depuis le 08-08-2026, la Console ne transfère plus les fichiers
+elle-même : le répertoire de travail doit être partagé avec le runtime, par bind mount côté hôte
+distant.
 
 Deux authentifications, à ne pas confondre :
 

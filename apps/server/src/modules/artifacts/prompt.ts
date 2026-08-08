@@ -1,6 +1,6 @@
 import path from "node:path";
 import { runOutputDir } from "./paths";
-import { remoteRunPaths } from "./remote-sync";
+import { remoteRunPaths } from "./remote-paths";
 
 /** `remoteRoot` renseigné = runtime distant : les chemins doivent être ceux
  *  qu'Hermes voit sur sa propre machine, pas ceux de la Console. */

@@ -542,7 +542,6 @@ Restent non prouvés :
 - cycle de vie complet forward/close/reconnect ;
 - concurrence sous missions longues ;
 - interruption lors d’un changement de cible ;
-- SFTP et remote-sync contre une machine réelle ;
 - restauration après coupure réseau ;
 - quotas et capacité disque distants.
 - mission réelle et artefact relu après la migration de stockage, sauvegarde externe et revue

@@ -27,7 +27,6 @@ import {
   AuthError,
   developmentAuthBypassConfig,
   getSession,
-  usesBearerSession,
   requireSiteRequestContext,
   type SiteRequestContext,
 } from "@/modules/auth/service";
@@ -121,7 +120,7 @@ app.use("/api/*", async (c, next) => {
     }
     c.set("authSession", session);
     c.set("siteContext", await requireSiteRequestContext(session));
-    if (!["GET", "HEAD"].includes(c.req.method) && !usesBearerSession(c.req.raw)) {
+    if (!["GET", "HEAD"].includes(c.req.method)) {
       assertSameOriginMutation(c.req.raw);
       assertCsrf(c.req.raw, session);
     }

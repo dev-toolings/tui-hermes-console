@@ -333,7 +333,14 @@ async function activateSshWorkspaceUnlocked(input: {
 
   return withEphemeralSshChannel(stored.target, async (channel) => {
     if (input.create) {
-      await (await channel.sftp()).mkdirp(remoteWorkdir);
+      const created = await channel.exec(`mkdir -p -- ${shellQuote(remoteWorkdir)}`);
+      if (created.code !== 0) {
+        throw new HermesRuntimeError(
+          "Le répertoire de travail distant n’a pas pu être créé.",
+          502,
+          "SSH_WORKSPACE_CREATE_FAILED",
+        );
+      }
     }
     const state = await inspectPath(channel, remoteWorkdir);
     if (!state.exists || !state.writable || state.symlink) {
@@ -351,7 +358,7 @@ async function activateSshWorkspaceUnlocked(input: {
       ? await alignTerminalCwd(channel, inspection, remoteHermesWorkdir, stored.target.user)
       : null;
     return withTerminalCwdRollback(async () => {
-      await verifySftpRoundTrip(channel, remoteWorkdir);
+      await verifyRemoteWriteRoundTrip(channel, remoteWorkdir);
       await probeHermesWorkspaceAccess(
         channel,
         inspection,
@@ -656,47 +663,39 @@ function nativeHermesPrefix(inspection: WorkspaceInspection, sshUser: string) {
   return `${nativeRunAsPrefix(inspection, sshUser)} ${shellQuote(executable)}`;
 }
 
-async function verifySftpRoundTrip(channel: SshChannel, remoteWorkdir: string) {
-  const localDir = await mkdtemp(path.join(tmpdir(), "hermes-console-sftp-"));
-  const source = path.join(localDir, "source");
-  const received = path.join(localDir, "received");
+async function verifyRemoteWriteRoundTrip(channel: SshChannel, remoteWorkdir: string) {
   const marker = randomUUID();
   const remote = path.posix.join(remoteWorkdir, `.hermes-console-probe-${marker}`);
   let failure: unknown = null;
   try {
-    await writeFile(source, marker, { encoding: "utf8", mode: 0o600 });
-    const sftp = await channel.sftp();
-    const root = await sftp.stat(remoteWorkdir);
-    if (root.type !== "directory") {
+    const directory = await channel.exec(
+      `test -d ${shellQuote(remoteWorkdir)} && test -w ${shellQuote(remoteWorkdir)}`,
+    );
+    if (directory.code !== 0) {
       throw new HermesRuntimeError(
-        "Le chemin distant n’est pas un répertoire SFTP réel.",
+        "Le chemin distant n’est pas un répertoire inscriptible.",
         409,
         "SSH_WORKSPACE_INVALID_TYPE",
       );
     }
-    await sftp.upload(source, remote);
-    const uploaded = await sftp.stat(remote);
-    if (uploaded.type !== "file" || uploaded.size !== Buffer.byteLength(marker)) {
-      throw new Error("preuve SFTP distante invalide");
-    }
-    await sftp.download(remote, received, 1_024);
-    if ((await readFile(received, "utf8")) !== marker) {
-      throw new Error("contenu SFTP relu différent");
+    const written = await channel.exec(
+      `printf %s ${shellQuote(marker)} > ${shellQuote(remote)}`,
+    );
+    if (written.code !== 0) throw new Error("écriture distante refusée");
+    const read = await channel.exec(`cat -- ${shellQuote(remote)}`);
+    if (read.code !== 0 || read.stdout !== marker) {
+      throw new Error("contenu distant relu différent");
     }
   } catch (error) {
     failure = error;
   }
   const cleanup = await channel.exec(`rm -f -- ${shellQuote(remote)}`);
-  try {
-    await rm(localDir, { recursive: true, force: true });
-  } finally {
-    if (cleanup.code !== 0) {
-      throw new HermesRuntimeError(
-        "La preuve SFTP distante n’a pas pu être supprimée ; le workspace n’est pas activé.",
-        502,
-        "SSH_WORKSPACE_PROBE_CLEANUP_FAILED",
-      );
-    }
+  if (cleanup.code !== 0) {
+    throw new HermesRuntimeError(
+      "La preuve d’écriture distante n’a pas pu être supprimée ; le workspace n’est pas activé.",
+      502,
+      "SSH_WORKSPACE_PROBE_CLEANUP_FAILED",
+    );
   }
   if (failure) throw failure;
 }

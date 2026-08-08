@@ -2,7 +2,6 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { and, asc, count, eq, gt, inArray, isNull, lte, lt, or, sql } from "drizzle-orm";
 import {
   consoleAuthTransactions,
-  consoleMobilePairings,
   consoleSessions,
   consoleUsers,
   mspMandateAssignments,
@@ -18,7 +17,6 @@ import { describeError, log } from "@/observability/log";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 const AUTH_TRANSACTION_TTL_MS = 1000 * 60 * 10;
-const MOBILE_PAIRING_TTL_MS = 1000 * 60 * 10;
 const MAX_ACTIVE_DEVELOPMENT_SESSIONS = 8;
 const SESSION_COOKIE = "hc_session";
 const OIDC_STATE_COOKIE = "hc_oidc_state";
@@ -238,35 +236,6 @@ async function createSession(
     expiresAt,
   });
   return { rawToken, session: { tokenHash: hash, csrfToken, expiresAt } };
-}
-
-export async function createMobilePairing(session: AuthSession) {
-  const pairingCode = randomToken();
-  const expiresAt = new Date(Date.now() + MOBILE_PAIRING_TTL_MS);
-  const db = getDatabase();
-  await db.delete(consoleMobilePairings).where(lt(consoleMobilePairings.expiresAt, new Date()));
-  await db.delete(consoleMobilePairings).where(eq(consoleMobilePairings.userId, session.userId));
-  await db.insert(consoleMobilePairings).values({
-    codeHash: tokenHash(pairingCode),
-    userId: session.userId,
-    siteId: session.siteId,
-    mandateId: session.selectedMandateId ?? null,
-    expiresAt,
-  });
-  return { pairingCode, expiresAt };
-}
-
-export async function exchangeMobilePairing(pairingCode: string) {
-  const hash = tokenHash(pairingCode);
-  return getDatabase().transaction(async (tx) => {
-    const [pairing] = await tx
-      .delete(consoleMobilePairings)
-      .where(and(eq(consoleMobilePairings.codeHash, hash), gt(consoleMobilePairings.expiresAt, new Date())))
-      .returning();
-    if (!pairing) throw new AuthError("Le code d’association a expiré ou a déjà été utilisé.", 401, "MOBILE_PAIRING_INVALID");
-    const created = await createSession(pairing.userId, pairing.siteId, tx, pairing.mandateId);
-    return { sessionToken: created.rawToken, expiresAt: created.session.expiresAt };
-  });
 }
 
 async function listMemberships(
@@ -882,7 +851,7 @@ export async function completeDevelopmentLogin() {
 }
 
 export async function getSession(request: Request): Promise<AuthSession | null> {
-  const token = bearerSessionToken(request) ?? readCookie(request, SESSION_COOKIE);
+  const token = readCookie(request, SESSION_COOKIE);
   if (!token) return null;
   const db = getDatabase();
   const session = await db.query.consoleSessions.findFirst({ where: and(eq(consoleSessions.tokenHash, tokenHash(token)), gt(consoleSessions.expiresAt, new Date())) });
@@ -909,23 +878,6 @@ export async function getSession(request: Request): Promise<AuthSession | null> 
     aiDisclosureVersion: user.aiDisclosureVersion,
     aiDisclosureAcceptedAt: user.aiDisclosureAcceptedAt,
   };
-}
-
-/**
- * Les clients natifs présentent le même token opaque que le Web, mais depuis
- * SecureStore via Authorization. Contrairement au cookie, ce header n'est pas
- * envoyé automatiquement par un navigateur tiers et ne requiert donc pas de
- * double-submit CSRF.
- */
-export function bearerSessionToken(request: Request): string | null {
-  const authorization = request.headers.get("authorization");
-  if (!authorization) return null;
-  const match = /^Bearer ([A-Za-z0-9_-]{20,512})$/.exec(authorization);
-  return match?.[1] ?? null;
-}
-
-export function usesBearerSession(request: Request) {
-  return bearerSessionToken(request) !== null;
 }
 
 export async function selectSessionSite(request: Request, siteId: string) {

@@ -2,7 +2,6 @@ import { Link } from "@/lib/router";
 import { AlertTriangleIcon, KeyRoundIcon, LockIcon, ShieldAlertIcon, UserIcon } from "lucide-react";
 import { Badge, ButtonLink, Card, CardSurface, SectionHeading } from "@/components/ui/boardui";
 import { SettingsContent } from "@/components/settings/settings-content";
-import { MobileDevicePairing } from "@/components/settings/mobile-device-pairing";
 import type { RuntimeData } from "@/loaders";
 
 
@@ -55,7 +54,6 @@ export function SettingsSecurityScreen({ data }: { data: RuntimeData }) {
         </CardSurface>
       </Card>
 
-      <MobileDevicePairing />
 
       <Card>
         <CardSurface>

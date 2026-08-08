@@ -1,7 +1,7 @@
 import { createReadStream, createWriteStream } from "node:fs";
 import net from "node:net";
 import { pipeline } from "node:stream/promises";
-import { Client, type SFTPWrapper, type Stats } from "ssh2";
+import { Client } from "ssh2";
 import { createByteLimit } from "./byte-limit";
 import { mapForwardError, mapSshError, sshHostKeyRejected } from "./errors";
 import {
@@ -11,7 +11,6 @@ import {
   verifyHostKey,
 } from "./known-hosts";
 import type {
-  SftpOps,
   SshChannel,
   SshCommandSession,
   SshExecResult,
@@ -28,7 +27,6 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
   let connecting: Promise<Client> | null = null;
   let server: net.Server | null = null;
   let forwarded: { url: string; remote: string } | null = null;
-  let sftpHandle: SFTPWrapper | null = null;
 
   function connect(): Promise<Client> {
     if (client) return Promise.resolve(client);
@@ -143,79 +141,8 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
     });
   }
 
-  async function sftp(): Promise<SftpOps> {
-    const conn = await connect();
-    // Une session SFTP par appel épuisait `MaxSessions` (10 par défaut) au bout
-    // de quelques missions : on en garde une seule, rouverte si elle se ferme.
-    if (!sftpHandle) {
-      sftpHandle = await new Promise<SFTPWrapper>((resolve, reject) => {
-        conn.sftp((error, wrapper) => (error ? reject(mapSshError(error)) : resolve(wrapper)));
-      });
-      sftpHandle.once("close", () => {
-        sftpHandle = null;
-      });
-    }
-    const handle = sftpHandle;
-
-    return {
-      async mkdirp(remotePath: string) {
-        // SFTP n'a pas de mkdir récursif : chaque segment est créé et un échec
-        // n'est toléré que si un stat prouve qu'un répertoire existe déjà.
-        const segments = remotePath.split("/").filter(Boolean);
-        let current = remotePath.startsWith("/") ? "" : ".";
-        for (const segment of segments) {
-          current = `${current}/${segment}`;
-          await ensureSftpDirectory(handle, current);
-        }
-      },
-      list(remotePath: string, maxEntries: number) {
-        return readSftpDirectoryBounded(handle, remotePath, maxEntries);
-      },
-      stat(remotePath: string) {
-        return new Promise((resolve, reject) => {
-          handle.lstat(remotePath, (error, stats) => {
-            if (error) {
-              reject(mapSshError(error));
-              return;
-            }
-            resolve(toSftpStat(stats));
-          });
-        });
-      },
-      async upload(localPath: string, remotePath: string, mode?: number) {
-        await pipeline(createReadStream(localPath), handle.createWriteStream(remotePath));
-        if (mode !== undefined) {
-          await new Promise<void>((resolve, reject) => {
-            handle.chmod(remotePath, mode, (error) =>
-              error ? reject(mapSshError(error)) : resolve(),
-            );
-          });
-        }
-      },
-      async download(remotePath: string, localPath: string, maxBytes: number) {
-        await pipeline(
-          handle.createReadStream(remotePath),
-          createByteLimit(maxBytes),
-          createWriteStream(localPath, { flags: "wx", mode: 0o600 }),
-        );
-      },
-      async remove(remotePath: string) {
-        await new Promise<void>((resolve, reject) => {
-          handle.unlink(remotePath, (error) => {
-            if (!error || Number((error as { code?: unknown }).code) === 2) {
-              resolve();
-              return;
-            }
-            reject(mapSshError(error));
-          });
-        });
-      },
-    };
-  }
-
   function close() {
     forwarded = null;
-    sftpHandle = null;
     server?.close();
     server = null;
     const conn = client;
@@ -293,92 +220,6 @@ export function createSsh2Channel(target: SshTarget): SshChannel {
     return (await startRemote(command)).result;
   }
 
-  return { forward, sftp, exec: execRemote, start: startRemote, close };
+  return { forward, exec: execRemote, start: startRemote, close };
 }
 
-type DirectorySftp = Pick<SFTPWrapper, "mkdir" | "stat">;
-
-type ListingSftp = Pick<SFTPWrapper, "opendir" | "readdir" | "close">;
-
-export function readSftpDirectoryBounded(
-  handle: ListingSftp,
-  remotePath: string,
-  maxEntries: number,
-): Promise<string[]> {
-  if (!Number.isSafeInteger(maxEntries) || maxEntries < 0) {
-    return Promise.reject(new Error("limite de liste SFTP invalide"));
-  }
-  const readLimit = maxEntries + 1;
-  return new Promise((resolve, reject) => {
-    handle.opendir(remotePath, (openError, directory) => {
-      if (openError) {
-        reject(mapSshError(openError));
-        return;
-      }
-      const names: string[] = [];
-      let settled = false;
-      const finish = (error?: unknown) => {
-        if (settled) return;
-        settled = true;
-        handle.close(directory, (closeError) => {
-          if (error) reject(mapSshError(error));
-          else if (closeError) reject(mapSshError(closeError));
-          else resolve(names);
-        });
-      };
-      const readNext = () => {
-        handle.readdir(directory, (readError, entries) => {
-          if (readError) {
-            finish(readError);
-            return;
-          }
-          if (!entries) {
-            finish();
-            return;
-          }
-          for (const entry of entries) {
-            names.push(entry.filename);
-            if (names.length >= readLimit) {
-              finish();
-              return;
-            }
-          }
-          readNext();
-        });
-      };
-      readNext();
-    });
-  });
-}
-
-export function ensureSftpDirectory(
-  handle: DirectorySftp,
-  remotePath: string,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    handle.mkdir(remotePath, (mkdirError) => {
-      if (!mkdirError) {
-        resolve();
-        return;
-      }
-      handle.stat(remotePath, (statError, stats) => {
-        if (!statError && stats.isDirectory()) {
-          resolve();
-          return;
-        }
-        reject(mapSshError(mkdirError));
-      });
-    });
-  });
-}
-
-function toSftpStat(stats: Stats) {
-  const type = stats.isFile()
-    ? ("file" as const)
-    : stats.isDirectory()
-      ? ("directory" as const)
-      : stats.isSymbolicLink()
-        ? ("symlink" as const)
-        : ("other" as const);
-  return { size: stats.size, type };
-}

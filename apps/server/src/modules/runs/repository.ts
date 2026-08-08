@@ -34,10 +34,6 @@ import {
   scanOutputArtifacts,
 } from "@/modules/artifacts/repository";
 import {
-  pullRunOutputs,
-  RemoteSyncError,
-} from "@/modules/artifacts/remote-sync";
-import {
   isSiteRequestContextActive,
   type SiteRequestContext,
   type SiteScope,
@@ -736,7 +732,6 @@ export async function completeRun(
 }
 
 type ArtifactDeliveryDependencies = {
-  pull(runId: string): Promise<void>;
   scan(scope: SiteScope, runId: string): Promise<unknown>;
 };
 
@@ -752,18 +747,13 @@ export type ArtifactDeliveryResult =
 export async function finalizeRunArtifactDelivery(
   scope: SiteScope,
   runId: string,
-  dependencies: ArtifactDeliveryDependencies = {
-    pull: pullRunOutputs,
-    scan: scanOutputArtifacts,
-  },
+  dependencies: ArtifactDeliveryDependencies = { scan: scanOutputArtifacts },
 ): Promise<ArtifactDeliveryResult> {
   try {
-    await dependencies.pull(runId);
     await dependencies.scan(scope, runId);
     return { ok: true };
   } catch (error) {
-    const operation =
-      error instanceof RemoteSyncError ? error.operation : "scan_outputs";
+    const operation = "scan_outputs";
     return {
       ok: false,
       operation,

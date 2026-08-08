@@ -17,7 +17,7 @@ daté seulement après exécution ; `—` signifie « non prouvé », pas « non
 > de Gate 1 vérifiable sans attendre une signature commerciale. Onze stories hors périmètre sont
 > **supprimées**, voir « Périmètre supprimé » en fin de document. Deux stories sont créées pour
 > régulariser des capacités livrées hors méthode : `US-G1-009` (suppression gouvernée d'un artefact)
-> et `US-G1-010` (exception CSRF du jeton porteur). Quatre commits livrés sans story sont consignés.
+> Quatre commits livrés sans story sont consignés.
 > La dérogation `DER-001` de [CONVENTIONS.md](CONVENTIONS.md) autorise, jusqu'au 08-11-2026 et pour
 > les seules stories Gate 0 sans frontière de sécurité, une acceptation par un implémenteur unique.
 > Le corpus passe de 44 à **27 stories**.
@@ -58,7 +58,6 @@ change seulement de place.
 | US-G1-007 | §11, §13 — E2E critique | US-G1-001..006 | [slice local G1-007A post-setup 2026-08-01](evidence/2026-08-01-gate-1-g1-007a-post-setup-local.md), [slice G1-007B connectivité runtime 2026-08-02](evidence/2026-08-02-gate-1-hermes-runtime-connectivity.md) | `IMPLÉMENTÉE` localement pour G1-007A/B ; story complète bloquée par P-E2E vierge, navigateur/OIDC, P-SEC et acceptation Gate |
 | US-G1-008 | §9.4, §10, §13 — SSH réel, SFTP gelé | US-G1-002 | [connectivité Hermes VPS 02-08-2026](evidence/2026-08-02-gate-1-hermes-runtime-connectivity.md), [VM vierge 04-08-2026](evidence/2026-08-04-ssh-003-005-hermes-ephemeral-01.md) | `BLOQUÉE` sur le sous-périmètre SSH — tunnel, séparation des comptes, empreintes et rotation restent à accepter. SFTP est explicitement `GELÉE` et non bloquante |
 | US-G1-009 | §9.1, §13 — suppression gouvernée d'un artefact | US-G1-006 | [test d'intégration legal hold 08-08-2026](../../apps/server/drizzle/artifact-deletion-legal-hold.integration.test.ts) | `IMPLÉMENTÉE`, preuves incomplètes. Livrée hors méthode par `34f6fa3`, régularisée le 08-08-2026. Garde de rétention légale ajoutée et prouvée par mutation, refus désormais audité. `P-SEC` rôle refusé au niveau HTTP, restauration après erreur forcée et refus run actif contre base réelle restent ouverts. Non éligible à `DER-001` |
-| US-G1-010 | §9.4, §13 — borner l'exception CSRF du jeton porteur | aucune | — | `IMPLÉMENTÉE`, non vérifiée. Livrée hors méthode par `3392d9f`. Aucun test ne couvre la garde d'`index.ts:124`, seul le parseur est testé. `P-SEC` obligatoire avant toute vérification. Non éligible à `DER-001` |
 | US-G1-SSH-001..005,008 | §9.4, §10 — bootstrap, confiance, tunnel et identité SSH | US-G1-008 | [états détaillés](SSH-STORIES.md), [VM vierge Terraform/Ansible 04-08-2026](evidence/2026-08-04-ssh-003-005-hermes-ephemeral-01.md), [preuve latest/main et SSH-005](evidence/2026-08-04-g1-002-latest-docker-native.md), [preuve SSH-001/002](evidence/2026-08-04-ssh-001-002-hermes-ephemeral-01.md), [preuve SSH-008](evidence/2026-08-04-ssh-008-hermes-ephemeral-01.md) | `TECHNIQUEMENT VÉRIFIÉE` — SSH-008 rotation/révocation prouvée ; revue indépendante et opérateur 2 restent ouverts |
 | US-G1-SSH-010 | §9.4, §10 — stockage Docker `/opt/data` sans transfert SFTP | US-G1-SSH-005 | [migration Docker P-OPS 2026-08-02](evidence/2026-08-02-gate-1-ssh-storage-migration.md) | `VÉRIFIÉE` techniquement pour le cutover P-OPS ; preuve SFTP retirée du contrat courant, acceptation reviewer restante |
 | US-G2-001 | §6.3, §8, §13 — site/projet | aucune ; « Gate 1 acceptée » est une dépendance de Gate | [preuve site context 2026-08-01](evidence/2026-08-01-gate-2-site-context.md) | `VÉRIFIÉE` |
@@ -113,8 +112,7 @@ reviewer.
 | Capacité | Artefacts principaux | Story | Statut |
 |---|---|---|---|
 | Administration des skills Hermes | `apps/server/src/api/skills/`, `apps/server/src/modules/runtime/hermes-skills-admin.ts`, `apps/web/src/screens/skills.tsx`, nav `/skills` | **aucune** | hors périmètre d'acceptation |
-| Application mobile native Expo | `apps/mobile/`, migration `0038_mobile_pairing.sql`, `apps/web/src/components/settings/mobile-device-pairing.tsx` | **aucune** | `GELÉE` le 08-08-2026. `docs/PRD.md` §5.5 ne promet aucune application native ; ce périmètre n'a été ni demandé ni engagé. Le code reste dans l'arbre, il compile et son `node_modules` reste monté dans le sandbox guidé. Retour en `PRÊTE` seulement si le premier `ACCEPTÉE` est obtenu ET qu'un design partner qualifié au titre de `US-G0-001` le demande. **Le gel ne couvre pas la surface serveur de la ligne suivante** |
-| Session par jeton porteur et contournement de garde CSRF | `apps/server/src/modules/auth/service.ts:857`, `apps/server/src/index.ts:124`, `apps/server/src/api/auth/mobile/route.ts` | `US-G1-010` | **Non gelable.** Livrée dans le même commit que l'app mobile, mais applicable à 100 % des mutations `/api/*` : présenter un en-tête `Authorization` désactive `assertSameOriginMutation` et `assertCsrf`. Le seul test livré couvre le parseur, pas la garde. Geler `apps/mobile` ne suspend pas cette surface, qui reste active. Exige un `P-SEC` et un reviewer sécurité, et n'est pas éligible à `DER-001` |
+| Application mobile native Expo | supprimée du dépôt le 08-08-2026 | **aucune** | Voir « Périmètre supprimé ». Ancien état : `docs/PRD.md` §5.5 ne promet aucune application native ; ce périmètre n'a été ni demandé ni engagé. Le code reste dans l'arbre, il compile et son `node_modules` reste monté dans le sandbox guidé. Retour en `PRÊTE` seulement si le premier `ACCEPTÉE` est obtenu ET qu'un design partner qualifié au titre de `US-G0-001` le demande. **Le gel ne couvre pas la surface serveur de la ligne suivante** |
 
 ### Commits sans entrée de traçabilité
 
@@ -125,7 +123,7 @@ compte. Le rattachement définitif est une décision de périmètre du propriét
 | Commit | Objet réel, lu dans le diff | Rattachement | Décision |
 |---|---|---|---|
 | `3392d9f` (a) | Spike application mobile Expo | aucun, périmètre non demandé | `GELÉE` |
-| `3392d9f` (b) | Session par jeton porteur et bascule de la garde CSRF/same-origin sur toutes les routes | `US-G1-010` | story de sécurité obligatoire, `P-SEC` exigé. Le rattachement initial « aucun, périmètre non demandé » était **faux** : vrai de `apps/mobile/`, faux du commit |
+| `3392d9f` (b) | Session par jeton porteur et bascule de la garde CSRF/same-origin sur toutes les routes | **code supprimé le 08-08-2026** | Le rattachement initial « aucun, périmètre non demandé » était faux : vrai de `apps/mobile/`, faux du commit. Une story de sécurité `US-G1-010` avait été écrite pour exiger un `P-SEC`, puis rendue sans objet par la suppression du code. La garde CSRF est redevenue inconditionnelle |
 | `c69194b` | Ancrage des tours de conversation : `use-live-thread.ts`, `xulux-chat/thread.tsx`, `thread-messages.ts` | `US-G0-UX-003` | confirmé par le diff. **Conséquence :** ce commit est du 07-08 et la preuve visée du 06-08, donc la preuve est antérieure au code courant |
 | `abd52ce` | Aperçu de fichier (`file-preview-dialog.tsx`, 232 lignes neuves), pièces jointes, `runtime/config.ts`, `setup/api-access.ts`, `artifacts/remote-sync`, typage `upload(..., mode?)` dans 5 fichiers SSH. L'intitulé « update chat » ne décrit pas le contenu | **aucun rattachement retenu** | Le rattachement à `US-G1-002D` proposé le 08-08 était infondé : aucun fichier `modules/runtime/update*` n'apparaît dans le diff, la proposition venait du message de commit et non du contenu. À découper. **Point dur :** le volet SSH touche la surface SFTP, dont les stories `US-G1-SSH-006/007/009` sont supprimées du périmètre le 08-08-2026. Le code SFTP, lui, reste dans l'arbre et continue d'être modifié sans contrat |
 | `34f6fa3` | Suppression gouvernée d'un artefact : soft delete, quarantaine restaurable, purge SFTP distante, audit `artifact.delete`, bump de `SITE_ROLE_MATRIX_VERSION` | `US-G1-009`, rattachée au périmètre de `US-G1-006` | Mutation destructive, donc intégralement sous le § « Pour toute mutation sensible ». **Régression corrigée le 08-08-2026 :** la suppression ne consultait pas la rétention légale, alors que `GATE-1-CONTRAT-EXPLOITATION.md:210` l'exige et que la purge l'applique déjà (`retention/service.ts:225`). Garde ajoutée, preuve d'intégration en cours |
@@ -166,3 +164,23 @@ si le périmètre rouvre un jour.
 que son contrat n'existe plus, et le commit `abd52ce` l'a modifié le 07-08-2026. Une surface sans
 contrat est exactement ce que ce registre est censé rendre visible. À trancher : retirer le code, ou
 lui écrire une story.
+
+## Code supprimé le 08-08-2026
+
+La suppression des stories a été suivie de celle du code correspondant, pour ne pas laisser de
+surface sans contrat. Ce que la Console ne fait plus :
+
+| Périmètre retiré | Ce qui disparaît | Conséquence assumée |
+|---|---|---|
+| Application mobile native | `apps/mobile/`, 4 workflows GitHub de build iOS et Android, écran d'appairage web | Aucun client natif. Le parcours mobile reste couvert par le web à 320 px (`US-G0-MOBILE-001`) |
+| Session par jeton porteur | `bearerSessionToken`, `usesBearerSession`, route `/api/auth/mobile`, table `console_mobile_pairings` (migration `0040`) | **Gain de sécurité :** `assertSameOriginMutation` et `assertCsrf` s'appliquent de nouveau à toutes les mutations, sans exception. `US-G1-010` devient sans objet et est supprimée |
+| Transfert SFTP | `scoped-sftp.ts`, `remote-sync.ts`, `SftpOps`, les fabriques `sftp()` des deux canaux SSH | La Console ne transfère plus les fichiers vers le runtime distant. Le répertoire de travail doit être partagé, ce que `US-G1-SSH-010` établit déjà par bind mount `/srv/hermes-console/data → /opt/data` |
+
+`remote-sync.ts` est remplacé par `remote-paths.ts`, qui ne fait plus que résoudre les chemins que
+Hermes doit voir. La sonde d'écriture distante de `workspace.ts` passe désormais par des commandes
+shell au lieu d'un aller-retour SFTP.
+
+**Réserve à vérifier avant toute revue de Gate.** Aucune preuve n'a été rejouée après ces
+suppressions. `US-G1-001` (durabilité des artefacts) et `US-G1-SSH-010` reposaient sur des rapports
+antérieurs, produits quand le transfert SFTP existait encore. Leur état déclaré n'a pas été remis en
+cause ici, mais il n'a pas été revalidé non plus.

@@ -56,10 +56,15 @@ describe("route authorization inventory", () => {
     });
   });
 
-  test("keeps the one-time mobile exchange public without exposing product routes", () => {
-    expect(ROUTES.find(({ path }) => path === "/api/auth/mobile")?.access).toEqual({
-      boundary: "public",
-    });
+  test("n'expose publiquement que les sondes et l'authentification", () => {
+    // Liste exhaustive : toute nouvelle route publique doit être un choix
+    // explicite, pas un oubli de garde. L'échange d'appairage mobile a été
+    // retiré le 08-08-2026 avec l'application native.
+    expect(
+      ROUTES.filter(({ access }) => access.boundary === "public")
+        .map(({ path }) => path)
+        .sort(),
+    ).toEqual(["/api/auth", "/api/healthz", "/api/readyz"]);
     expect(ROUTES.find(({ path }) => path === "/api/threads")?.access.boundary).toBe("site");
   });
 

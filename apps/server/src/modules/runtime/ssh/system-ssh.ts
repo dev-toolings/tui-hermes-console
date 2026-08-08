@@ -8,7 +8,6 @@ import { createByteLimit } from "./byte-limit";
 import { mapSystemSshStderr, sshBinaryMissing } from "./errors";
 import { configuredKnownHostsPath } from "./known-hosts";
 import type {
-  SftpOps,
   SshChannel,
   SshCommandSession,
   SshExecResult,
@@ -178,39 +177,6 @@ export function createSystemSshChannel(target: SshTarget): SshChannel {
     return forwarded.url;
   }
 
-  async function sftp(): Promise<SftpOps> {
-    return {
-      async mkdirp(remotePath: string) {
-        await run(["mkdir", "-p", "--", shellQuote(remotePath)]);
-      },
-      async list(remotePath: string, maxEntries: number) {
-        // Un dossier absent/illisible est un échec de livraison, pas une liste vide.
-        const out = await run([systemSftpListCommand(remotePath, maxEntries)]);
-        return parseSystemSftpList(out, maxEntries);
-      },
-      async stat(remotePath: string) {
-        const out = await run([
-          "stat",
-          "--format=%f:%s",
-          "--",
-          shellQuote(remotePath),
-        ]);
-        return parseSystemSftpStat(out);
-      },
-      async upload(localPath: string, remotePath: string, mode?: number) {
-        await scp(localPath, `${target.user}@${target.host}:${remotePath}`);
-        if (mode !== undefined) {
-          await run(["chmod", mode.toString(8), "--", shellQuote(remotePath)]);
-        }
-      },
-      async download(remotePath: string, localPath: string, maxBytes: number) {
-        await downloadBounded(remotePath, localPath, maxBytes);
-      },
-      async remove(remotePath: string) {
-        await run(["rm", "-f", "--", shellQuote(remotePath)]);
-      },
-    };
-  }
 
   function close(sync = false) {
     forwarded = null;
@@ -353,63 +319,7 @@ export function createSystemSshChannel(target: SshTarget): SshChannel {
     return (await startRemote(command)).result;
   }
 
-  return { forward, sftp, exec: execRemote, start: startRemote, close };
-}
-
-export function systemSftpListCommand(remotePath: string, maxEntries: number) {
-  if (!Number.isSafeInteger(maxEntries) || maxEntries < 0) {
-    throw new Error("limite de liste SSH invalide");
-  }
-  return [
-    "{ find --",
-    shellQuote(remotePath),
-    "-mindepth 1 -maxdepth 1 -printf '%f\\0';",
-    "printf '/__hermes_find_status__:%s\\0' \"$?\"; }",
-    "| head -z -n",
-    String(maxEntries + 2),
-  ].join(" ");
-}
-
-export function parseSystemSftpList(output: string, maxEntries: number) {
-  if (!Number.isSafeInteger(maxEntries) || maxEntries < 0) {
-    throw new Error("limite de liste SSH invalide");
-  }
-  const fields = output.split("\0").filter((name) => name.length > 0);
-  const markerIndex = fields.findIndex((field) =>
-    field.startsWith("/__hermes_find_status__:"),
-  );
-  if (markerIndex >= 0) {
-    const status = Number(fields[markerIndex]!.slice("/__hermes_find_status__:".length));
-    if (!Number.isSafeInteger(status) || status !== 0) {
-      throw new Error(`énumération distante échouée (find=${String(status)})`);
-    }
-    return fields.slice(0, Math.min(markerIndex, maxEntries + 1));
-  }
-  // Le marqueur n'est normalement absent que lorsque `head` a atteint sa
-  // borne avant la fin de find : on garde maxCount+1 pour signaler le quota.
-  if (fields.length >= maxEntries + 2) {
-    return fields.slice(0, maxEntries + 1);
-  }
-  throw new Error("énumération distante incomplète (statut find absent)");
-}
-
-export function parseSystemSftpStat(output: string) {
-  const [modeHex, sizeRaw] = output.trim().split(":");
-  const mode = Number.parseInt(modeHex ?? "", 16);
-  const size = Number(sizeRaw);
-  if (!Number.isSafeInteger(mode) || !Number.isSafeInteger(size) || size < 0) {
-    throw new Error("stat distant invalide");
-  }
-  const kind = mode & 0o170000;
-  const type =
-    kind === 0o100000
-      ? ("file" as const)
-      : kind === 0o040000
-        ? ("directory" as const)
-        : kind === 0o120000
-          ? ("symlink" as const)
-          : ("other" as const);
-  return { size, type };
+  return { forward, exec: execRemote, start: startRemote, close };
 }
 
 function exec(command: string, args: string[]): Promise<string> {
