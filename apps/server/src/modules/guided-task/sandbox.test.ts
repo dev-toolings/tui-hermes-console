@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -59,16 +59,39 @@ describe("guided delivery sandbox policy", () => {
     expect(() => validateGuidedTestCommands([])).toThrow("GUIDED_TEST_COMMANDS_REQUIRED");
   });
 
-  test("mounts only verified repository dependency directories read-only", async () => {
+  test("mounts one read-only directory per declared workspace with a node_modules, with no hardcoded exception", async () => {
     const repositoryRoot = path.resolve(import.meta.dir, "../../../../..");
     const mounts = await resolveGuidedDependencyMounts(repositoryRoot);
-    expect(mounts.map((mount) => mount.target)).toEqual([
-      "/workspace/node_modules",
-      "/workspace/apps/server/node_modules",
-      "/workspace/apps/web/node_modules",
-      "/workspace/packages/console-core/node_modules",
-      "/workspace/packages/ui/node_modules",
-    ]);
+
+    // Property 1: exactly one mount per workspace directory declared in the root package.json
+    // (plus the repository root itself) that actually has a node_modules directory. Derived
+    // independently from resolveGuidedDependencyMounts so this does not just restate its logic.
+    const rootPackageJson = JSON.parse(
+      await readFile(path.join(repositoryRoot, "package.json"), "utf8"),
+    ) as { workspaces: string[] };
+    const expectedWorkspaceDirectories = [repositoryRoot];
+    for (const pattern of rootPackageJson.workspaces) {
+      const parent = path.join(repositoryRoot, pattern.replace(/\/\*$/, ""));
+      const entries = await readdir(parent, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) {
+        if (entry.isDirectory()) expectedWorkspaceDirectories.push(path.join(parent, entry.name));
+      }
+    }
+    const expectedTargets = new Set<string>();
+    for (const directory of expectedWorkspaceDirectories) {
+      const candidate = path.join(directory, "node_modules");
+      const isDirectory = await stat(candidate)
+        .then((info) => info.isDirectory())
+        .catch(() => false);
+      if (isDirectory) {
+        expectedTargets.add(path.posix.join("/workspace", path.relative(repositoryRoot, candidate)));
+      }
+    }
+    expect(new Set(mounts.map((mount) => mount.target))).toEqual(expectedTargets);
+    expect(mounts.length).toBeGreaterThan(0);
+
+    // Property 2: every mount is read-only, targets /workspace/<repo-relative path>, and the
+    // resulting bubblewrap args bind it read-only (never read-write).
     const args = buildBubblewrapArgs({
       workspace: "/sandbox",
       sandboxHome: "/sandbox-home",
@@ -78,8 +101,81 @@ describe("guided delivery sandbox policy", () => {
       networkPolicy: "none",
       command: ["/bin/true"],
     });
-    expect(args.join(" ")).toContain(`--ro-bind ${mounts[0]!.source} /workspace/node_modules`);
-    expect(args.join(" ")).toContain("--tmpfs /workspace/apps/web/node_modules/.vite-temp");
+    const joinedArgs = args.join(" ");
+    for (const mount of mounts) {
+      expect(mount.target.startsWith("/workspace/")).toBe(true);
+      expect(path.isAbsolute(mount.source)).toBe(true);
+      expect(joinedArgs).toContain(`--ro-bind ${mount.source} ${mount.target}`);
+    }
+
+    // Property 3: no mount source escapes the repository root.
+    for (const mount of mounts) {
+      const resolvedSource = await realpath(mount.source);
+      expect(
+        resolvedSource === repositoryRoot || resolvedSource.startsWith(`${repositoryRoot}${path.sep}`),
+      ).toBe(true);
+    }
+
+    // Property 4: known cache directories are neutralized as tmpfs, and only when present.
+    for (const mount of mounts) {
+      for (const cacheDirectory of [".vite-temp", ".cache"]) {
+        const cacheTarget = path.posix.join(mount.target, cacheDirectory);
+        const cacheExists = await stat(path.join(mount.source, cacheDirectory))
+          .then(() => true)
+          .catch(() => false);
+        if (cacheExists) {
+          expect(mount.ephemeralCacheTargets).toContain(cacheTarget);
+          expect(joinedArgs).toContain(`--tmpfs ${cacheTarget}`);
+        } else {
+          expect(mount.ephemeralCacheTargets).not.toContain(cacheTarget);
+        }
+      }
+    }
+  });
+
+  test("derives a mount for a workspace added after the fact, without repository changes", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "guided-workspace-fixture-"));
+    try {
+      await writeFile(
+        path.join(root, "package.json"),
+        JSON.stringify({ name: "fixture", workspaces: ["apps/*"] }),
+      );
+      await mkdir(path.join(root, "apps", "freshly-added", "node_modules"), { recursive: true });
+      await writeFile(path.join(root, "apps", "freshly-added", "node_modules", ".keep"), "");
+      await mkdir(path.join(root, "apps", "without-deps"), { recursive: true });
+
+      const mounts = await resolveGuidedDependencyMounts(root);
+      const realRoot = await realpath(root);
+      const targets = mounts.map((mount) => mount.target);
+
+      expect(targets).toContain("/workspace/apps/freshly-added/node_modules");
+      expect(targets).not.toContain("/workspace/apps/without-deps/node_modules");
+      expect(mounts.find((mount) => mount.target === "/workspace/apps/freshly-added/node_modules")?.source).toBe(
+        path.join(realRoot, "apps", "freshly-added", "node_modules"),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("ignores a node_modules symlinked outside the repository root", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "guided-escape-fixture-"));
+    const outside = await mkdtemp(path.join(os.tmpdir(), "guided-escape-outside-"));
+    try {
+      await writeFile(
+        path.join(root, "package.json"),
+        JSON.stringify({ name: "fixture", workspaces: [] }),
+      );
+      await writeFile(path.join(outside, "marker.txt"), "outside the repository root");
+      await symlink(outside, path.join(root, "node_modules"));
+
+      const mounts = await resolveGuidedDependencyMounts(root);
+
+      expect(mounts).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
   });
 
   test("creates a detached worktree and proves the host root is not writable", async () => {
