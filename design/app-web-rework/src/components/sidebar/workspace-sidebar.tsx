@@ -21,6 +21,7 @@ import {
   RiFileSearchLine,
   RiFlowChart,
   RiFolderHistoryLine,
+  RiLayout4Line,
   RiGroupLine,
   RiHashtag,
   RiMoonLine,
@@ -69,6 +70,7 @@ type Props = {
 const navigation = [
   { label: "File", to: "/inbox", icon: RiDashboardLine },
   { label: "Missions", to: "/missions", icon: RiFlowChart },
+  { label: "Layout lab", to: "/layouts", icon: RiLayout4Line },
   { label: "Nouvelle tâche", to: "/tasks/new", icon: RiTaskLine },
   { label: "Historique", to: "/history", icon: RiFolderHistoryLine },
   { label: "Membres", to: "/members", icon: RiGroupLine },

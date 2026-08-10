@@ -20,6 +20,7 @@ const STACK: Record<
   "/menu": { title: "Hermes Console", parent: null, short: "Menu" },
   "/inbox": { title: "File", parent: "/menu" },
   "/missions": { title: "Missions", parent: "/menu" },
+  "/layouts": { title: "Layout lab", parent: "/menu" },
   "/tasks/new": { title: "Nouvelle tâche", parent: "/inbox" },
   "/channels": { title: "Salons", parent: "/menu" },
   "/history": { title: "Historique", parent: "/menu" },

@@ -16,6 +16,7 @@ import App, {
   ChannelPage,
 } from "./App";
 import { MissionPage, MissionsPage } from "./components/mission/mission-page";
+import { LayoutLabPage } from "./components/mission/layout-lab";
 
 function InboxRedirect() {
   const location = useLocation();
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
       { path: "tasks/new", Component: TaskPage },
       { path: "missions", Component: MissionsPage },
       { path: "missions/:missionId", Component: MissionPage },
+      { path: "layouts", Component: LayoutLabPage },
       { path: "history", Component: HistoryPage },
       { path: "members", Component: MembersPage },
       { path: "registry", Component: RegistryPage },

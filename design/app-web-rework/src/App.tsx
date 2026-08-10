@@ -180,6 +180,10 @@ const routeMeta: Record<string, { label: string; subtitle: string }> = {
     label: "Missions",
     subtitle: "Une timeline par mission, décisions en tête",
   },
+  "/layouts": {
+    label: "Layout lab",
+    subtitle: "Dix compositions de la surface mission, à comparer",
+  },
   "/tasks/new": {
     label: "Nouvelle tâche",
     subtitle: "Lancer une mission avec une intention vérifiable",
