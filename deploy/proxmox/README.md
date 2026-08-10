@@ -87,4 +87,8 @@ l’exécute sans `--commit`, puis nomme la release avec le commit effectivement
 Docker et system-wide sont mutuellement exclusifs sur `:8642`. Pour une bascule
 de recette volontaire, fournir respectivement `-e allow_managed_docker_stop=true`
 ou `-e allow_native_stop=true`. Sans cette autorisation, le playbook échoue avant
-d’arrêter le mode actif.
+d'arrêter le mode actif.
+
+Le parcours opérateur recommandé, incluant sauvegarde PVE, reset multi-mode,
+postconditions, rollback et diagnostic CLI, est documenté dans
+[`HERMES-REMOTE-RUNTIME-MODES.md`](../../docs/user-stories/guides/HERMES-REMOTE-RUNTIME-MODES.md).

@@ -26,6 +26,55 @@ export type ModelSettingsDto = {
   };
 };
 
+type RuntimeErrorBody = {
+  error?: {
+    code?: unknown;
+    message?: unknown;
+  };
+  code?: unknown;
+  message?: unknown;
+};
+
+export class RuntimeApiError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+
+  constructor(input: { status: number; code?: string | null; message: string }) {
+    super(input.message);
+    this.name = "RuntimeApiError";
+    this.status = input.status;
+    this.code = input.code ?? null;
+  }
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+/** Lit les réponses runtime non-JSON sans perdre le statut HTTP de l'échec. */
+export async function readRuntimeResponseBody(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+/** Conserve le contrat d'erreur HTTP de la Console pour les surfaces runtime. */
+export function runtimeApiErrorFromResponse(
+  response: Pick<Response, "status">,
+  body: unknown,
+  fallbackMessage: string,
+): RuntimeApiError {
+  const payload = (body ?? {}) as RuntimeErrorBody;
+  const error = payload.error ?? payload;
+  return new RuntimeApiError({
+    status: response.status,
+    code: stringValue(error.code),
+    message: stringValue(error.message) ?? fallbackMessage,
+  });
+}
+
 let cached: ModelSettingsDto | null = null;
 let inflight: Promise<ModelSettingsDto> | null = null;
 
@@ -33,11 +82,13 @@ async function fetchModelSettings(refresh = false): Promise<ModelSettingsDto> {
   const response = await fetch(`/api/runtime/models${refresh ? "?refresh=1" : ""}`, {
     cache: "no-store",
   });
-  const body = (await response.json()) as ModelSettingsDto & {
-    error?: { message?: string };
-  };
-  if (!response.ok || !body.catalog) {
-    throw new Error(body.error?.message ?? "Impossible de charger les modèles Hermes.");
+  const body = (await readRuntimeResponseBody(response)) as ModelSettingsDto | null;
+  if (!response.ok || !body?.catalog) {
+    throw runtimeApiErrorFromResponse(
+      response,
+      body,
+      "Impossible de charger les modèles Hermes.",
+    );
   }
   return body;
 }

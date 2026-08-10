@@ -36,7 +36,13 @@ export function RunChatShell({
   surface?: "chat" | "mission";
 }) {
   const stream = (
-    <EventStream {...streamProps} layout="xulux" modelLabel={model} phase={phase} />
+    <EventStream
+      {...streamProps}
+      layout="xulux"
+      modelLabel={model}
+      phase={phase}
+      source={surface}
+    />
   );
 
   if (surface === "chat") {

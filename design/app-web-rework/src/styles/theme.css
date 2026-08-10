@@ -1,0 +1,180 @@
+@theme {
+  --container-content: 1600px;
+  --sidebar-width: 260px;
+  --sidebar-width-collapsed: 60px;
+  --font-sans: var(--font-inter);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+}
+
+:root {
+  --radius: 0.625rem;
+  --font-inter: "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-jetbrains: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+
+  /* Display scale, taken from the sidebar. `row` is the channel link
+     (# général), `nav` is the primary entry (File), `label` is the section
+     heading (Console). Every dense surface in the app aligns on these. */
+  --text-row: 13px;
+  --text-row-lh: 18px;
+  --text-nav: 14px;
+  --text-nav-lh: 20px;
+  --text-label: 12px;
+  --text-label-lh: 16px;
+  --text-meta: 11px;
+  --text-meta-lh: 15px;
+  --row-h: 32px;
+  --row-h-lg: 36px;
+  --icon: 16px;
+  --icon-lg: 20px;
+
+  /* BoardUI semantic color system, manual light is the initial theme. */
+  --background-full: lch(98.94% 0.5 282);
+  --background-primary: lch(98.94% 0.5 282);
+  --background-secondary: lch(95.94% 0.5 282);
+  --background-tertiary: lch(91.94% 0.5 282);
+  --background-inner: lch(98.94% 0.5 282);
+  --text-primary: lch(9.894% 0 282);
+  --text-secondary: lch(39.576% 1.25 282);
+  --text-tertiary: lch(65.3% 1.25 282);
+  --border-button: lch(89.49% 0 282);
+  --border-table: lch(89.49% 0 282);
+  --border-separator: lch(89.49% 0 282);
+  --border-card: lch(89.49% 0 282);
+  --border-control: lch(85.44% 0 282);
+  --border-sidebar-panel: lch(89.49% 0 282);
+  --sidebar-muted-foreground: lch(39.576% 1.25 282);
+  --focus: #3080ff;
+  --theme-toggle-background: #ebebeb;
+  --theme-toggle-selected: #ffffff;
+  /* BoardUI popover: one neutral shared by border, separators and badge chips. */
+  --popover-line: #ebebeb;
+  --popover-muted: #737373;
+
+  --accent-100: #dbeafe;
+  --accent-200: #bedbff;
+  --accent-300: #90c5ff;
+  --accent-400: #3392ff;
+  --accent-500: #3080ff;
+  --accent-600: #155dfc;
+  --accent-700: #1447e6;
+  --accent-contrast: #ffffff;
+  --background: var(--background-full);
+  --foreground: var(--text-primary);
+  --card: var(--background-inner);
+  --popover: var(--background-inner);
+  --panel: var(--background-primary);
+  --surface: var(--background-secondary);
+  --surface-hover: var(--background-tertiary);
+  --surface-sunken: var(--background-secondary);
+  --surface-raised: var(--background-tertiary);
+  --surface-raised-hover: #d4d4d4;
+  --control: var(--background-secondary);
+  --control-active: var(--theme-toggle-selected);
+  --state-pos: #d9f99d;
+  --state-pos-fg: #3c6300;
+  --state-pos-soft: #f7fee7;
+  --state-warn: #fff085;
+  --state-warn-fg: #894b00;
+  --state-warn-soft: #fefce8;
+  --state-neg: #ffccd3;
+  --state-neg-fg: #a50036;
+  --state-neg-soft: #fff1f2;
+  --state-info: #dbeafe;
+  --state-info-fg: #1447e6;
+  --state-info-soft: #eff6ff;
+  --muted: var(--background-secondary);
+  --muted-foreground: var(--text-secondary);
+  --accent: var(--background-secondary);
+  --primary: var(--accent-600);
+  --border: var(--border-separator);
+  --input: var(--background-tertiary);
+  --ring: var(--focus);
+  --sidebar: var(--background-primary);
+  --sidebar-border: #ffffff;
+  --gradient-primary: linear-gradient(180deg, var(--accent-500) 0%, var(--accent-600) 100%);
+  --gradient-primary-hover: linear-gradient(180deg, var(--accent-400) 0%, var(--accent-500) 100%);
+  --gradient-primary-active: linear-gradient(180deg, var(--accent-600) 0%, var(--accent-700) 100%);
+  --shadow-xs: 0 1px 2px 0 #0000000d;
+  --shadow-card: 0 1px 1px 0 #0000000a, 0 4px 4px 0 #00000005;
+  --shadow-elevated: 0 1px 0 0 #00000005, 0 1px 12px 0 #0000000f, 0 0 1px 0 #00000052;
+  --shadow-sidebar: 0 1px 0 0 rgb(0 0 0 / 0.0196), 0 1px 12px 0 rgb(0 0 0 / 0.0588), 0 0 1px 0 rgb(0 0 0 / 0.3216);
+  --shadow-nav-selected: 0 0 0 1px var(--accent-500), inset 0 1px 0 0 rgb(255 255 255 / 0.251);
+  --shadow-dropdown: 0 1px 1px 0 #0000000a, 0 4px 4px 0 #00000005;
+  --shadow-btn-primary: inset 0 1px 0 0 #ffffff40, 0 0 0 1px var(--accent-600), 0 1px 2px 0 #0000001a;
+  color-scheme: light;
+}
+
+.dark {
+  --background-full: #121212;
+  --background-primary: #121212;
+  --background-secondary: #171717;
+  --background-tertiary: #262626;
+  --background-inner: color-mix(in srgb, #262626 60%, transparent);
+  --text-primary: #fafafa;
+  --text-secondary: #737373;
+  --text-tertiary: #525252;
+  --border-button: #404040;
+  --border-table: #262626;
+  --border-separator: #262626;
+  --border-card: #262626;
+  --border-control: #404040;
+  --border-sidebar-panel: #27272a;
+  --sidebar-muted-foreground: #a3a3a3;
+  --theme-toggle-background: #262626;
+  --theme-toggle-selected: #404040;
+  --popover-line: #262626;
+  --popover-muted: #a3a3a3;
+  --background: var(--background-full);
+  --foreground: var(--text-primary);
+  --card: var(--background-inner);
+  --popover: #262626;
+  --panel: var(--background-primary);
+  --surface: var(--background-secondary);
+  --surface-hover: var(--background-tertiary);
+  --surface-sunken: var(--background-secondary);
+  --surface-raised: var(--background-tertiary);
+  --surface-raised-hover: #404040;
+  --control: var(--background-primary);
+  --control-active: var(--background-tertiary);
+  --state-pos: #1a2e0599;
+  --state-pos-fg: #9ae600;
+  --state-pos-soft: #1a2e0566;
+  --state-warn: #43200499;
+  --state-warn-fg: #fdc700;
+  --state-warn-soft: #43200466;
+  --state-neg: #4d021899;
+  --state-neg-fg: #ff637e;
+  --state-neg-soft: #4d021866;
+  --state-info: #16245699;
+  --state-info-fg: #8ec5ff;
+  --state-info-soft: #16245666;
+  --muted: var(--background-tertiary);
+  --muted-foreground: var(--text-secondary);
+  --accent: #404040;
+  --primary: var(--accent-500);
+  --border: var(--border-separator);
+  --input: #404040;
+  --ring: var(--focus);
+  --sidebar: var(--background-secondary);
+  --sidebar-border: #27272a;
+  --gradient-primary: linear-gradient(180deg, var(--accent-400) 0%, var(--accent-600) 100%);
+  --gradient-primary-hover: linear-gradient(180deg, var(--accent-400) 0%, var(--accent-500) 100%);
+  --gradient-primary-active: linear-gradient(180deg, var(--accent-600) 0%, var(--accent-700) 100%);
+  --shadow-btn-primary: inset 0 1px 0 0 #ffffff33, 0 0 0 1px var(--accent-600), 0 1px 2px 0 #00000040;
+  --shadow-sidebar: 0 1px 0 0 rgb(0 0 0 / 0.10), 0 1px 12px 0 rgb(0 0 0 / 0.16), 0 0 1px 0 rgb(0 0 0 / 0.42);
+  --shadow-dropdown: 0 1px 1px 0 #00000024, 0 4px 4px 0 #0000001a;
+  color-scheme: dark;
+}
+
+.workspace-sidebar-panel {
+  --muted-foreground: var(--sidebar-muted-foreground);
+}

@@ -12,11 +12,13 @@ describe("persona navigation", () => {
   test("an approver sees decision surfaces but no creation or agent administration", () => {
     const capabilities = new Set([
       "thread.read",
+      "guided.task.read",
       "run.read",
       "run.approve",
       "artifact.read",
     ]);
     expect(navForCapabilities(ALL_NAV, capabilities).map((item) => item.href)).toEqual([
+      "/inbox",
       "/sessions",
       "/artifacts",
       "/chat",
@@ -34,10 +36,13 @@ describe("persona navigation", () => {
       "connector.read",
       "thread.read",
       "thread.create",
+      "guided.task.create",
+      "guided.task.read",
       "run.read",
       "artifact.read",
     ]);
     expect(navForCapabilities(ALL_NAV, capabilities).map((item) => item.href)).toEqual([
+      "/inbox",
       "/tasks/new",
       "/sessions",
       "/agents",
@@ -51,15 +56,26 @@ describe("persona navigation", () => {
     ]);
   });
 
+  test("task creation follows guided.task.create, not thread.create", () => {
+    expect(navForCapabilities(ALL_NAV, new Set(["thread.create"])).map((item) => item.href)).not.toContain(
+      "/tasks/new",
+    );
+    expect(navForCapabilities(ALL_NAV, new Set(["guided.task.create"])).map((item) => item.href)).toContain(
+      "/tasks/new",
+    );
+  });
+
   test("an auditor gets the journal but not installation settings", () => {
     const capabilities = new Set([
       "agent.read",
       "thread.read",
+      "guided.task.read",
       "run.read",
       "artifact.read",
       "audit.read",
     ]);
     expect(navForCapabilities(ALL_NAV, capabilities).map((item) => item.href)).toEqual([
+      "/inbox",
       "/sessions",
       "/agents",
       "/skills",
@@ -73,9 +89,15 @@ describe("persona navigation", () => {
     ]);
   });
 
-  test("guided work is the default and the operational indexes have explicit metadata", () => {
-    expect(DEFAULT_CONSOLE_PATH).toBe("/tasks/new");
+  test("the inbox is the default and the operational indexes have explicit metadata", () => {
+    expect(DEFAULT_CONSOLE_PATH).toBe("/inbox");
+    expect(pageMeta("/inbox").title).toBe("Inbox");
     expect(pageMeta("/tasks/new").title).toBe("Nouvelle tâche");
+    expect(pageMeta("/tasks/task_1")).toEqual({
+      title: "Tâche guidée",
+      crumb: "Tâche",
+      parent: { label: "Inbox", href: "/inbox" },
+    });
     expect(pageMeta("/overview").title).toBe("Vue d’ensemble");
     expect(pageMeta("/sessions").title).toBe("Sessions");
     expect(pageMeta("/skills").title).toBe("Skills");

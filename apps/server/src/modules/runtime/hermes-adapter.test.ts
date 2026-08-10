@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   createHermesAgentRun,
+  listHermesModelOptions,
   listHermesSkills,
   normalizeHermesModelOptions,
 } from "./hermes-adapter";
@@ -197,6 +198,56 @@ describe("normalizeHermesModelOptions", () => {
       source: "hermes_runtime",
       models: [{ id: "anthropic/claude-opus-4.6", fast: false, reasoning: false }],
     });
+  });
+});
+
+describe("listHermesModelOptions errors", () => {
+  test("preserves a Hermes 412 detail as an actionable precondition error", async () => {
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      Response.json(
+        { detail: "Le runtime Hermes termine son initialisation." },
+        { status: 412 },
+      )) as unknown as typeof fetch;
+
+    try {
+      const error = await listHermesModelOptions({
+        baseUrl: "http://127.0.0.1:8642",
+        token: "test-token",
+      }).catch((reason: unknown) => reason);
+
+      expect(error).toMatchObject({
+        status: 412,
+        code: "HERMES_PRECONDITION_FAILED",
+        message: "Le runtime Hermes termine son initialisation.",
+      });
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
+  });
+
+  test("does not expose a non-JSON upstream response", async () => {
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response("<html>proxy failure with internal path</html>", {
+        status: 412,
+        headers: { "content-type": "text/html" },
+      })) as unknown as typeof fetch;
+
+    try {
+      const error = await listHermesModelOptions({
+        baseUrl: "http://127.0.0.1:8642",
+        token: "test-token",
+      }).catch((reason: unknown) => reason);
+
+      expect(error).toMatchObject({
+        status: 412,
+        code: "HERMES_PRECONDITION_FAILED",
+        message: "Hermes a répondu HTTP 412.",
+      });
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
   });
 });
 

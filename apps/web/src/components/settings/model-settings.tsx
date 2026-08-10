@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BrainCircuitIcon,
   CheckCircle2Icon,
@@ -26,10 +26,18 @@ import { Badge, Button, Card, CardSurface } from "@/components/ui/boardui";
 import {
   getModelSettingsClient,
   peekModelSettingsClient,
+  readRuntimeResponseBody,
+  runtimeApiErrorFromResponse,
   setModelSettingsClient,
   type ModelSettingsDto,
 } from "@/lib/runtime/models-client";
 import { useRuntimeStatus } from "@/components/shell/use-runtime-status";
+import {
+  codexAuthRuntimeError,
+  RuntimeErrorDialog,
+  runtimeErrorAlert,
+  type RuntimeErrorAlert,
+} from "@/components/settings/runtime-error-dialog";
 import {
   DEFAULT_REASONING_EFFORT,
   HERMES_REASONING_EFFORT_LABELS,
@@ -44,6 +52,7 @@ type CodexAuthSession = {
   verificationUri: string | null;
   userCode: string | null;
   error: string | null;
+  errorCode?: string | null;
 };
 
 type LoadState =
@@ -90,15 +99,35 @@ export function ModelSettings() {
     | { kind: "success"; message: string }
     | { kind: "error"; message: string }
   >({ kind: "idle" });
+  const [runtimeAlert, setRuntimeAlert] = useState<RuntimeErrorAlert | null>(null);
+  const [runtimeRetry, setRuntimeRetry] = useState<(() => void) | null>(null);
 
-  function applySelection(body: ModelSettingsDto) {
+  const presentRuntimeError = useCallback((reason: unknown, retry: () => void) => {
+    const alert = runtimeErrorAlert(reason);
+    if (!alert) return;
+    setRuntimeAlert(alert);
+    setRuntimeRetry(() => retry);
+  }, []);
+
+  function closeRuntimeAlert() {
+    setRuntimeAlert(null);
+    setRuntimeRetry(null);
+  }
+
+  function retryRuntimeAction() {
+    const retry = runtimeRetry;
+    closeRuntimeAlert();
+    retry?.();
+  }
+
+  const applySelection = useCallback((body: ModelSettingsDto) => {
     const next = selectionFromSettings(body);
     setSelectedProvider(next.provider);
     setSelectedModel(next.model);
     setSelectedEffort(next.effort);
-  }
+  }, []);
 
-  async function load() {
+  const load = useCallback(async () => {
     setState({ kind: "loading" });
     setSaved(false);
     try {
@@ -106,13 +135,14 @@ export function ModelSettings() {
       applySelection(body);
       setState({ kind: "ready", data: body });
     } catch (reason) {
+      presentRuntimeError(reason, () => void load());
       setState({
         kind: "error",
         message:
           reason instanceof Error ? reason.message : "Impossible de charger les modèles Hermes.",
       });
     }
-  }
+  }, [applySelection, presentRuntimeError]);
 
   useEffect(() => {
     let active = true;
@@ -124,6 +154,11 @@ export function ModelSettings() {
       })
       .catch((reason: unknown) => {
         if (!active) return;
+        const alert = runtimeErrorAlert(reason);
+        if (alert) {
+          setRuntimeAlert(alert);
+          setRuntimeRetry(() => () => void load());
+        }
         setState({
           kind: "error",
           message:
@@ -133,7 +168,7 @@ export function ModelSettings() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [applySelection, load]);
 
   const selected = useMemo(
     () => {
@@ -169,17 +204,16 @@ export function ModelSettings() {
             : null,
         }),
       });
-      const body = (await response.json()) as ModelSettingsDto & {
-        error?: { message?: string };
-      };
-      if (!response.ok || !body.catalog) {
-        throw new Error(body.error?.message ?? "Impossible d’enregistrer le modèle.");
+      const body = (await readRuntimeResponseBody(response)) as ModelSettingsDto | null;
+      if (!response.ok || !body?.catalog) {
+        throw runtimeApiErrorFromResponse(response, body, "Impossible d’enregistrer le modèle.");
       }
       applySelection(body);
       setModelSettingsClient(body);
       setState({ kind: "ready", data: body });
       setSaved(true);
     } catch (reason) {
+      presentRuntimeError(reason, () => void save());
       setState({
         kind: "error",
         message: reason instanceof Error ? reason.message : "Impossible d’enregistrer le modèle.",
@@ -189,21 +223,27 @@ export function ModelSettings() {
     }
   }
 
-  async function connectCodex() {
+  const connectCodex = useCallback(async () => {
     setAuthBusy(true);
     try {
       const response = await fetch("/api/runtime/providers/openai-codex/auth", {
         method: "POST",
         headers: { "X-Hermes-Toast": "0" },
       });
-      const body = (await response.json()) as CodexAuthSession & {
-        error?: { message?: string };
-      };
-      if (!response.ok || !body.sessionId) {
-        throw new Error(body.error?.message ?? "Impossible de démarrer la connexion OpenAI.");
+      const body = (await readRuntimeResponseBody(response)) as CodexAuthSession | null;
+      if (!response.ok || !body?.sessionId) {
+        throw runtimeApiErrorFromResponse(
+          response,
+          body,
+          "Impossible de démarrer la connexion OpenAI.",
+        );
       }
       setAuth(body);
+      if (body.status === "failed") {
+        presentRuntimeError(codexAuthRuntimeError(body), () => void connectCodex());
+      }
     } catch (reason) {
+      presentRuntimeError(reason, () => void connectCodex());
       setAuth({
         sessionId: "",
         status: "failed",
@@ -215,7 +255,7 @@ export function ModelSettings() {
     } finally {
       setAuthBusy(false);
     }
-  }
+  }, [presentRuntimeError]);
 
   async function cancelCodex() {
     if (!auth?.sessionId) return;
@@ -245,14 +285,17 @@ export function ModelSettings() {
           body: JSON.stringify({ apiKey }),
         },
       );
-      const body = (await response.json()) as {
+      const body = (await readRuntimeResponseBody(response)) as {
         ok?: boolean;
         authenticated?: boolean;
         modelCount?: number;
-        error?: { message?: string };
-      };
-      if (!response.ok || !body.ok) {
-        throw new Error(body.error?.message ?? "Hermes n’a pas enregistré cette clé.");
+      } | null;
+      if (!response.ok || !body?.ok) {
+        throw runtimeApiErrorFromResponse(
+          response,
+          body,
+          "Hermes n’a pas enregistré cette clé.",
+        );
       }
 
       setApiKey("");
@@ -274,6 +317,7 @@ export function ModelSettings() {
             : "Clé enregistrée dans le pool Hermes. Elle sera vérifiée lors du prochain appel.",
       });
     } catch (reason) {
+      presentRuntimeError(reason, () => void saveApiKey());
       setApiKeyStatus({
         kind: "error",
         message:
@@ -285,35 +329,76 @@ export function ModelSettings() {
   }
 
   useEffect(() => {
-    if (!auth?.sessionId || !["starting", "pending"].includes(auth.status)) return;
-    const interval = window.setInterval(() => {
-      void fetch(
-        `/api/runtime/providers/openai-codex/auth?sessionId=${encodeURIComponent(auth.sessionId)}`,
-        { cache: "no-store" },
-      )
-        .then(async (response) => {
-          const body = (await response.json()) as CodexAuthSession;
-          if (!response.ok) throw new Error("Autorisation OpenAI introuvable.");
-          setAuth(body);
-          if (body.status === "connected") void load();
-        })
-        .catch((reason: unknown) => {
-          setAuth((current) =>
-            current
-              ? {
-                  ...current,
-                  status: "failed",
-                  error:
-                    reason instanceof Error
-                      ? reason.message
-                      : "Le suivi de l’autorisation OpenAI a échoué.",
-                }
-              : null,
+    const sessionId = auth?.sessionId;
+    if (!sessionId || !["starting", "pending"].includes(auth.status)) return;
+
+    let active = true;
+    let timer: number | null = null;
+    let controller: AbortController | null = null;
+
+    const schedule = (poll: () => Promise<void>) => {
+      if (!active) return;
+      timer = window.setTimeout(() => void poll(), 1_500);
+    };
+
+    const poll = async () => {
+      controller = new AbortController();
+      try {
+        const response = await fetch(
+          `/api/runtime/providers/openai-codex/auth?sessionId=${encodeURIComponent(sessionId)}`,
+          { cache: "no-store", signal: controller.signal },
+        );
+        const body = (await readRuntimeResponseBody(response)) as CodexAuthSession | null;
+        if (!response.ok || !body) {
+          throw runtimeApiErrorFromResponse(
+            response,
+            body,
+            "Autorisation OpenAI introuvable.",
           );
-        });
-    }, 1_500);
-    return () => window.clearInterval(interval);
-  }, [auth?.sessionId, auth?.status]);
+        }
+        if (!active || body.sessionId !== sessionId) return;
+
+        setAuth(body);
+        if (body.status === "failed") {
+          const alert = runtimeErrorAlert(codexAuthRuntimeError(body));
+          if (alert) {
+            setRuntimeAlert(alert);
+            setRuntimeRetry(() => () => void connectCodex());
+          }
+        }
+        if (body.status === "connected") void load();
+      } catch (reason) {
+        if (!active || (reason instanceof Error && reason.name === "AbortError")) return;
+        const alert = runtimeErrorAlert(reason);
+        if (alert) {
+          setRuntimeAlert(alert);
+          setRuntimeRetry(() => () => void connectCodex());
+        }
+        setAuth((current) =>
+          current?.sessionId === sessionId
+            ? {
+                ...current,
+                status: "failed",
+                error:
+                  reason instanceof Error
+                    ? reason.message
+                    : "Le suivi de l’autorisation OpenAI a échoué.",
+              }
+            : current,
+        );
+      } finally {
+        controller = null;
+        schedule(poll);
+      }
+    };
+
+    schedule(poll);
+    return () => {
+      active = false;
+      if (timer !== null) window.clearTimeout(timer);
+      controller?.abort();
+    };
+  }, [auth?.sessionId, auth?.status, connectCodex, load]);
 
   const providers = state.kind === "ready" ? state.data.catalog.providers : [];
   const activeProvider = providers.find((provider) => provider.slug === selectedProvider);
@@ -330,6 +415,7 @@ export function ModelSettings() {
   const codexProvider = providers.find((provider) => provider.slug === "openai-codex");
 
   return (
+    <>
     <Card>
       <CardSurface>
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -715,6 +801,12 @@ export function ModelSettings() {
         )}
       </CardSurface>
     </Card>
+      <RuntimeErrorDialog
+        error={runtimeAlert}
+        onClose={closeRuntimeAlert}
+        onRetry={retryRuntimeAction}
+      />
+    </>
   );
 }
 

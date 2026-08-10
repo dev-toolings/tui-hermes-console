@@ -81,6 +81,7 @@ import { NotFoundScreen } from "@/screens/not-found";
 import { SessionsScreen } from "@/screens/sessions";
 import { AuditScreen } from "@/screens/audit";
 import { GuidedTaskScreen } from "@/screens/guided-task";
+import { InboxScreen } from "@/screens/inbox";
 import { GuidedTaskDetailScreen } from "@/screens/guided-task-detail";
 import { DEFAULT_CONSOLE_PATH } from "@/components/shell/nav-config";
 import { parseRuntimeSection } from "@/lib/runtime/settings-navigation";
@@ -92,6 +93,7 @@ import {
   loadAudit,
   loadHermesUpdates,
   loadDashboard,
+  loadInbox,
   loadAchievements,
   loadRetention,
   loadRuntime,
@@ -216,6 +218,19 @@ const homeRoute = createRoute({
   beforeLoad: () => {
     throw redirect({ to: DEFAULT_CONSOLE_PATH as never, replace: true });
   },
+});
+
+/**
+ * File partagée par rôle et capacité. Route d'accueil de la Console : on vient
+ * d'abord voir ce qui attend une décision, pas remplir un formulaire vide.
+ */
+const inboxRoute = createRoute({
+  getParentRoute: () => consoleLayout,
+  path: "/inbox",
+  loader: loadInbox,
+  component: () => <InboxScreen data={inboxRoute.useLoaderData()} />,
+  pendingComponent: Pending,
+  errorComponent: ErrorBox,
 });
 
 const dashboardRoute = createRoute({
@@ -609,6 +624,7 @@ export const routeTree = rootRoute.addChildren([
   installationGuideRoute,
   consoleLayout.addChildren([
     homeRoute,
+    inboxRoute,
     dashboardRoute,
     sessionsRoute,
     auditRoute,

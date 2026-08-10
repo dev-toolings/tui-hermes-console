@@ -85,6 +85,7 @@ import * as guidedTask from "@/api/guided/tasks/[taskId]/route";
 import * as guidedTaskRevisions from "@/api/guided/tasks/[taskId]/revisions/route";
 import * as guidedTaskDecisions from "@/api/guided/tasks/[taskId]/decisions/route";
 import * as guidedTaskAttempts from "@/api/guided/tasks/[taskId]/attempts/route";
+import * as inboxMissions from "@/api/inbox/missions/route";
 import * as guidedRepositories from "@/api/guided/repositories/route";
 import * as guidedRepository from "@/api/guided/repositories/[projectId]/route";
 import type { SiteAction } from "@/modules/auth/site-authorization";
@@ -205,6 +206,11 @@ export const ROUTES: RouteDefinition[] = [
     module: guidedTaskAttempts,
     access: siteAccess({ POST: "guided.task.execute" }),
     requiresAiConsent: { POST: true },
+  },
+  {
+    path: "/api/inbox/missions",
+    module: inboxMissions,
+    access: siteAccess({ GET: "thread.read" }),
   },
 
   {

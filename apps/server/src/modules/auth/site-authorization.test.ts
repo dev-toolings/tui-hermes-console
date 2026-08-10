@@ -98,6 +98,7 @@ describe("site role permission matrix", () => {
 
     expect(canPerformSiteAction("requester", "thread.create")).toBe(true);
     expect(canPerformSiteAction("requester", "guided.task.create")).toBe(true);
+    expect(canPerformSiteAction("approver", "guided.task.create")).toBe(false);
     expect(canPerformSiteAction("requester", "guided.task.execute")).toBe(false);
     expect(canPerformSiteAction("requester", "agent.read")).toBe(true);
     expect(canPerformSiteAction("requester", "connector.read")).toBe(true);

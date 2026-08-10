@@ -995,14 +995,30 @@ async function throwResponseError(response: Response): Promise<never> {
   const raw = await response.text();
   let message = `Hermes a répondu HTTP ${response.status}.`;
   try {
-    const body = JSON.parse(raw) as { error?: { message?: string } | string; message?: string };
-    message =
-      (typeof body.error === "object" ? body.error?.message : body.error) ??
-      body.message ??
-      message;
+    message = extractHermesResponseErrorMessage(JSON.parse(raw)) ?? message;
   } catch {
     // Une réponse HTML ou texte ne doit jamais être renvoyée telle quelle au navigateur.
   }
 
-  throw new HermesRuntimeError(message.slice(0, 500), response.status, "HERMES_HTTP_ERROR");
+  throw new HermesRuntimeError(
+    message.slice(0, 500),
+    response.status,
+    response.status === 412
+      ? "HERMES_PRECONDITION_FAILED"
+      : "HERMES_HTTP_ERROR",
+  );
+}
+
+function extractHermesResponseErrorMessage(input: unknown): string | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const body = input as Record<string, unknown>;
+  for (const candidate of [body.error, body.detail, body.message]) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) continue;
+    const nested = candidate as Record<string, unknown>;
+    for (const value of [nested.message, nested.detail]) {
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+  }
+  return null;
 }

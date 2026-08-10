@@ -1,4 +1,5 @@
 import remoteUpdateManagerScript from "./remote-update-manager.sh" with { type: "text" };
+import remoteManagerCliPolicy from "./remote-manager-cli-policy.sh" with { type: "text" };
 
 export const REMOTE_UPDATE_MANAGER_PATH =
   "/usr/local/libexec/hermes-console-runtime-manager";
@@ -7,6 +8,9 @@ export const REMOTE_UPDATE_MANAGER_CONFIG =
 export const REMOTE_UPDATE_MANAGER_SUDOERS =
   "/etc/sudoers.d/hermes-console-runtime-manager";
 export const REMOTE_UPDATE_MANAGER_SCRIPT = remoteUpdateManagerScript;
+export const REMOTE_MANAGER_CLI_POLICY_PATH =
+  "/usr/local/libexec/hermes-console-runtime-cli-policy";
+export const REMOTE_MANAGER_CLI_POLICY = remoteManagerCliPolicy;
 
 const DOCKER_CONTRACT = "g1-002-docker-v1";
 
@@ -36,6 +40,19 @@ export function remoteUpdateManagerInspectCommand() {
 
 export function remoteUpdateManagerUpdateCommand() {
   return `sudo -n ${REMOTE_UPDATE_MANAGER_PATH} update`;
+}
+
+export function remoteUpdateManagerCliCommand(
+  args: string[],
+  pseudoTerminal: boolean,
+) {
+  return [
+    "sudo",
+    "-n",
+    REMOTE_UPDATE_MANAGER_PATH,
+    pseudoTerminal ? "cli-pty" : "cli",
+    ...args.map(shellQuote),
+  ].join(" ");
 }
 
 export function parseRemoteUpdateManagerResult(
@@ -84,7 +101,8 @@ export function buildRemoteUpdateManagerInstallCommand(options: InstallOptions) 
 
   const sudo = options.sudo ? `${options.sudo} ` : "";
   const managerBase64 = Buffer.from(REMOTE_UPDATE_MANAGER_SCRIPT).toString("base64");
-  const sudoers = `${options.serviceUser} ALL=(root) NOPASSWD: ${REMOTE_UPDATE_MANAGER_PATH} inspect, ${REMOTE_UPDATE_MANAGER_PATH} update, ${REMOTE_UPDATE_MANAGER_PATH} workspace-get, ${REMOTE_UPDATE_MANAGER_PATH} workspace-set *, ${REMOTE_UPDATE_MANAGER_PATH} workspace-probe *`;
+  const cliPolicyBase64 = Buffer.from(REMOTE_MANAGER_CLI_POLICY).toString("base64");
+  const sudoers = `${options.serviceUser} ALL=(root) NOPASSWD: ${REMOTE_UPDATE_MANAGER_PATH} inspect, ${REMOTE_UPDATE_MANAGER_PATH} update, ${REMOTE_UPDATE_MANAGER_PATH} workspace-get, ${REMOTE_UPDATE_MANAGER_PATH} workspace-set *, ${REMOTE_UPDATE_MANAGER_PATH} workspace-probe *, ${REMOTE_UPDATE_MANAGER_PATH} cli *, ${REMOTE_UPDATE_MANAGER_PATH} cli-pty *`;
   const configLines = [
     `mode=${options.mode}`,
     `runtime_root=${runtimeRoot}`,
@@ -100,16 +118,20 @@ export function buildRemoteUpdateManagerInstallCommand(options: InstallOptions) 
   return [
     "set -eu",
     `MANAGER_B64='${managerBase64}'`,
+    `CLI_POLICY_B64='${cliPolicyBase64}'`,
     "MANAGER_TMP=$(mktemp)",
+    "CLI_POLICY_TMP=$(mktemp)",
     "CONFIG_TMP=$(mktemp)",
     "SUDOERS_TMP=$(mktemp)",
-    `trap 'rm -f -- "$MANAGER_TMP" "$CONFIG_TMP" "$SUDOERS_TMP"' EXIT`,
+    `trap 'rm -f -- "$MANAGER_TMP" "$CLI_POLICY_TMP" "$CONFIG_TMP" "$SUDOERS_TMP"' EXIT`,
     `printf '%s' "$MANAGER_B64" | base64 -d > "$MANAGER_TMP"`,
+    `printf '%s' "$CLI_POLICY_B64" | base64 -d > "$CLI_POLICY_TMP"`,
     `printf '%s\\n' ${configLines.map(shellQuote).join(" ")} > "$CONFIG_TMP"`,
     `printf '%s\\n' ${shellQuote(sudoers)} > "$SUDOERS_TMP"`,
     `${sudo}visudo -cf "$SUDOERS_TMP" >/dev/null`,
     `${sudo}install -d -o 0 -g 0 -m 0755 -- /usr/local/libexec /etc/hermes-console`,
     `${sudo}install -o 0 -g 0 -m 0755 -- "$MANAGER_TMP" ${REMOTE_UPDATE_MANAGER_PATH}`,
+    `${sudo}install -o 0 -g 0 -m 0644 -- "$CLI_POLICY_TMP" ${REMOTE_MANAGER_CLI_POLICY_PATH}`,
     `${sudo}install -o 0 -g 0 -m 0600 -- "$CONFIG_TMP" ${REMOTE_UPDATE_MANAGER_CONFIG}`,
     `${sudo}install -o 0 -g 0 -m 0440 -- "$SUDOERS_TMP" ${REMOTE_UPDATE_MANAGER_SUDOERS}`,
     `${sudo}visudo -cf ${REMOTE_UPDATE_MANAGER_SUDOERS} >/dev/null`,

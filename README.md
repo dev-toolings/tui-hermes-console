@@ -1,7 +1,7 @@
 # Hermes Console Core
 
 Couche d’exploitation agentique self-hosted : **control plane + surface de travail** autour d’un
-runtime [Hermes Agent](https://github.com/NousResearch/hermes-agent) — créer un agent (identité
+runtime [Hermes Agent](https://github.com/NousResearch/hermes-agent), créer un agent (identité
 opérationnelle), lui confier une mission traçable, observer l’exécution, récupérer résultats et
 artefacts. Sans CLI, sans imposer Telegram/WhatsApp comme interface client.
 
@@ -32,6 +32,15 @@ Canal    = web d’abord (messaging / workspace = transports futurs)
 - runtime (URL + token chiffré) + test `/health` + `/v1/capabilities`.
 
 Créer un agent sur `/agents/new`, lancer sur `/runs/new`, suivre sur `/runs/thr_*`.
+
+## Inbox
+
+`/inbox` est la route d’accueil. Elle réunit ce qui attend encore quelque chose : une décision à
+prendre, une exécution en cours, un échec à reprendre, un brouillon non validé. Les éléments terminés
+ne figurent pas dans cette projection. La file combine les résumés paginés `GET /api/guided/tasks`
+et `GET /api/inbox/missions`, sans état propre ni fetch projet séparé. Elle se lit en quatre sections : décisions,
+reprises, brouillons à compléter et activités en cours ; dans chaque section, le blocage le plus ancien
+apparaît en premier.
 
 ## Tâche guidée
 
@@ -90,18 +99,18 @@ make setup   # install + .env.local + création/vérification DB + migrations
 
 Variables serveur :
 
-- `DATABASE_URL` — Postgres dédié `infra-postgres`
+- `DATABASE_URL` : Postgres dédié `infra-postgres`
   (`postgres://test:test@localhost:5432/hermes_console`) ;
-- `HERMES_BASE_URL` / `HERMES_RUNTIME_TOKEN` — fallback **accès direct** si pas de config DB ;
+- `HERMES_BASE_URL` / `HERMES_RUNTIME_TOKEN` : fallback **accès direct** si pas de config DB ;
   le mode tunnel SSH (Hermes sur une autre machine) se configure dans Paramètres → Runtime ;
-- `HERMES_CLI_PATH` — chemin absolu optionnel vers la CLI Hermes pour un service background dont
+- `HERMES_CLI_PATH` : chemin absolu optionnel vers la CLI Hermes pour un service background dont
   le `PATH` n'inclut pas `~/.local/bin` ;
-- `INSTALLATION_ADMIN_EMAILS` — allowlist séparée des comptes autorisés à modifier le runtime et
+- `INSTALLATION_ADMIN_EMAILS` : allowlist séparée des comptes autorisés à modifier le runtime et
   ses credentials ; si elle est absente, la compatibilité mono-admin ne s'active que lorsque
   `GOOGLE_ALLOWED_EMAILS` contient exactement une adresse ;
-- `HERMES_PROTOCOL` — `agent` (défaut) ou `responses` ;
-- `HERMES_SHARED_WORKDIR` — même chemin que l’hôte Hermes (défaut `/tmp/hermes-console-work`) ;
-- `APP_ENCRYPTION_KEY` — chiffrement du token runtime.
+- `HERMES_PROTOCOL` : `agent` (défaut) ou `responses` ;
+- `HERMES_SHARED_WORKDIR` : même chemin que l’hôte Hermes (défaut `/tmp/hermes-console-work`) ;
+- `APP_ENCRYPTION_KEY` : chiffrement du token runtime.
 
 ## Runtime Hermes distant (tunnel SSH)
 
@@ -120,11 +129,11 @@ Deux authentifications, à ne pas confondre :
 
 Côté machine distante :
 
-- `AllowTcpForwarding yes` dans `sshd_config` — sinon le tunnel est refusé (message dédié dans l'UI) ;
+- `AllowTcpForwarding yes` dans `sshd_config` : sinon le tunnel est refusé (message dédié dans l'UI) ;
 - l'URL à saisir est celle vue **depuis cette machine**, en général `http://127.0.0.1:8642` ;
 - « Dossier de travail distant » (défaut `/tmp/hermes-console-work`) reçoit `runs/<id>/{in,out}`.
 
-Piège de diagnostic : `ssh <hôte> 'hermes --version'` peut échouer alors que le runtime tourne —
+Piège de diagnostic : `ssh <hôte> 'hermes --version'` peut échouer alors que le runtime tourne :
 un SSH non interactif ne charge pas le `PATH` du shell de connexion. Vérifiez plutôt le service
 (`systemctl --user status hermes-gateway`) ou le port (`ss -lntp | grep 8642`).
 

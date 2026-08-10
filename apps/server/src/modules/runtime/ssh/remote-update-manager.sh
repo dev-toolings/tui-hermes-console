@@ -5,6 +5,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 
 CONFIG=/etc/hermes-console/runtime-manager.conf
+CLI_POLICY=/usr/local/libexec/hermes-console-runtime-cli-policy
 NATIVE_ROOT=/opt/hermes-console
 NATIVE_SERVICE=hermes-gateway.service
 INSTALLER_URL=https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh
@@ -49,10 +50,46 @@ validate_config() {
   [ "$docker_source" = nousresearch/hermes-agent:latest ] || fail invalid_docker_source
 }
 
+load_cli_policy() {
+  [ -f "$CLI_POLICY" ] || fail cli_policy_missing
+  [ "$(stat -c %u "$CLI_POLICY")" = 0 ] || fail cli_policy_owner
+  [ "$(stat -c %a "$CLI_POLICY")" = 644 ] || fail cli_policy_mode
+  # shellcheck source=/dev/null
+  . "$CLI_POLICY"
+  command -v validate_cli_arguments >/dev/null 2>&1 || fail cli_policy_invalid
+}
+
+api_identity_ok() {
+  body=$(curl --connect-timeout 2 --max-time 4 -fsS http://127.0.0.1:8642/health) || return 1
+  printf '%s\n' "$body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' || return 1
+  printf '%s\n' "$body" | grep -Eq '"platform"[[:space:]]*:[[:space:]]*"hermes-agent"'
+}
+
+native_identity_ok() {
+  api_identity_ok || return 1
+  systemctl is-active --quiet "$NATIVE_SERVICE" || return 1
+  main_pid=$(systemctl show -p MainPID --value "$NATIVE_SERVICE")
+  case "$main_pid" in ''|0|*[!0-9]*) return 1 ;; esac
+  [ "$(ps -o user= -p "$main_pid" | tr -d ' ')" = "$service_user" ] || return 1
+  ss -ltnpH 'sport = :8642' | grep -F '127.0.0.1:8642' | grep -F "pid=$main_pid," >/dev/null
+}
+
 healthcheck() {
   count=0
   while [ "$count" -lt 60 ]; do
-    if curl --connect-timeout 2 --max-time 4 -fsS http://127.0.0.1:8642/health >/dev/null 2>&1; then
+    if api_identity_ok; then
+      return 0
+    fi
+    count=$((count + 1))
+    sleep 2
+  done
+  return 1
+}
+
+native_healthcheck() {
+  count=0
+  while [ "$count" -lt 60 ]; do
+    if native_identity_ok; then
       return 0
     fi
     count=$((count + 1))
@@ -147,6 +184,67 @@ workspace_probe() {
   docker exec "$docker_container" sh -c 'set -eu; marker="$1/.hermes-runtime-probe-$$"; : > "$marker"; rm -f -- "$marker"' sh "$1"
 }
 
+credential_inventory() {
+  provider=$1
+  if [ "$mode" = docker ]; then
+    validate_docker
+    docker exec -i -u hermes -e HOME=/opt/data -e HERMES_HOME=/opt/data \
+      -e PATH=/opt/hermes/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+      -w /opt/data "$docker_container" /opt/hermes/.venv/bin/hermes auth list "$provider"
+    return
+  fi
+
+  executable="$NATIVE_ROOT/current/venv/bin/hermes"
+  [ -x "$executable" ] || fail native_cli_missing
+  service_home=$(getent passwd "$service_user" | cut -d: -f6)
+  [ -n "$service_home" ] || fail service_home_missing
+  runuser -u "$service_user" -- env HOME="$service_home" HERMES_HOME="$runtime_root" \
+    PATH="$NATIVE_ROOT/current/venv/bin:$runtime_root/node/bin:/usr/local/bin:/usr/bin:/bin" \
+    "$executable" auth list "$provider"
+}
+
+authorize_credential_removal() {
+  provider=$1
+  index=$2
+  inventory=$(credential_inventory "$provider") || fail credential_inventory_failed
+  is_console_managed_credential "$inventory" "$index" || fail credential_not_console_managed
+}
+
+run_cli() {
+  cli_mode=$1
+  shift
+  load_cli_policy
+  validate_cli_arguments "$@" || fail invalid_cli_arguments
+
+  if [ "$1" = auth ] && { [ "$2" = add ] || [ "$2" = remove ]; }; then
+    exec 9>/run/lock/hermes-console-credentials.lock
+    flock -x 9 || fail credential_lock_failed
+  fi
+  if [ "$1" = auth ] && [ "$2" = remove ]; then
+    authorize_credential_removal "$3" "$4"
+  fi
+
+  if [ "$mode" = docker ]; then
+    validate_docker
+    if [ "$cli_mode" = cli-pty ]; then
+      exec docker exec -it -u hermes -e HOME=/opt/data -e HERMES_HOME=/opt/data \
+        -e PATH=/opt/hermes/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+        -w /opt/data "$docker_container" /opt/hermes/.venv/bin/hermes "$@"
+    fi
+    exec docker exec -i -u hermes -e HOME=/opt/data -e HERMES_HOME=/opt/data \
+      -e PATH=/opt/hermes/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+      -w /opt/data "$docker_container" /opt/hermes/.venv/bin/hermes "$@"
+  fi
+
+  executable="$NATIVE_ROOT/current/venv/bin/hermes"
+  [ -x "$executable" ] || fail native_cli_missing
+  service_home=$(getent passwd "$service_user" | cut -d: -f6)
+  [ -n "$service_home" ] || fail service_home_missing
+  exec runuser -u "$service_user" -- env HOME="$service_home" HERMES_HOME="$runtime_root" \
+    PATH="$NATIVE_ROOT/current/venv/bin:$runtime_root/node/bin:/usr/local/bin:/usr/bin:/bin" \
+    "$executable" "$@"
+}
+
 run_as_service() {
   service_home=$(getent passwd "$service_user" | cut -d: -f6)
   [ -n "$service_home" ] || fail service_home_missing
@@ -159,6 +257,7 @@ update_native() {
   target=$(git ls-remote "$REPOSITORY" refs/heads/main | cut -f1)
   valid_hex "$target" 40 || fail native_target_invalid
   if [ "$target" = "$previous" ]; then
+    native_healthcheck || fail native_health_failed
     printf 'mode=native\nupdated=false\nprevious_revision=%s\ncurrent_revision=%s\n' "$previous" "$target"
     return
   fi
@@ -178,9 +277,9 @@ update_native() {
   [ "$observed" = "$target" ] || fail native_revision_mismatch
   chown -R 0:0 "$release"
   ln -sfn "$release" "$NATIVE_ROOT/current"
-  if ! systemctl restart "$NATIVE_SERVICE" || ! healthcheck; then
+  if ! systemctl restart "$NATIVE_SERVICE" || ! native_healthcheck; then
     ln -sfn "$NATIVE_ROOT/releases/$previous" "$NATIVE_ROOT/current"
-    if systemctl restart "$NATIVE_SERVICE" && healthcheck; then
+    if systemctl restart "$NATIVE_SERVICE" && native_healthcheck; then
       printf 'mode=native\nupdated=false\nrolled_back=true\nprevious_revision=%s\ncurrent_revision=%s\n' "$previous" "$previous"
       exit 75
     fi
@@ -271,6 +370,11 @@ case "${1:-}" in
     [ "$#" -eq 2 ] || fail invalid_arguments
     [ "$mode" = docker ] || fail invalid_mode
     workspace_probe "$2"
+    ;;
+  cli|cli-pty)
+    operation=$1
+    shift
+    run_cli "$operation" "$@"
     ;;
   *) fail invalid_operation ;;
 esac

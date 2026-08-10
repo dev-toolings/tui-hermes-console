@@ -35,6 +35,7 @@ import { deleteAgent as deleteAgentScoped } from "@/modules/agents/repository";
 import { deleteThread as deleteThreadScoped } from "@/modules/runs/delete-thread";
 import { cancelRun as cancelRunScoped } from "@/modules/runs/cancel-run";
 import { respondRunApproval as approveRunScoped } from "@/modules/runs/respond-approval";
+import { listInboxMissionSummaries } from "@/modules/runs/repository";
 import { HermesRuntimeError } from "@/modules/runtime/hermes-adapter";
 
 const POSTGRES_IMAGE =
@@ -234,6 +235,41 @@ describeWithDocker("site context API isolation on PostgreSQL", () => {
     expect(connectors.connectors.map(({ label }) => label)).toEqual(["Paris inbox"]);
     expect(threads.threads.map(({ id }) => id)).toEqual(["thr_paris"]);
     expect(files.artifacts.map(({ id }) => id)).toEqual(["file_paris"]);
+  });
+
+  test("Inbox mission summaries scope, paginate and choose the latest run deterministically", async () => {
+    psql(`
+      INSERT INTO console_users (id, email, google_subject) VALUES
+        ('usr_inbox_requester', 'inbox-requester@example.com', 'sub-inbox-requester');
+      INSERT INTO organization_memberships (user_id, organization_id)
+        VALUES ('usr_inbox_requester', 'org_client_paris');
+      INSERT INTO site_memberships (user_id, site_id, organization_id, role)
+        VALUES ('usr_inbox_requester', 'paris', 'org_client_paris', 'requester');
+      INSERT INTO projects (id, site_id, name, slug)
+        VALUES ('project_inbox', 'paris', 'Projet Inbox', 'projet-inbox');
+      INSERT INTO threads
+        (id, site_id, project_id, owner_user_id, author_user_id, title, agent_name, instructions, hermes_conversation, source, created_at, updated_at) VALUES
+        ('inbox_mission_b', 'paris', 'project_inbox', 'usr_inbox_requester', 'usr_inbox_requester', 'B', 'Agent Inbox', 'test', 'console:inbox-b', 'mission', '2099-08-09T09:00:00Z', '2099-08-09T12:00:00Z'),
+        ('inbox_mission_a', 'paris', 'project_inbox', 'usr_inbox_requester', 'usr_inbox_requester', 'A', 'Agent Inbox', 'test', 'console:inbox-a', 'mission', '2099-08-09T09:00:00Z', '2099-08-09T12:00:00Z'),
+        ('inbox_mission_hidden', 'paris', 'project_inbox', 'usr_paris', 'usr_paris', 'Hidden', 'Agent Inbox', 'test', 'console:inbox-hidden', 'mission', '2099-08-09T09:00:00Z', '2099-08-09T11:00:00Z');
+      INSERT INTO runs
+        (id, site_id, project_id, owner_user_id, author_user_id, thread_id, input, status, created_at) VALUES
+        ('inbox_run_a', 'paris', 'project_inbox', 'usr_inbox_requester', 'usr_inbox_requester', 'inbox_mission_b', 'private input', 'running', '2099-08-09T10:00:00Z'),
+        ('inbox_run_z', 'paris', 'project_inbox', 'usr_inbox_requester', 'usr_inbox_requester', 'inbox_mission_b', 'private input', 'failed', '2099-08-09T10:00:00Z'),
+        ('inbox_run_second', 'paris', 'project_inbox', 'usr_inbox_requester', 'usr_inbox_requester', 'inbox_mission_a', 'private input', 'completed', '2099-08-09T10:00:00Z');
+    `);
+    const requester = { ...actor, userId: "usr_inbox_requester", role: "requester" as const, actorOrganizationId: "org_client_paris", mandateProjectId: "project_inbox" };
+    const first = await listInboxMissionSummaries(requester, { limit: 1 });
+    expect(first.missions).toEqual([{
+      id: "inbox_mission_b", title: "B", agentName: "Agent Inbox", updatedAt: "2099-08-09T12:00:00.000Z",
+      latestRun: { status: "failed" },
+    }]);
+    expect(first.page.hasMore).toBe(true);
+    const second = await listInboxMissionSummaries(requester, { limit: 1, cursor: first.page.nextCursor! });
+    expect(second.missions.map((mission) => mission.id)).toEqual(["inbox_mission_a"]);
+    expect(second.page.hasMore).toBe(false);
+    expect((await listInboxMissionSummaries({ ...requester, mandateProjectId: "missing" }, { limit: 10 })).missions).toEqual([]);
+    expect((await listInboxMissionSummaries({ ...requester, siteId: "lyon" }, { limit: 10 })).missions).toEqual([]);
   });
 
   test("foreign and random ids share 404s and cannot mutate business rows or trigger effects", async () => {

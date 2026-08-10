@@ -9,6 +9,7 @@ import {
   CircleHelpIcon,
   FileBoxIcon,
   HistoryIcon,
+  InboxIcon,
   LayoutDashboardIcon,
   MessageSquareIcon,
   MilestoneIcon,
@@ -29,14 +30,26 @@ export type NavItem = {
   section?: string;
 };
 
-export const DEFAULT_CONSOLE_PATH = "/tasks/new";
+/**
+ * L'Inbox est la porte d'entrée : on arrive pour voir ce qui attend une
+ * décision, pas pour remplir un formulaire vide. La création reste à un clic,
+ * dans la navigation comme dans l'Inbox elle-même.
+ */
+export const DEFAULT_CONSOLE_PATH = "/inbox";
 
 export const WORK_NAV = [
+  {
+    label: "Inbox",
+    href: "/inbox",
+    icon: InboxIcon,
+    requiredCapability: "guided.task.read",
+    section: "Travail",
+  },
   {
     label: "Nouvelle tâche",
     href: "/tasks/new",
     icon: SquarePenIcon,
-    requiredCapability: "thread.create",
+    requiredCapability: "guided.task.create",
     section: "Travail",
   },
   {
@@ -163,7 +176,11 @@ export type PageMeta = {
 };
 
 export function pageMeta(pathname: string): PageMeta {
+  if (pathname === "/inbox") return { title: "Inbox", crumb: "Inbox" };
   if (pathname === "/tasks/new") return { title: "Nouvelle tâche", crumb: "Créer" };
+  if (pathname.startsWith("/tasks/")) {
+    return { title: "Tâche guidée", crumb: "Tâche", parent: { label: "Inbox", href: "/inbox" } };
+  }
   if (pathname === "/overview") return { title: "Vue d’ensemble", crumb: "Aperçu" };
   if (pathname === "/agents/new") {
     return { title: "Nouvel agent", crumb: "Créer", parent: { label: "Agents", href: "/agents" } };

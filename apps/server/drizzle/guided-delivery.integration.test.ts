@@ -10,6 +10,7 @@ import {
   createGuidedTaskRevision,
   decideGuidedTask,
   getGuidedTask,
+  listGuidedTaskSummaries,
 } from "@/modules/guided-task/repository";
 
 const POSTGRES_IMAGE =
@@ -243,5 +244,50 @@ describeWithDocker("guided delivery persistence and isolation on PostgreSQL", ()
     expect(replay.attempts.at(-1)?.status).toBe("completed");
     expect(replay.decisions.filter((item) => item.idempotencyKey === decision.idempotencyKey))
       .toHaveLength(1);
+  });
+
+  test("lists a bounded current-revision Inbox summary with stable pagination and scopes", async () => {
+    psql(`
+      INSERT INTO projects (id, site_id, name, slug) VALUES
+        ('inbox_project', 'site_a', 'Projet Inbox', 'projet-inbox');
+      INSERT INTO guided_tasks (id, site_id, project_id, owner_user_id, author_user_id, idempotency_key, title, status, current_revision_id, created_at, updated_at) VALUES
+        ('inbox_b', 'site_a', 'inbox_project', 'user_requester', 'user_requester', 'inbox-1-key', 'Premier', 'ready', NULL, '2099-08-09T08:00:00Z', '2099-08-09T12:00:00Z'),
+        ('inbox_a', 'site_a', 'inbox_project', 'user_requester', 'user_requester', 'inbox-2-key', 'Second', 'ready', NULL, '2099-08-09T08:00:00Z', '2099-08-09T12:00:00Z'),
+        ('inbox_hidden', 'site_a', 'inbox_project', 'user_approver', 'user_approver', 'inbox-hidden-key', 'Autrui', 'ready', NULL, '2099-08-09T08:00:00Z', '2099-08-09T11:00:00Z');
+      INSERT INTO guided_task_revisions (id, site_id, project_id, task_id, number, author_user_id, idempotency_key, content, content_sha256, state, requires_technical_approval, validated_at, validated_by_user_id, created_at) VALUES
+        ('inbox_b_r1', 'site_a', 'inbox_project', 'inbox_b', 1, 'user_requester', 'inbox-1-r1', '{}'::jsonb, '${"1".repeat(64)}', 'validated', false, '2099-08-09T08:00:00Z', 'user_requester', '2099-08-09T08:00:00Z'),
+        ('inbox_b_r2', 'site_a', 'inbox_project', 'inbox_b', 2, 'user_requester', 'inbox-1-r2', '{}'::jsonb, '${"2".repeat(64)}', 'validated', false, '2099-08-09T09:00:00Z', 'user_requester', '2099-08-09T09:00:00Z'),
+        ('inbox_a_r1', 'site_a', 'inbox_project', 'inbox_a', 1, 'user_requester', 'inbox-2-r1', '{}'::jsonb, '${"3".repeat(64)}', 'validated', false, '2099-08-09T08:00:00Z', 'user_requester', '2099-08-09T08:00:00Z'),
+        ('inbox_hidden_r1', 'site_a', 'inbox_project', 'inbox_hidden', 1, 'user_approver', 'inbox-hidden-r1', '{}'::jsonb, '${"4".repeat(64)}', 'validated', false, '2099-08-09T08:00:00Z', 'user_approver', '2099-08-09T08:00:00Z');
+      UPDATE guided_tasks SET current_revision_id = CASE id
+        WHEN 'inbox_b' THEN 'inbox_b_r2'
+        WHEN 'inbox_a' THEN 'inbox_a_r1'
+        WHEN 'inbox_hidden' THEN 'inbox_hidden_r1'
+      END WHERE id IN ('inbox_b', 'inbox_a', 'inbox_hidden');
+      INSERT INTO guided_task_attempts (id, site_id, project_id, task_id, revision_id, author_user_id, attempt_number, idempotency_key, status, repository_path, base_commit, branch_name, evidence_complete, tests_passed) VALUES
+        ('inbox_b_old_attempt', 'site_a', 'inbox_project', 'inbox_b', 'inbox_b_r1', 'user_requester', 1, 'inbox-1-old-attempt', 'awaiting_functional_validation', '/private/r1', '${"a".repeat(40)}', 'private/r1', true, true),
+        ('inbox_b_current_attempt', 'site_a', 'inbox_project', 'inbox_b', 'inbox_b_r2', 'user_requester', 2, 'inbox-1-current-attempt', 'completed', '/private/r2', '${"b".repeat(40)}', 'private/r2', true, true);
+      INSERT INTO guided_task_decisions (id, site_id, project_id, task_id, revision_id, attempt_id, decision_number, kind, outcome, actor_user_id, actor_role, idempotency_key, created_at) VALUES
+        ('inbox_b_old_tool', 'site_a', 'inbox_project', 'inbox_b', 'inbox_b_r1', NULL, 1, 'tool', 'rejected', 'user_requester', 'requester', 'inbox-1-old-tool', '2099-08-09T08:30:00Z'),
+        ('inbox_b_current_tool', 'site_a', 'inbox_project', 'inbox_b', 'inbox_b_r2', NULL, 2, 'tool', 'approved', 'user_requester', 'requester', 'inbox-1-current-tool', '2099-08-09T09:30:00Z');
+    `);
+    const inboxRequester = { ...requester, mandateProjectId: "inbox_project" };
+    const first = await listGuidedTaskSummaries(inboxRequester, { limit: 1 });
+    expect(first.tasks.map((item) => item.id)).toEqual(["inbox_b"]);
+    expect(first.page.hasMore).toBe(true);
+    expect(first.tasks[0]).toMatchObject({
+      currentRevision: { id: "inbox_b_r2" },
+      latestAttempt: { id: "inbox_b_current_attempt", revisionId: "inbox_b_r2" },
+      decisions: [{ kind: "tool", outcome: "approved", attemptId: null }],
+    });
+    expect(first.tasks[0]).not.toHaveProperty("repositoryPath");
+    expect(first.tasks[0]).not.toHaveProperty("evidence");
+    const second = await listGuidedTaskSummaries(inboxRequester, { limit: 1, cursor: first.page.nextCursor! });
+    expect(second.tasks.map((item) => item.id)).toEqual(["inbox_a"]);
+    expect(second.page.hasMore).toBe(false);
+    const mandateScoped = await listGuidedTaskSummaries({ ...requester, mandateProjectId: "project_missing" }, { limit: 10 });
+    expect(mandateScoped.tasks).toEqual([]);
+    const foreignSite = await listGuidedTaskSummaries(foreignAdmin, { limit: 10 });
+    expect(foreignSite.tasks).toEqual([]);
   });
 });

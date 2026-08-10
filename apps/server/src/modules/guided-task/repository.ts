@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, asc, desc, eq, max } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, max, or } from "drizzle-orm";
 import { z } from "zod";
 import {
   guidedTechnicalApprovalRequired,
@@ -8,6 +8,7 @@ import {
 } from "@console/core/modules/guided-task/spec";
 import type {
   GuidedDecision,
+  GuidedInboxPage,
   GuidedTaskDto,
 } from "@console/core/modules/guided-task/task";
 import { getDatabase } from "@/db/client";
@@ -86,9 +87,10 @@ export class GuidedTaskRepositoryError extends Error {
       | "GUIDED_ATTEMPT_NOT_FOUND"
       | "GUIDED_DECISION_FORBIDDEN"
       | "GUIDED_DECISION_CONFLICT"
-      | "GUIDED_REVISION_STALE",
+      | "GUIDED_REVISION_STALE"
+      | "GUIDED_INBOX_CURSOR_INVALID",
     message: string,
-    readonly status: 403 | 404 | 409 = 409,
+    readonly status: 400 | 403 | 404 | 409 = 409,
   ) {
     super(message);
     this.name = "GuidedTaskRepositoryError";
@@ -496,14 +498,133 @@ function attemptNotFound() {
   );
 }
 
-export async function listGuidedTasks(context: SiteRequestContext): Promise<GuidedTaskDto[]> {
+const inboxCursorSchema = z.object({
+  updatedAt: z.string().datetime({ offset: true }),
+  id: z.string().trim().min(1).max(200),
+}).strict();
+
+export type GuidedInboxPageRequest = { limit: number; cursor?: string };
+
+function decodeInboxCursor(cursor: string) {
+  try {
+    const decoded = inboxCursorSchema.safeParse(JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")));
+    if (!decoded.success || !Number.isFinite(new Date(decoded.data.updatedAt).getTime())) throw new Error();
+    if (encodeInboxCursor(decoded.data) !== cursor) throw new Error();
+    return decoded.data;
+  } catch {
+    throw new GuidedTaskRepositoryError(
+      "GUIDED_INBOX_CURSOR_INVALID",
+      "Le curseur de pagination Inbox est invalide.",
+      400,
+    );
+  }
+}
+
+function encodeInboxCursor(cursor: { updatedAt: string; id: string }) {
+  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+/**
+ * Une page Inbox bornée, sans contenu de révision, preuves ou métadonnées de sandbox.
+ * Après le contrôle d'accès, elle effectue toujours trois lectures: page, tentatives et décisions.
+ */
+export async function listGuidedTaskSummaries(
+  context: SiteRequestContext,
+  input: GuidedInboxPageRequest,
+): Promise<GuidedInboxPage> {
   await assertSiteAction(context, "guided.task.read");
-  const rows = await getDatabase().select({ id: guidedTasks.id }).from(guidedTasks).where(and(
-    eq(guidedTasks.siteId, context.siteId),
-    context.mandateProjectId ? eq(guidedTasks.projectId, context.mandateProjectId) : undefined,
-    context.role === "requester" ? eq(guidedTasks.ownerUserId, context.userId) : undefined,
-  )).orderBy(desc(guidedTasks.updatedAt));
-  return Promise.all(rows.map((row) => getGuidedTask(context, row.id)));
+  const cursor = input.cursor ? decodeInboxCursor(input.cursor) : null;
+  const db = getDatabase();
+  const rows = await db
+    .select({
+      id: guidedTasks.id,
+      title: guidedTasks.title,
+      status: guidedTasks.status,
+      updatedAt: guidedTasks.updatedAt,
+      currentRevisionId: guidedTasks.currentRevisionId,
+      projectName: projects.name,
+      revisionId: guidedTaskRevisions.id,
+      revisionState: guidedTaskRevisions.state,
+      requiresTechnicalApproval: guidedTaskRevisions.requiresTechnicalApproval,
+    })
+    .from(guidedTasks)
+    .innerJoin(projects, and(eq(projects.siteId, guidedTasks.siteId), eq(projects.id, guidedTasks.projectId)))
+    .leftJoin(guidedTaskRevisions, and(
+      eq(guidedTaskRevisions.siteId, guidedTasks.siteId),
+      eq(guidedTaskRevisions.taskId, guidedTasks.id),
+      eq(guidedTaskRevisions.id, guidedTasks.currentRevisionId),
+    ))
+    .where(and(
+      eq(guidedTasks.siteId, context.siteId),
+      context.mandateProjectId ? eq(guidedTasks.projectId, context.mandateProjectId) : undefined,
+      context.role === "requester" ? eq(guidedTasks.ownerUserId, context.userId) : undefined,
+      cursor ? or(
+        lt(guidedTasks.updatedAt, new Date(cursor.updatedAt)),
+        and(eq(guidedTasks.updatedAt, new Date(cursor.updatedAt)), lt(guidedTasks.id, cursor.id)),
+      ) : undefined,
+    ))
+    .orderBy(desc(guidedTasks.updatedAt), desc(guidedTasks.id))
+    .limit(input.limit + 1);
+  const hasMore = rows.length > input.limit;
+  const pageRows = hasMore ? rows.slice(0, input.limit) : rows;
+  const taskIds = pageRows.map((row) => row.id);
+
+  const [attemptRows, decisionRows] = taskIds.length === 0 ? [[], []] : await Promise.all([
+    db.selectDistinctOn([guidedTaskAttempts.taskId], {
+      taskId: guidedTaskAttempts.taskId,
+      id: guidedTaskAttempts.id,
+      revisionId: guidedTaskAttempts.revisionId,
+      status: guidedTaskAttempts.status,
+    })
+      .from(guidedTaskAttempts)
+      .innerJoin(guidedTasks, and(
+        eq(guidedTasks.siteId, guidedTaskAttempts.siteId),
+        eq(guidedTasks.id, guidedTaskAttempts.taskId),
+        eq(guidedTasks.currentRevisionId, guidedTaskAttempts.revisionId),
+      ))
+      .where(and(eq(guidedTaskAttempts.siteId, context.siteId), inArray(guidedTaskAttempts.taskId, taskIds)))
+      .orderBy(guidedTaskAttempts.taskId, desc(guidedTaskAttempts.attemptNumber)),
+    db.selectDistinctOn([guidedTaskDecisions.taskId, guidedTaskDecisions.kind], {
+      taskId: guidedTaskDecisions.taskId,
+      kind: guidedTaskDecisions.kind,
+      outcome: guidedTaskDecisions.outcome,
+      attemptId: guidedTaskDecisions.attemptId,
+    })
+      .from(guidedTaskDecisions)
+      .innerJoin(guidedTasks, and(
+        eq(guidedTasks.siteId, guidedTaskDecisions.siteId),
+        eq(guidedTasks.id, guidedTaskDecisions.taskId),
+        eq(guidedTasks.currentRevisionId, guidedTaskDecisions.revisionId),
+      ))
+      .where(and(eq(guidedTaskDecisions.siteId, context.siteId), inArray(guidedTaskDecisions.taskId, taskIds)))
+      .orderBy(guidedTaskDecisions.taskId, guidedTaskDecisions.kind, desc(guidedTaskDecisions.decisionNumber)),
+  ]);
+  const attemptsByTask = new Map(attemptRows.map((attempt) => [attempt.taskId, attempt]));
+  const decisionsByTask = new Map<string, typeof decisionRows>();
+  for (const decision of decisionRows) {
+    decisionsByTask.set(decision.taskId, [...(decisionsByTask.get(decision.taskId) ?? []), decision]);
+  }
+  const last = pageRows.at(-1);
+  return {
+    tasks: pageRows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      status: row.status,
+      projectName: row.projectName,
+      currentRevision: row.revisionId && row.revisionState ? {
+        id: row.revisionId,
+        state: row.revisionState,
+        requiresTechnicalApproval: row.requiresTechnicalApproval ?? false,
+      } : null,
+      latestAttempt: attemptsByTask.get(row.id) ?? null,
+      decisions: decisionsByTask.get(row.id) ?? [],
+      updatedAt: row.updatedAt.toISOString(),
+    })),
+    page: {
+      hasMore,
+      nextCursor: hasMore && last ? encodeInboxCursor({ updatedAt: last.updatedAt.toISOString(), id: last.id }) : null,
+    },
+  };
 }
 
 export async function getGuidedTask(

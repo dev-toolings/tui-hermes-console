@@ -10,6 +10,7 @@ import { XuluxThreadMessage } from "./messages";
 import { xuluxThreadStyle } from "./tokens";
 import { ComposerMetaBar } from "@/components/run/composer-meta-bar";
 import type { ThreadPhase } from "@/components/run/use-live-thread";
+import type { ThreadSource } from "@console/core/types/domain";
 
 export const XuluxThread: FC<{
   showComposer?: boolean;
@@ -17,6 +18,7 @@ export const XuluxThread: FC<{
   /** Thread existant (/runs/:id) — pas de welcome brain au refresh. */
   openingExisting?: boolean;
   modelLabel?: string;
+  source?: ThreadSource;
   /**
    * Ce qui doit être vu au moment de répondre — aujourd'hui la demande
    * d'autorisation. Posé dans le dock du composer, pas en tête d'écran : une
@@ -28,6 +30,7 @@ export const XuluxThread: FC<{
   phase = "ready",
   openingExisting = false,
   modelLabel,
+  source = "mission",
   beforeComposer,
 }) => {
   const messageCount = useAuiState((s) => s.thread.messages.length);
@@ -57,9 +60,9 @@ export const XuluxThread: FC<{
           // `overflow-y-scroll` réserve la gouttière en permanence : la barre
           // qui apparaît ne décale jamais le texte. `overscroll-contain` évite
           // que la fin de course du transcript fasse défiler le shell derrière.
-          "relative min-h-0 flex-1 overflow-x-hidden overflow-y-scroll overscroll-contain scroll-smooth scroll-pt-4 px-4 pt-4 scrollbar-subtle",
+          "relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-scroll overscroll-contain scroll-smooth scroll-pt-4 px-4 pt-4 scrollbar-subtle",
           showComposer ? "pb-3" : "pb-4 md:pb-6",
-          isNew && "flex flex-col justify-center",
+          isNew && "justify-center",
         )}
       >
         {isNew ? <ThreadWelcome /> : null}
@@ -104,7 +107,7 @@ export const XuluxThread: FC<{
                 le placeholder de streaming se contracte en réponse courte.
               */}
               <div className="mx-auto w-full max-w-(--thread-max-width)">
-                <XuluxComposer />
+                <XuluxComposer source={source} />
               </div>
               <ComposerMetaBar modelLabel={modelLabel} phase={phase} />
             </div>

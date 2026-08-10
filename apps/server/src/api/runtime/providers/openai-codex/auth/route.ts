@@ -4,6 +4,7 @@ import { apiErrorResponse } from "@/modules/api/errors";
 import { HermesRuntimeError } from "@/modules/runtime/hermes-adapter";
 import { resolveAvailableRuntimeModelSelection } from "@/modules/runtime/available-model-selection";
 import {
+  hermesCommandFailure,
   startHermesCommand,
   type HermesCommandSession,
 } from "@/modules/runtime/local-management";
@@ -16,6 +17,7 @@ type AuthSession = {
   verificationUri: string | null;
   userCode: string | null;
   error: string | null;
+  errorCode: string | null;
   output: string;
   startedAt: number;
   expiresAt: number;
@@ -53,6 +55,7 @@ export async function POST() {
       verificationUri: null,
       userCode: null,
       error: null,
+      errorCode: null,
       output: "",
       startedAt: Date.now(),
       expiresAt: Date.now() + 16 * 60_000,
@@ -71,26 +74,33 @@ export async function POST() {
     };
     child.onOutput(({ chunk }) => onOutput(chunk));
     void child.result
-      .then(async ({ code }) => {
+      .then(async ({ code, stdout, stderr }) => {
         if (session.status === "cancelled") return;
         if (code === 0) {
           await activateAvailableModelAfterCodexAuth();
           session.status = "connected";
           session.error = null;
+          session.errorCode = null;
         } else {
+          const failure = hermesCommandFailure({
+            code,
+            stdout,
+            stderr,
+          });
           session.status = "failed";
-          session.error =
-            extractSafeError(session.output) ??
-            `Hermes CLI a quitté le flux d’autorisation (code ${code}).`;
+          session.error = failure.message;
+          session.errorCode = failure.code;
         }
       })
       .catch((error: unknown) => {
         if (session.status === "cancelled") return;
         session.status = "failed";
         session.error =
-          error instanceof Error
+          error instanceof HermesRuntimeError
             ? error.message
             : "Impossible de suivre l’autorisation Hermes.";
+        session.errorCode =
+          error instanceof HermesRuntimeError ? error.code : "HERMES_CLI_FAILED";
       });
 
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -131,6 +141,7 @@ export async function DELETE(request: Request) {
     if (session.status === "starting" || session.status === "pending") {
       session.status = "cancelled";
       session.error = null;
+      session.errorCode = null;
       session.process.kill();
     }
     return Response.json(toPublicSession(session));
@@ -173,19 +184,10 @@ function toPublicSession(session: AuthSession) {
     startedAt: new Date(session.startedAt).toISOString(),
     expiresAt: new Date(session.expiresAt).toISOString(),
     error: session.error,
+    errorCode: session.errorCode,
   };
 }
 
 function stripAnsi(value: string) {
   return value.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "");
-}
-
-function extractSafeError(output: string) {
-  const lines = output
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => !line.toLowerCase().includes("token"))
-    .slice(-3);
-  return lines.length > 0 ? lines.join(" ").slice(0, 500) : null;
 }

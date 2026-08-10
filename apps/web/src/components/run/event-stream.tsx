@@ -14,6 +14,7 @@ import { HermesThread } from "@/components/assistant-ui/thread";
 import { XuluxThread } from "@/components/xulux-chat/thread";
 import { HermesToolCallUI } from "./hermes-tool-ui";
 import type { ThreadPhase } from "./use-live-thread";
+import type { ThreadSource } from "@console/core/types/domain";
 
 /** @deprecated Prefer `buildMessages` from `@/lib/thread-messages`. */
 export { buildMessages } from "@/lib/thread-messages";
@@ -31,6 +32,7 @@ export function EventStream({
   layout = "default",
   modelLabel,
   beforeComposer,
+  source = "mission",
 }: {
   prompt?: string;
   events?: RunEvent[];
@@ -45,6 +47,7 @@ export function EventStream({
   modelLabel?: string;
   /** Rendu au ras du composer — la demande d'autorisation, aujourd'hui. */
   beforeComposer?: ReactNode;
+  source?: ThreadSource;
 }) {
   const messages = useMemo(() => {
     if (externalMessages) return externalMessages;
@@ -98,6 +101,7 @@ export function EventStream({
         openingExisting={layout === "xulux"}
         modelLabel={modelLabel}
         beforeComposer={beforeComposer}
+        source={source}
       />
     ) : (
       <HermesThread showComposer={Boolean(onNew)} loading={phase !== "ready"} />

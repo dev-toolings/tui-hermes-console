@@ -25,12 +25,13 @@ import type {
 } from "@console/core/types/api";
 import type {
   RunActivityPoint,
+  InboxMissionPage,
   ThreadListItemDto,
 } from "@console/core/modules/runs/types";
 import type { RuntimeProbeDto } from "@console/core/modules/runtime/probe";
 import type { AuditEntryDto } from "@console/core/modules/audit/types";
 import type { GuidedTaskDraft } from "@console/core/modules/guided-task/spec";
-import type { GuidedTaskDto } from "@console/core/modules/guided-task/task";
+import type { GuidedInboxPage, GuidedTaskDto } from "@console/core/modules/guided-task/task";
 
 export class ApiError extends Error {
   constructor(
@@ -177,6 +178,13 @@ export const fetchThreads = (source: "mission" | "chat" | "all" = "all") =>
   getJson<{ threads: ThreadListItemDto[] }>(
     source === "all" ? "/api/threads" : `/api/threads?source=${source}`,
   ).then((r) => r.threads);
+
+export const fetchInboxMissions = (input: { limit?: number; cursor?: string } = {}) => {
+  const query = new URLSearchParams();
+  if (input.limit) query.set("limit", String(input.limit));
+  if (input.cursor) query.set("cursor", input.cursor);
+  return getJson<InboxMissionPage>(`/api/inbox/missions${query.size > 0 ? `?${query}` : ""}`);
+};
 
 export const fetchAuditEntries = (limit = 200) =>
   getJson<{ entries: AuditEntryDto[] }>(`/api/audit?limit=${limit}`).then(
@@ -392,6 +400,14 @@ export const createGuidedRepositoryProject = (input: {
   headers: { "Content-Type": "application/json", "X-Hermes-Toast": "0" },
   body: JSON.stringify(input),
 }).then((response) => response.repository);
+
+export const fetchGuidedTasks = (input: { limit?: number; cursor?: string } = {}) => {
+  const query = new URLSearchParams();
+  if (input.limit) query.set("limit", String(input.limit));
+  if (input.cursor) query.set("cursor", input.cursor);
+  const suffix = query.size > 0 ? `?${query}` : "";
+  return getJson<GuidedInboxPage>(`/api/guided/tasks${suffix}`);
+};
 
 export const fetchGuidedTask = (taskId: string) =>
   getJson<{ task: GuidedTaskDto }>(`/api/guided/tasks/${encodeURIComponent(taskId)}`)

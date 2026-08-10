@@ -84,7 +84,7 @@ export async function executeSessionCommand(input: {
     command.kind === "agent_edit" ||
     command.kind === "agent_switch";
 
-  if (isAgentCommand && thread.source === "chat") {
+  if (isAgentCommand && command.kind !== "agent_create" && thread.source === "chat") {
     return {
       handled: true,
       systemMessage:
@@ -111,6 +111,12 @@ export async function executeSessionCommand(input: {
         name: command.name,
         instructions: command.instructions,
       });
+      if (thread.source === "chat") {
+        return {
+          handled: true,
+          systemMessage: `Agent créé dans le catalogue : **${agent.name}** (\`${agent.slug}\`).\n\nAppelez-le depuis ce chat avec \`@${agent.slug} votre instruction\` : une mission dédiée sera créée.`,
+        };
+      }
       await applyAgentToThread(input.context, input.threadId, agent);
       return {
         handled: true,

@@ -8,6 +8,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -21,6 +22,8 @@ import {
   XIcon,
 } from "lucide-react";
 import {
+  Button,
+  Dialog,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -424,6 +427,7 @@ function SessionRow({
   onNavigate: () => void;
   onDelete: () => void;
 }) {
+  const deleteSelectionRef = useRef(false);
   const status = (session.latestRun?.status ?? "pending") as RunStatus;
   const style = RUN_STATUS[status];
   const live = !style.terminal && status !== "pending";
@@ -470,12 +474,21 @@ function SessionRow({
           >
             <MoreHorizontalIcon className="size-3.5" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-36">
+          <DropdownMenuContent
+            align="end"
+            className="min-w-36"
+            onCloseAutoFocus={(event) => {
+              if (deleteSelectionRef.current) {
+                event.preventDefault();
+                deleteSelectionRef.current = false;
+              }
+            }}
+          >
             <DropdownMenuItem
               variant="destructive"
               disabled={deleting}
-              onSelect={(event) => {
-                event.preventDefault();
+              onSelect={() => {
+                deleteSelectionRef.current = true;
                 onDelete();
               }}
             >
@@ -510,6 +523,8 @@ function OpenClawSessionSidebar({
 }) {
   const recent = useMemo(() => sessions.slice(0, 40), [sessions]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [sessionToDelete, setSessionToDelete] = useState<ChatSessionRow | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Les groupes vides ne sont pas rendus : un intitulé « Hier » sans ligne en
   // dessous ferait croire à un chargement incomplet.
@@ -524,14 +539,8 @@ function OpenClawSessionSidebar({
   }, [recent, nowMs]);
 
   const deleteSession = async (session: ChatSessionRow) => {
-    if (
-      !window.confirm(
-        `Delete « ${session.title} »?\n\nTranscript, missions, artefacts DB and workdirs will be removed. Active runs are cancelled.`,
-      )
-    ) {
-      return;
-    }
     setDeletingId(session.id);
+    setDeleteError(null);
     try {
       const response = await fetch(`/api/threads/${encodeURIComponent(session.id)}`, {
         method: "DELETE",
@@ -539,10 +548,11 @@ function OpenClawSessionSidebar({
       });
       if (!response.ok) {
         const body = (await response.json()) as { error?: { message?: string } };
-        window.alert(body.error?.message ?? "Delete failed.");
+        setDeleteError(body.error?.message ?? "La suppression a échoué.");
         return;
       }
       dropThreadSnapshotCache(session.id);
+      setSessionToDelete(null);
       onNavigate();
       await onDeleted(session.id);
     } finally {
@@ -638,7 +648,10 @@ function OpenClawSessionSidebar({
                     deleting={deletingId === session.id}
                     nowMs={nowMs}
                     onNavigate={onNavigate}
-                    onDelete={() => void deleteSession(session)}
+                    onDelete={() => {
+                      setDeleteError(null);
+                      setSessionToDelete(session);
+                    }}
                   />
                 ))}
               </ul>
@@ -653,6 +666,55 @@ function OpenClawSessionSidebar({
         ) : null}
       </div>
 
+      <Dialog
+        open={sessionToDelete !== null}
+        onClose={() => {
+          if (!deletingId) {
+            setDeleteError(null);
+            setSessionToDelete(null);
+          }
+        }}
+        role="alertdialog"
+        showClose={false}
+        title="Supprimer cette session ?"
+        description={sessionToDelete?.title}
+        footer={
+          <>
+            <Button
+              data-dialog-autofocus
+              variant="ghost"
+              disabled={deletingId !== null}
+              onClick={() => {
+                setDeleteError(null);
+                setSessionToDelete(null);
+              }}
+            >
+              Annuler
+            </Button>
+            <Button
+              variant="danger"
+              disabled={deletingId !== null || sessionToDelete === null}
+              leadingIcon={Trash2Icon}
+              onClick={() => {
+                if (sessionToDelete) void deleteSession(sessionToDelete);
+              }}
+            >
+              {deletingId ? "Suppression…" : "Supprimer"}
+            </Button>
+          </>
+        }
+      >
+        <p>
+          Le transcript, les missions, les artefacts et les espaces de travail
+          associés seront supprimés. Toute mission active sera annulée. Cette
+          action est irréversible.
+        </p>
+        {deleteError ? (
+          <p role="alert" className="mt-3 text-destructive">
+            {deleteError}
+          </p>
+        ) : null}
+      </Dialog>
     </aside>
   );
 }

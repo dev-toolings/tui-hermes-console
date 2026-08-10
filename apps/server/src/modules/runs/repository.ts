@@ -1,6 +1,6 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, isNull, max, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, max, or, sql } from "drizzle-orm";
 import { getDatabase } from "@/db/client";
 import {
   artifacts,
@@ -15,6 +15,7 @@ import {
 } from "@/db/schema";
 import type {
   ArtifactDto,
+  InboxMissionPage,
   ProductEventInput,
   ProductRunStatus,
   RunActivityPoint,
@@ -78,6 +79,79 @@ export class ProductRepositoryError extends Error {
     super(message);
     this.name = "ProductRepositoryError";
   }
+}
+
+type InboxMissionPageRequest = { limit: number; cursor?: string };
+
+function decodeInboxMissionCursor(cursor: string) {
+  try {
+    const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as unknown;
+    if (
+      !decoded || typeof decoded !== "object" || Array.isArray(decoded) ||
+      typeof (decoded as { updatedAt?: unknown }).updatedAt !== "string" ||
+      typeof (decoded as { id?: unknown }).id !== "string" ||
+      !Number.isFinite(new Date((decoded as { updatedAt: string }).updatedAt).getTime()) ||
+      Buffer.from(JSON.stringify(decoded)).toString("base64url") !== cursor
+    ) throw new Error();
+    return decoded as { updatedAt: string; id: string };
+  } catch {
+    throw new ProductRepositoryError("THREAD_NOT_FOUND", "Curseur Inbox missions invalide.");
+  }
+}
+
+function encodeInboxMissionCursor(cursor: { updatedAt: string; id: string }) {
+  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+/** Fixed-cost Inbox mission summary: page query plus one batched latest-run query. */
+export async function listInboxMissionSummaries(
+  scope: SiteRequestContext,
+  input: InboxMissionPageRequest,
+): Promise<InboxMissionPage> {
+  const cursor = input.cursor ? decodeInboxMissionCursor(input.cursor) : null;
+  const db = getDatabase();
+  const rows = await db.select({
+    id: threads.id,
+    title: threads.title,
+    agentName: threads.agentName,
+    updatedAt: threads.updatedAt,
+  }).from(threads).where(and(
+    eq(threads.siteId, scope.siteId),
+    eq(threads.source, "mission"),
+    scope.mandateProjectId ? eq(threads.projectId, scope.mandateProjectId) : undefined,
+    scope.role === "requester" ? eq(threads.ownerUserId, scope.userId) : undefined,
+    cursor ? or(
+      lt(threads.updatedAt, new Date(cursor.updatedAt)),
+      and(eq(threads.updatedAt, new Date(cursor.updatedAt)), lt(threads.id, cursor.id)),
+    ) : undefined,
+  )).orderBy(desc(threads.updatedAt), desc(threads.id)).limit(input.limit + 1);
+  const hasMore = rows.length > input.limit;
+  const pageRows = hasMore ? rows.slice(0, input.limit) : rows;
+  const threadIds = pageRows.map((row) => row.id);
+  const latestRuns = threadIds.length === 0 ? [] : await db.selectDistinctOn([runs.threadId], {
+    threadId: runs.threadId,
+    status: runs.status,
+  }).from(runs).where(and(
+    eq(runs.siteId, scope.siteId),
+    inArray(runs.threadId, threadIds),
+  )).orderBy(runs.threadId, desc(runs.createdAt), desc(runs.id));
+  const latestRunByThread = new Map(latestRuns.map((run) => [run.threadId, run]));
+  const last = pageRows.at(-1);
+  return {
+    missions: pageRows.map((thread) => ({
+      id: thread.id,
+      title: thread.title,
+      agentName: thread.agentName,
+      updatedAt: thread.updatedAt.toISOString(),
+      latestRun: latestRunByThread.has(thread.id)
+        ? { status: latestRunByThread.get(thread.id)!.status as ProductRunStatus }
+        : null,
+    })),
+    page: {
+      hasMore,
+      nextCursor: hasMore && last ? encodeInboxMissionCursor({ updatedAt: last.updatedAt.toISOString(), id: last.id }) : null,
+    },
+  };
 }
 
 export async function createThreadWithRun(context: SiteRequestContext, input: {

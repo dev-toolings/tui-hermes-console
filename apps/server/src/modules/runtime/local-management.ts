@@ -6,8 +6,10 @@ import {
 } from "./config";
 import { HermesRuntimeError } from "./hermes-adapter";
 import { getChannel, type SshTarget } from "./ssh";
+import { REMOTE_UPDATE_MANAGER_PATH } from "./ssh/remote-update-manager";
 
 const CONSOLE_CREDENTIAL_PREFIX = "console-web-";
+const REMOTE_CLI_UNAVAILABLE_MESSAGE = "Hermes CLI introuvable sur l’hôte SSH.";
 
 export function hermesCliExecutable(
   env: Record<string, string | undefined> = process.env,
@@ -183,11 +185,7 @@ export async function runHermesCommand(
       }),
     ]);
     if (result.code !== 0) {
-      throw new HermesRuntimeError(
-        "La commande Hermes a échoué.",
-        502,
-        "HERMES_CLI_FAILED",
-      );
+      throw hermesCommandFailure(result);
     }
     return { stdout: stripAnsi(result.stdout), stderr: stripAnsi(result.stderr) };
   } finally {
@@ -323,19 +321,59 @@ export function remoteHermesCommand(
   ]
     .map(shellQuote)
     .join(" ");
+  const managerExec = [
+    "sudo",
+    "-n",
+    REMOTE_UPDATE_MANAGER_PATH,
+    options.pseudoTerminal ? "cli-pty" : "cli",
+    ...args,
+  ]
+    .map(shellQuote)
+    .join(" ");
+  // Un canal SSH non interactif ne charge ni .profile ni les shims utilisateur.
+  // Résoudre explicitement le launcher distant évite aussi de réutiliser par
+  // erreur HERMES_CLI_PATH, qui décrit uniquement la machine de la Console.
   const hostCommand = [
-    'export PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/hermes/.venv/bin:$PATH";',
-    "exec",
-    shellQuote(hermesCliExecutable()),
-    ...args.map(shellQuote),
-  ].join(" ");
+    'export PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/hermes-console/current/venv/bin:/opt/hermes/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"',
+    "hermes_bin=",
+    'for candidate in "$(command -v hermes 2>/dev/null || true)" "$HOME/.local/bin/hermes" /opt/hermes-console/current/venv/bin/hermes /opt/hermes/.venv/bin/hermes /usr/local/bin/hermes /usr/bin/hermes; do',
+    '  if [ -n "$candidate" ] && [ -x "$candidate" ]; then hermes_bin="$candidate"; break; fi',
+    "done",
+    'if [ -z "$hermes_bin" ]; then',
+    `  printf '%s\\n' ${shellQuote(REMOTE_CLI_UNAVAILABLE_MESSAGE)} >&2`,
+    "  exit 127",
+    "fi",
+    ['exec "$hermes_bin"', ...args.map(shellQuote)].join(" "),
+  ].join("\n");
   return [
-    "if docker inspect hermes-console-runtime >/dev/null 2>&1; then",
+    `if [ -x ${shellQuote(REMOTE_UPDATE_MANAGER_PATH)} ]; then`,
+    `  exec ${managerExec}`,
+    "elif docker inspect hermes-console-runtime >/dev/null 2>&1; then",
     `  exec ${dockerExec}`,
     "else",
     `  ${hostCommand}`,
     "fi",
   ].join("\n");
+}
+
+export function hermesCommandFailure(result: CommandResult & { code: number }) {
+  if (
+    result.code === 127 &&
+    stripAnsi(`${result.stdout}\n${result.stderr}`).includes(
+      REMOTE_CLI_UNAVAILABLE_MESSAGE,
+    )
+  ) {
+    return new HermesRuntimeError(
+      REMOTE_CLI_UNAVAILABLE_MESSAGE,
+      503,
+      "HERMES_REMOTE_CLI_UNAVAILABLE",
+    );
+  }
+  return new HermesRuntimeError(
+    "La commande Hermes a échoué.",
+    502,
+    "HERMES_CLI_FAILED",
+  );
 }
 
 function consoleManagedCredentialIndexes(output: string) {

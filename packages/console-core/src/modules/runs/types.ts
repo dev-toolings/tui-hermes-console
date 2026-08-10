@@ -120,3 +120,17 @@ export type ThreadListItemDto = {
   updatedAt: string;
   latestRun: RunDto | null;
 };
+
+/** Projection minimale autorisée pour la liste Inbox des missions. */
+export type InboxMissionSummary = {
+  id: string;
+  title: string;
+  agentName: string;
+  updatedAt: string;
+  latestRun: Pick<RunDto, "status"> | null;
+};
+
+export type InboxMissionPage = {
+  missions: InboxMissionSummary[];
+  page: { hasMore: boolean; nextCursor: string | null };
+};

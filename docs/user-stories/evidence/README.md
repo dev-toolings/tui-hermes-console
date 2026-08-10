@@ -6,6 +6,10 @@ clé privée, un mot de passe, un token, une adresse privée, un cookie ou une d
 
 ## Rapports disponibles
 
+- [09-08-2026 — Inbox paginée et migration `guided.task.create`](2026-08-09-inbox-summary-and-guided-create-migration.md) :
+  résumé minimal, pagination/scopes/révision courante, capacité de création positive/négative ;
+  aucune acceptation historique n'est resignée.
+
 - [08-08-2026 — audit de clôture du RAF](2026-08-08-raf-closure-audit.md) : onze exigences
   recroisées, dix actions closes et condition commerciale humaine maintenue bloquante à `0/3`.
 - [08-08-2026 — acceptation US-G0-UX-001 sous DER-001](2026-08-08-gate-0-ux-001-der-001.md) :

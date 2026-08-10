@@ -1,8 +1,8 @@
-# PRD — Hermes Console
+# PRD : Hermes Console
 
-**Version :** 1.5
-**Date :** 06-08-2026
-**Statut :** vérité produit auditée — technical preview, non prête pour une offre B2B autonome
+**Version :** 2.0
+**Date :** 10-08-2026
+**Statut :** PRD actif — full vertical du carnet de mission guidé, technical preview
 **Produit :** console guidée transformant une demande professionnelle en travail logiciel vérifié
 **Périmètre actuel :** une installation, plusieurs sites isolés techniquement, plusieurs comptes Google allowlistés ; rôles et ownership sont implémentés localement mais restent non acceptés avant P-E2E/revue
 **Runtime de référence :** canal officiel Hermes Agent `latest` / branche `main`, API server sur le
@@ -11,12 +11,89 @@ port 8642. Docker résout `:latest` en digest avant l’exécution ; system-wide
 pour l’audit et le rollback, sans devenir des pins d’entrée. La revue indépendante et le parcours
 P-E2E restent ouverts.
 
-> Ce document décrit l’arbre de travail réel au 06-08-2026, y compris les changements non encore
+> Ce document décrit l’arbre de travail réel au 10-08-2026, y compris les changements non encore
 > publiés. Les capacités sont classées en quatre états : **livré**, **validé statiquement**,
 > **non validé E2E** et **cible**. Une présence dans le code ne vaut pas preuve de production.
 >
 > L’historique détaillé des amendements v0.1 à v1.1 a été supprimé. Git reste la source de cet
 > historique ; le PRD ne conserve qu’une vérité courante et une direction produit.
+
+---
+
+## 0. Mandat actif — passer en full vertical
+
+Le produit ne cherche pas à couvrir toutes les surfaces d’un outil d’agents. Il ferme un parcours
+complet et vérifiable pour un binôme **demandeur métier + développeur/approbateur** sur un projet
+logiciel existant, avec un Hermes local ou distant déjà joignable.
+
+> **Hermes Console transforme une demande métier en travail logiciel vérifié. La Console gouverne,
+> Hermes exécute, l’humain décide.**
+
+Le full vertical est donc : **Inbox → création guidée → contrat validé → tentative Hermes → preuves
+→ décision humaine**. Une tâche n’avance jamais parce qu’une carte change de colonne ; elle avance
+quand une condition réelle du contrat est satisfaite.
+
+~~~text
+╔══════════════════════════╗
+║ Web · Desktop · Mobile  ║
+║ mêmes routes et identité ║
+╚════════════╤═════════════╝
+             │ HTTPS JSON/SSE · parcours partagé
+             ▼
+╔══════════════════════════════════╗
+║ Kernel Console                    ║
+║ Inbox · Tâche · Tentative         ║
+║ Preuves · Décision · Audit        ║
+╚══════╤══════════╤══════════╤═════╝
+       │ SQL      │ mandat   │ runtime direct/SSH
+       ▼          ▼          ▼
+┌────────────┐ ┌──────────┐ ┌────────────────┐
+│ PostgreSQL │ │ Hermes   │ │ Hermes distant │
+│ vérité     │ │ adapté   │ │ ou local       │
+└────────────┘ └──────────┘ └────────────────┘
+~~~
+
+Légende : les surfaces projettent le même contrat ; le kernel possède les décisions et les preuves ;
+Hermes ne reçoit qu’un mandat validé. Composants : clients Web/Tauri/mobile web, Console, PostgreSQL,
+adaptateur Hermes et runtime direct ou SSH.
+
+### 0.1 Wedge et contrat de réussite
+
+- **ICP initial :** agence, ESN ou PME produit de 2 à 10 personnes, avec un projet logiciel non
+  sensible et un changement borné, réversible et vérifiable.
+- **Job-to-be-done :** le demandeur décrit le résultat sans Git ni shell ; le développeur garde la
+  profondeur technique ; l’un et l’autre décident à partir de la même preuve.
+- **Unité de preuve :** une tâche durable, une révision de contrat, une tentative Hermes, un paquet de
+  preuves et une décision humaine. Les sessions restent une surface opérationnelle secondaire.
+- **GO full vertical :** une paire réelle crée une tâche, valide le contrat, obtient une tentative
+  isolée, consulte diff/tests/aperçu, puis accepte ou refuse le résultat ; le parcours est prouvé sur
+  Web desktop et Web mobile, avec une persona autorisée et une persona refusée.
+
+### 0.2 Deux profondeurs, une seule vérité
+
+| Surface | Promesse | Limite normative |
+|---|---|---|
+| Web | Autorité produit : Inbox, création, tâche, preuves, décisions | Aucune décision n’est simulée par le client |
+| Desktop/Tauri | Profondeur opérateur : runtime, événements, fichiers et détails Hermes | Ne crée pas un second modèle métier |
+| Mobile web | Créer, suivre, consulter les preuves et décider au doigt | Pas d’administration Docker/SSH ni de logs bruts par défaut |
+| Canal futur | Capturer ou projeter une tâche | Ne valide jamais, n’exécute jamais et ne possède aucune preuve |
+
+### 0.3 Périmètre verrouillé
+
+**À garder maintenant :** Inbox comme accueil, wizard en quatre moments, workspace de tâche,
+tentatives/preuves/décisions, runtime direct/SSH existant, projet/site/ownership/audit, Sessions/
+Missions pour les runs avec vue Liste/Kanban, et chat expert comme surface technique secondaire.
+
+**À déprioriser :** capture rapide (brouillon sans exécution), affectation personnelle temps réel,
+commentaires et notifications, GitHub/CI/preview distants, puis adaptateurs de canal. Ils ne bloquent
+pas le premier GO tant que le parcours Web cœur n’est pas accepté.
+
+**À exclure du produit cœur :** dashboard généraliste comme accueil, Kanban d’une tâche/contrat,
+Slack/Buzz intégré, auto-run/autopilot, fleet/Edge/Relay, application mobile native, et abstraction
+multi-harness d’agents.
+
+Toute nouvelle capacité doit se rattacher à une étape du parcours ou rester hors PRD. La présence d’un
+écran, d’un mock ou d’une route ne constitue jamais une preuve de livraison.
 
 ---
 
@@ -75,7 +152,7 @@ Formulations interdites tant que les preuves manquent :
 
 ## 3. ICP et job-to-be-done
 
-### 3.1 Wedge prioritaire — binôme métier et développeur
+### 3.1 Wedge prioritaire : binôme métier et développeur
 
 Profil à tester :
 
@@ -95,7 +172,7 @@ personnes distinctes pour la validation fonctionnelle et la revue technique. Le 
 la séparation client/MSP existants restent utiles mais ne valent pas encore preuve du nouveau
 workflow avant P-E2E.
 
-### 3.2 Segment secondaire — agences et intégrateurs
+### 3.2 Segment secondaire : agences et intégrateurs
 
 Équipes opérant plusieurs projets clients et voulant faire participer le demandeur métier sans lui
 ouvrir GitHub, le runtime ou le serveur.
@@ -130,10 +207,13 @@ Il faut :
 5. rendre le résultat vérifiable par preuves métier et techniques ;
 6. conserver une trace complète sans exposer cette complexité par défaut.
 
-Le premier slice livre les points 1 et 2 et réutilise une partie du point 6. Il ne lance pas encore
-Hermes : un test réel a confirmé que le workdir de run borne les artefacts mais pas le `terminal.cwd`
-ni les outils de code. L’exécution guidée reste donc fail-closed jusqu’à la sandbox de dépôt. Les
-points 3 à 5 restent partiels ou absents.
+Le premier slice livrait seulement les points 1 et 2. L'arbre courant couvre désormais localement
+les points 3 à 5 par des décisions distinctes, un worktree Bubblewrap, Hermes réel et des preuves
+SHA-256. Cette exécution passe exclusivement par `/api/guided/tasks/:taskId/attempts`. L'ancien
+payload `guided` de `POST /api/threads` reste volontairement refusé par
+`GUIDED_EXECUTION_NOT_ISOLATED` : son workdir d'artefacts ne constituait pas une sandbox de code.
+La preuve locale datée existe ; le pilote tiers, la revue indépendante et l'acceptation de Gate
+restent ouverts.
 
 ---
 
@@ -188,6 +268,63 @@ Telegram et Buzz sont des adaptateurs optionnels de Gate 0 :
 Le parcours cœur reste donc utilisable et testable sans dépendre de la disponibilité ou de la
 maturité mobile d'un canal tiers.
 
+### 5.6 Multica comme référence, pas comme mode produit
+
+Multica confirme deux formes utiles : un objet de travail durable distinct de chaque exécution, et
+une Inbox humaine qui renvoie vers cet objet sans devenir le journal complet. Ces formes concordent
+avec la séparation Console `Tâche` / Hermes `Tentative` déjà retenue. Elles ne justifient ni un clone
+de Linear/Jira, ni l'import de Multica, ni un « mode Multica » dans `/tasks/new`.
+
+| Décision | Forme observée chez Multica | Traduction Hermes Console |
+|---|---|---|
+| **Adopter** | Une Issue durable peut produire plusieurs Tasks ; une Task terminée ne clôt pas automatiquement l'Issue | Une Tâche conserve plusieurs tentatives ; seul le contrat de preuve et la décision fonctionnelle permettent de la terminer |
+| **Adapter** | Quick Create accepte une formulation courte et fait préparer l'Issue de façon asynchrone | Une capture rapide optionnelle peut créer ou enrichir un **brouillon**, en conservant la demande originale et sans inventer d'exigence |
+| **Adapter** | L'Inbox rassemble assignations, mentions, commentaires et échecs qui concernent la personne | La projection actuelle reste une file partagée par rôle/capacité ; elle ne devient « personnelle » qu'après affectation serveur explicite et preuve multi-compte |
+| **Rejeter** | Assignation, mention, chat ou Autopilot peuvent créer directement une Task agent | Aucun brief, message, mention ou affectation ne contourne la validation du contrat, du plan et des décisions requises |
+| **Rejeter** | Board d'Issues, statuts libres et picker d'assignee comme cœur du produit | La Console reste centrée sur demande, contrat, preuve et décision, pas sur un tracker généraliste |
+| **Différer** | Autopilots planifiés ou événementiels | Aucune automation avant besoin partenaire, policy fail-closed, isolation et consentement explicites |
+
+~~~text
+┌──────────────────────────┐
+│ Brief Web ou canal       │
+└────────────┬─────────────┘
+             │ brief court · provenance
+             │ aucune exécution
+             ▼
+╔══════════════════════════╗
+║ Console                  ║
+║ Brouillon · contrat      ║
+║ Plan · décisions         ║
+╚════════════╤═════════════╝
+             │ mandat borné et validé
+             ▼
+┌──────────────────────────┐
+│ Hermes exécute           │
+└────────────┬─────────────┘
+             │ état · artefacts · preuves
+             ▼
+╔══════════════════════════╗
+║ Console                  ║
+║ Preuve · décision        ║
+║ Projection Inbox         ║
+╚════════════╤═════════════╝
+             │ événements lisibles
+             │ jamais autorité
+             ▼
+┌──────────────────────────┐
+│ Canaux optionnels        │
+└──────────────────────────┘
+~~~
+
+Légende : la Console possède le brouillon, le contrat, les décisions et la preuve ; Hermes
+exécute seulement un mandat validé ; les canaux capturent ou projettent sans approuver.
+Composants : capture Web/canal, Console, Hermes, Inbox et adaptateurs optionnels.
+
+La licence Multica ajoute des conditions aux termes Apache 2.0, notamment pour un service hébergé
+pour des tiers, l'embarquement commercial et la dérivation d'interface. Hermes Console n'intègre
+donc aucun code, composant UI, backend, daemon ou CLI Multica : seules les formes produit publiquement
+documentées servent de référence comparative.
+
 ---
 
 ## 6. État réel du produit
@@ -197,6 +334,8 @@ maturité mobile d'un canal tiers.
 | Surface | État réel |
 |---|---|
 | Tâche guidée | PostgreSQL, six intentions, projet/dépôt, révisions immuables, plan, risques, tentatives, preuves et décisions attribuées |
+| Inbox | **Implémentée dans l'arbre courant, non acceptée** : projection en lecture des tâches et missions par rôle/capacité, avec décision, reprise, suivi et ancienneté ; ni notification persistée ni affectation personnelle |
+| Capture rapide | **Cible** : brief optionnel vers un brouillon révisable, sans assignation et sans exécution Hermes |
 | Agents | CRUD PostgreSQL, provider, modèle, reasoning effort, archive/restauration et suppression |
 | Sessions | Threads persistés, historique, suppression, source chat ou mission |
 | Missions | Un run par message, états, streaming, annulation, retry, inactivité, résultat et usage |
@@ -224,25 +363,37 @@ maturité mobile d'un canal tiers.
 └────────┬─────────┘
          │ config runtime · test capabilities
          ▼
-┌──────────────────┐
-│ Tâche guidée     │
-└────────┬─────────┘
-         │ demande · exclusions · plan validé
-         ▼
-┌──────────────────┐
-│ Mise en attente  │
-│ sandbox requise  │
-└──────────────────┘
+┌────────────────────────┐
+│ Inbox · nouvelle tâche │
+└───────────┬────────────┘
+            │ demande · exclusions · plan · décisions
+            ▼
+┌────────────────────────┐
+│ Tentative guidée       │
+│ worktree Bubblewrap    │
+└───────────┬────────────┘
+            │ prompt borné · outils dans /workspace
+            ▼
+┌────────────────────────┐
+│ Hermes exécute         │
+└───────────┬────────────┘
+            │ diff · tests · preuves SHA-256
+            ▼
+┌────────────────────────┐
+│ Décision · Inbox       │
+└────────────────────────┘
 ~~~
 
 Légende : chaque flèche porte le protocole ou le type de donnée réellement échangé.
-Composants : compte, setup global, tâche guidée et garde fail-closed.
+Composants : compte, setup global, Inbox, tâche guidée, sandbox, Hermes, preuves et décision.
 
 Routes utilisateur principales :
 
 | Route | Fonction |
+|---|---|
 | /setup | Authentification et mise en service globale |
-| / | Redirection vers la création guidée |
+| / | Redirection vers l’Inbox |
+| /inbox | File des tâches et missions qui attendent une décision, une reprise ou avancent |
 | /tasks/new | Intention, demande, résultat attendu, plan et validation avant exécution |
 | /tasks/:taskId | Tâche durable, révisions, tentative, preuves et décisions attribuées |
 | /overview | Aperçu réel des missions et de l’activité |
@@ -258,6 +409,15 @@ Routes utilisateur principales :
 
 Précisions :
 
+- L'Inbox agrège deux résumés paginés métier : tâches guidées et missions. Le résumé de tâche
+  contient déjà le nom projet humain ; aucun fetch projet séparé n'est déclenché. Elle ne persiste
+  ni lecture, ni archivage, ni abonnement et reste une file partagée par rôle/capacité.
+- Le rendu navigateur local du 09-08-2026 confirme les brouillons sous « Brouillons à compléter »,
+  le nom humain du projet et un wording partagé sans formulation personnelle. Les pannes de source
+  et les personas négatifs restent couverts par tests locaux, pas encore par P-E2E.
+- La navigation « Nouvelle tâche », le CTA Inbox et l'API guidée utilisent désormais tous
+  `guided.task.create`. Le contrat positif/négatif est testé localement ; le rejeu navigateur
+  multi-persona reste requis avant acceptation.
 - La mention @agent existe sur /chat/new et crée une mission dédiée.
 - Une tâche guidée persiste ses propres tentatives : l’API refuse le lancement avant plan courant,
   approbation d’outil et éventuelle validation technique. Elle gèle dépôt, commit et révision avant
@@ -275,6 +435,13 @@ Précisions :
 
 ### 6.3 Capacités absentes ou non acceptées
 
+- affectation personnelle des décisions et reprises, état lu/archivé, abonnements, commentaires et
+  mise à jour temps réel ; l'Inbox courante est une projection partagée par rôle/capacité avec résumé
+  serveur paginé ;
+- P-E2E multi-persona de l'alignement déjà testé de `guided.task.create` entre navigation, CTA,
+  route et API ;
+- capture rapide optionnelle d'un brief vers un brouillon structuré ; le wizard actuel reste le
+  parcours livré et aucun brief ne déclenche Hermes ;
 - connexion GitHub distante, création de PR, statut CI et déploiement de preview ; le dépôt local,
   la branche/worktree, le diff et la preview textuelle sont livrés ;
 - capture ou démonstration visuelle automatisée du logiciel modifié ; les preuves diff/fichiers/tests
@@ -465,7 +632,7 @@ l’attribution précèdent toute croissance multi-user.
 
 ## 9. Sécurité et blocages
 
-### 9.1 P0 — durabilité des artefacts en production, correctif implémenté
+### 9.1 P0 : durabilité des artefacts en production, correctif implémenté
 
 compose.prod.yml et l’image runtime définissent désormais
 HERMES_CONSOLE_ARTIFACTS_DIR=/data/files, chemin porté par le volume files-data. Les lectures
@@ -478,7 +645,7 @@ les octets vérifiés survivent, tandis que corruption et absence répondent exp
 couvre le même hôte et le même volume ; elle ne remplace ni une sauvegarde/restauration, ni une perte
 d’hôte, ni l’acceptation P-OPS. La Gate 1 reste donc ouverte.
 
-### 9.2 P0 — approbation non fail-closed
+### 9.2 P0 : approbation non fail-closed
 
 Le parcours d’approbation fonctionne lorsque Hermes émet approval.requested. Les mesures du spike
 ont montré qu’une commande classée dangereuse pouvait cependant s’exécuter sans événement.
@@ -689,7 +856,8 @@ d’absorption fonctionnelle. Un partenariat upstream ou une frontière de contr
 | Agent management | CrewAI AMP couvre déploiement, collaboration, monitoring et scaling | Ne pas vendre « agent management platform » seul |
 | Observabilité | LangSmith et Langfuse couvrent traces, evals, RBAC, rétention et audit | Exporter, ne pas reconstruire |
 | Builders OSS | Dify et Open WebUI offrent self-hosting, chat et permissions | Ne pas dériver vers un builder/no-code |
-| Hermes natif | Desktop/dashboard couvrent la surface individuelle | Viser l’exploitation client et la séparation des rôles |
+| Collaboration humain-agent | Multica sépare Issue durable et Task d'exécution, propose Quick Create et Inbox humaine | Adopter la séparation, adapter la capture ; rejeter auto-run et tracker généraliste |
+| Hermes natif | Desktop/dashboard couvrent la surface individuelle | Viser l'exploitation client et la séparation des rôles |
 
 ### 12.3 Signal européen
 
@@ -703,54 +871,85 @@ contrôles organisationnels dépassent la Console.
 
 ---
 
-## 13. Roadmap B2B à gates
+## 13. Roadmap full vertical à gates
 
 ~~~text
-╔══════════════════════╗
-║ Gate 0 · Parcours    ║
-║ demande · résultat ║
-╚══════════╤═══════════╝
-           │ preuve P-E2E · métier comprend et vérifie
-           ▼
-╔══════════════════════╗
-║ Gate 1 · Livraison   ║
-║ sandbox · preuves  ║
-╚══════════╤═══════════╝
-           │ diff · tests · reprise · contrôle fail-closed
-           ▼
-╔══════════════════════╗
-║ Gate 2 · Validation  ║
-║ métier · technique ║
-╚══════════╤═══════════╝
-           │ décisions sensibles attribuées et auditées
-           ▼
-╔══════════════════════╗
-║ Gate 3 · Qualité     ║
-║ coûts · evals       ║
-╚══════════════════════╝
+╔══════════════════════════╗
+║ V0 · Contrat produit    ║
+║ Inbox · wording · IA    ║
+╚════════════╤═════════════╝
+             │ routes · quatre sections · aucun auto-run
+             ▼
+╔══════════════════════════╗
+║ V1 · Tâche durable      ║
+║ contrat · workspace     ║
+╚════════════╤═════════════╝
+             │ révision validée · décisions explicites
+             ▼
+╔══════════════════════════╗
+║ V2 · Livraison vérifiée ║
+║ Hermes · preuves        ║
+╚════════════╤═════════════╝
+             │ sandbox · diff · tests · artefacts
+             ▼
+╔══════════════════════════╗
+║ V3 · Décision humaine   ║
+║ rôles · E2E             ║
+╚════════════╤═════════════╝
+             │ acceptation fonctionnelle et technique
+             ▼
+╔══════════════════════════╗
+║ V4 · Surfaces et pilote ║
+║ Web · Desktop · Mobile ║
+╚══════════════════════════╝
 ~~~
 
-Légende : P-E2E = preuve de bout en bout ; chaque flèche indique le critère de sortie obligatoire.
-Composants : parcours guidé, livraison isolée, validations humaines, Edge/Relay, qualité.
+Légende : chaque flèche indique le critère de sortie obligatoire ; P-E2E = preuve de bout en bout.
+Composants : contrat, tâche, livraison isolée, décision humaine et projections multi-surfaces.
 
-### Gate 0 — validation du parcours guidé
+### Gate V0 — alignement contractuel et Inbox
 
-- recruter trois PME, agences ou intégrateurs réunissant demandeur métier et développeur ;
-- faire formuler une tâche réelle par un demandeur métier sans Git, shell ni agent à configurer ;
-- prouver la reformulation, les exclusions, le plan et la validation avant exécution ;
-- persister la tâche, son projet, ses révisions et ses tentatives ;
-- fournir un résultat que le demandeur peut vérifier sans lire une pull request ;
-- prouver création, résultat et décision depuis le Web mobile ;
-- déployer ce workflow étroit chez un client par partenaire ;
-- rester sur des tâches supervisées et peu risquées ;
-- mesurer cadrage, temps jusqu'au résultat vérifiable, taux terminal, corrections, reprises manuelles,
-  coût et valeur livrée ;
-- obtenir un engagement payant avant la fleet.
+Action immédiate : synchroniser le Design Lab avec `TASKS-ET-INBOX.md`, puis appliquer le wording dans
+`design/src/pages/inbox-page.tsx`, `design/src/components/shell/product-shell.tsx` et
+`design/src/components/shell/context-pane.tsx`.
 
-La capture Telegram et la projection Buzz sont des expériences optionnelles : leur absence ne bloque
-pas la décision Gate 0 tant que le parcours cœur Web est accepté.
+Critères de sortie : quatre sections **Décisions à traiter**, **À reprendre**, **Brouillons à
+compléter**, **Activités en cours** ; titre `N actions à traiter` ou `File à jour` ; aucun « en
+attente de vous », « rien ne vous attend », « votre signature » ou « rien à faire » sans attribution
+serveur ; CTA `Nouvelle tâche` ; aucune ouverture d’Inbox ne crée de tentative Hermes.
 
-### Gate 1 — livraison logicielle sûre
+La projection reste sans état propre : elle consomme les résumés serveur paginés et expose les pannes
+partielles. P-E2E multi-persona et revue d’acceptation restent obligatoires avant le GO.
+
+### Gate V1 — contrat et workspace de tâche
+
+- garder le wizard actuel en quatre moments : demande/projet, compréhension inclus/exclus, plan/risques/
+  validations, création du contrat sans lancement automatique ;
+- faire du workspace de tâche la surface forte : objectif, résultat attendu, hors périmètre, plan,
+  décisions requises, tentative Hermes et panneau de preuves ;
+- remplacer progressivement les fixtures Design Lab par le DTO de tâche réel sans créer une seconde
+  vérité dans le client ;
+- prouver idempotence, révision courante et refus de lancement avant les décisions requises.
+
+### Actions V2 à V4
+
+1. **Livraison vérifiée :** relier la tâche à `/api/guided/tasks/:taskId/attempts`, figer révision,
+   dépôt et commit, exécuter dans la sandbox attribuée, produire diff/fichiers/tests/artefacts et
+   afficher la limite réelle de chaque preuve.
+2. **Décision humaine :** prouver séparément approbation de plan, outils, validation technique si
+   requise et validation fonctionnelle ; tester un demandeur non autorisé, un approbateur autorisé,
+   un refus et une reprise, avec audit corrélé.
+3. **Surfaces :** Web desktop comme autorité, Web mobile à 320 px pour créer/consulter/décider, Fold
+   rail + tâche, TriFold rail + tâche + preuves ; Tauri garde les détails runtime sans modifier le
+   modèle métier.
+4. **Pilote :** trois binômes réels, un dépôt non sensible par binôme, tâches supervisées et
+   réversibles ; mesurer temps de cadrage, temps vers preuve, taux de décision, corrections, coût et
+   interventions manuelles.
+
+La capture rapide reste une tranche ultérieure : elle crée un brouillon idempotent avec provenance et
+ne peut déclencher Hermes. Buzz/Telegram restent des adaptateurs postérieurs à l’acceptation Web.
+
+### Gate V2 — livraison logicielle sûre
 
 - figer la révision de spécification et le commit de base ;
 - isoler chaque tentative dans une sandbox et une branche attribuées ;
@@ -766,7 +965,7 @@ pas la décision Gate 0 tant que le parcours cœur Web est accepté.
 - E2E du parcours critique ;
 - tests réels du tunnel et de la synchronisation distante.
 
-### Gate 2 — validations métier et technique
+### Gate V3 — validations métier et technique
 
 - site/projet comme frontière minimale ;
 - rôles admin, operator, requester, approver, auditor ;
@@ -784,14 +983,17 @@ pas la décision Gate 0 tant que le parcours cœur Web est accepté.
 
 Ce palier promettait enrôlement court, identité mTLS, connexion sortante derrière NAT, inventaire
 multi-runtime et niveaux external/connected/managed. Aucune ligne de code n'a été écrite et il
-dépendait d'une Gate 2 elle-même non acceptée. Ses six stories sont supprimées, voir la section
+dépendait d'une Gate V3 elle-même non acceptée. Ses six stories sont supprimées, voir la section
 « Périmètre supprimé » de [`docs/user-stories/TRACEABILITY.md`](user-stories/TRACEABILITY.md).
 L'historique Git conserve leur rédaction si le besoin réapparaît.
 
 Le langage et le packaging de l’Edge ne sont pas décidés dans ce PRD. La preuve du besoin et le
 contrat de sécurité précèdent ce choix.
 
-### Gate 3 — qualité et coûts
+### Horizon post-Gate 2 : qualité et coûts, non normatif
+
+Ce backlog n'est pas une Gate, ne porte aucune story normative et ne rouvre pas l'ancienne Gate 3
+Edge/Relay supprimée. Il ne devient un périmètre de livraison qu'après décision produit explicite.
 
 - export OpenTelemetry/OpenInference ;
 - intégration Langfuse, Phoenix, LangSmith ou backend client ;
@@ -832,13 +1034,22 @@ La revue se fait après Gate 0. Sans engagement payant, la fleet ne démarre pas
 
 ## 16. Sources primaires marché et runtime
 
-Sources consultées le 31-07-2026 :
+Sources Multica consultées le 09-08-2026 :
+
+- [Multica, Issues : objet durable et relation avec les Tasks](https://multica.ai/docs/issues)
+- [Multica, Tasks : exécutions, triggers, états et retries](https://multica.ai/docs/tasks)
+- [Multica, Inbox : notifications humaines, abonnements et limites](https://multica.ai/docs/inbox)
+- [Multica, CLI et daemon : exécution locale et workspaces isolés](https://github.com/multica-ai/multica/blob/main/CLI_AND_DAEMON.md)
+- [Multica, licence avec conditions additionnelles](https://github.com/multica-ai/multica/blob/main/LICENSE)
+- [Multica, changelog : Quick Create et Inbox](https://multica.ai/changelog)
+
+Autres sources consultées le 31-07-2026 :
 
 - [Hermes CLI, dashboard et serve](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/reference/cli-commands.md)
 - [Hermes API Server](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/api-server.md)
 - [Hermes Desktop](https://github.com/NousResearch/hermes-agent/blob/main/apps/desktop/README.md)
 - [Hermes Security Policy](https://github.com/NousResearch/hermes-agent/security)
-- [Hermes Agent — licence MIT](https://github.com/NousResearch/hermes-agent)
+- [Hermes Agent, licence MIT](https://github.com/NousResearch/hermes-agent)
 - [Microsoft Foundry](https://learn.microsoft.com/en-us/azure/foundry/what-is-foundry)
 - [AWS Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/harness-vs-runtime.html)
 - [Google Vertex AI Agent Builder](https://cloud.google.com/agent-builder/agent-engine/manage/monitoring)
@@ -846,7 +1057,7 @@ Sources consultées le 31-07-2026 :
 - [LangSmith Enterprise](https://docs.langchain.com/langsmith/enterprise)
 - [Langfuse self-hosted](https://langfuse.com/pricing-self-host)
 - [OpenTelemetry GenAI semantic conventions](https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai)
-- [Commission européenne — cadre réglementaire IA](https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai)
+- [Commission européenne, cadre réglementaire IA](https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai)
 - [Règlement européen 2024/1689](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=celex:32024R1689)
 
 Les comparaisons de marché justifient le positionnement ; elles ne prouvent pas à elles seules une

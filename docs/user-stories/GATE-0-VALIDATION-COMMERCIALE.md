@@ -31,7 +31,7 @@ décisions.
 - **État :** `ACCEPTÉE` — **acceptée sous DER-001, sans revue contradictoire humaine** ; rejeu
   desktop courant positif/négatif et absence d'exécution prématurée prouvés. Cette décision ne
   resigne ni la tranche mobile, ni `US-G0-UX-002`, ni `US-G0-APPROVAL-001`.
-- **Dépendances :** auth locale ou session utilisateur valide, capacité `thread.create`.
+- **Dépendances :** auth locale ou session utilisateur valide, capacité `guided.task.create`.
 - **Scénario positif :** Étant donné un utilisateur sans vocabulaire technique, quand il choisit une
   intention, décrit un objectif, un résultat observable et un hors-périmètre, alors la Console affiche
   une compréhension et un plan avant de proposer le lancement.

@@ -92,6 +92,23 @@ export type GuidedTaskDto = {
   decisions: GuidedDecision[];
 };
 
+/** Projection minimale autorisée pour la liste Inbox. Le détail reste `GuidedTaskDto`. */
+export type GuidedInboxTaskSummary = {
+  id: string;
+  title: string;
+  status: GuidedTaskDto["status"];
+  projectName: string;
+  currentRevision: Pick<GuidedTaskRevision, "id" | "state" | "requiresTechnicalApproval"> | null;
+  latestAttempt: Pick<GuidedAttempt, "id" | "revisionId" | "status"> | null;
+  decisions: Array<Pick<GuidedDecision, "kind" | "outcome" | "attemptId">>;
+  updatedAt: string;
+};
+
+export type GuidedInboxPage = {
+  tasks: GuidedInboxTaskSummary[];
+  page: { hasMore: boolean; nextCursor: string | null };
+};
+
 export class GuidedTaskContractError extends Error {
   constructor(readonly code: string, message: string) {
     super(`${code}: ${message}`);

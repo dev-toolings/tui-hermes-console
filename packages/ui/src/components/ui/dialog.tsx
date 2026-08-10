@@ -14,15 +14,32 @@ type DialogProps = {
   footer?: React.ReactNode
   className?: string
   showClose?: boolean
+  role?: "dialog" | "alertdialog"
+  closeLabel?: string
 }
 
 const EXIT_MS = 150
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",")
 
-export function Dialog({ open, onClose, title, description, children, footer, className, showClose = true }: DialogProps) {
+export function Dialog({ open, onClose, title, description, children, footer, className, showClose = true, role = "dialog", closeLabel = "Close dialog" }: DialogProps) {
   const [render, setRender] = React.useState(open)
   const [shown, setShown] = React.useState(false)
   const titleId = React.useId()
   const descriptionId = React.useId()
+  const dialogRef = React.useRef<HTMLDivElement>(null)
+  const previousFocusRef = React.useRef<HTMLElement | null>(null)
+  const onCloseRef = React.useRef(onClose)
+
+  React.useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
 
   // enter / exit lifecycle: mount → next frame fade/scale in; on close, fade out then unmount.
   React.useEffect(() => {
@@ -37,20 +54,64 @@ export function Dialog({ open, onClose, title, description, children, footer, cl
     return () => window.clearTimeout(t)
   }, [open])
 
-  // escape + body scroll lock while open
+  // Focus ownership, keyboard containment and body scroll lock while mounted.
   React.useEffect(() => {
     if (!render) return
+
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+
+    const focusFrame = requestAnimationFrame(() => {
+      const dialog = dialogRef.current
+      if (!dialog) return
+      const preferred = dialog.querySelector<HTMLElement>("[data-dialog-autofocus]")
+      const firstFocusable = dialog.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+      ;(preferred ?? firstFocusable ?? dialog).focus()
+    })
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
+      if (e.key === "Escape") {
+        e.preventDefault()
+        onCloseRef.current()
+        return
+      }
+      if (e.key !== "Tab") return
+
+      const dialog = dialogRef.current
+      if (!dialog) return
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+      ).filter((element) => element.getClientRects().length > 0)
+
+      if (focusable.length === 0) {
+        e.preventDefault()
+        dialog.focus()
+        return
+      }
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const active = document.activeElement
+      if (e.shiftKey && (active === first || !dialog.contains(active))) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && (active === last || !dialog.contains(active))) {
+        e.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener("keydown", onKey)
     const prev = document.body.style.overflow
     document.body.style.overflow = "hidden"
     return () => {
+      cancelAnimationFrame(focusFrame)
       document.removeEventListener("keydown", onKey)
       document.body.style.overflow = prev
+      const previousFocus = previousFocusRef.current
+      previousFocusRef.current = null
+      if (previousFocus?.isConnected) previousFocus.focus()
     }
-  }, [render, onClose])
+  }, [render])
 
   if (!render) return null
 
@@ -63,7 +124,9 @@ export function Dialog({ open, onClose, title, description, children, footer, cl
       onClick={onClose}
     >
       <div
-        role="dialog"
+        ref={dialogRef}
+        role={role}
+        tabIndex={-1}
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         aria-describedby={description ? descriptionId : undefined}
@@ -84,7 +147,7 @@ export function Dialog({ open, onClose, title, description, children, footer, cl
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="Close dialog"
+                aria-label={closeLabel}
                 className="-mt-1 -mr-1.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
               >
                 <XIcon className="size-4" />

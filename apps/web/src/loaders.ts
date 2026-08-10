@@ -19,11 +19,38 @@ import {
   fetchLifecyclePolicy,
   fetchRuntime,
   fetchRuntimeProbe,
+  fetchGuidedTasks,
+  fetchInboxMissions,
   fetchSkills,
   fetchStorage,
   fetchThreads,
 } from "@/lib/api";
 import { readPersonaCapabilities } from "@/lib/persona-capabilities";
+
+/**
+ * L'Inbox lit son résumé de tâches guidées et les missions.
+ * Chaque source est conditionnée à sa capacité, comme le reste de la Console,
+ * pour qu'un persona sans droit de lecture reçoive une file vide plutôt qu'une
+ * erreur.
+ */
+export async function loadInbox() {
+  const capabilities = readPersonaCapabilities();
+  // Deux sources indépendantes, isolées l'une de l'autre : une panne ne doit
+  // pas effacer les résultats déjà disponibles de l'autre.
+  const [tasks, missions] = await Promise.allSettled([
+    capabilities.has("guided.task.read") ? fetchGuidedTasks() : Promise.resolve({ tasks: [], page: { hasMore: false, nextCursor: null } }),
+    capabilities.has("thread.read") ? fetchInboxMissions() : Promise.resolve({ missions: [], page: { hasMore: false, nextCursor: null } }),
+  ]);
+  return {
+    tasks: tasks.status === "fulfilled" ? tasks.value.tasks : [],
+    page: tasks.status === "fulfilled" ? tasks.value.page : { hasMore: false, nextCursor: null },
+    missions: missions.status === "fulfilled" ? missions.value.missions : [],
+    missionPage: missions.status === "fulfilled" ? missions.value.page : { hasMore: false, nextCursor: null },
+    degraded:
+      tasks.status === "rejected" || missions.status === "rejected",
+  };
+}
+export type InboxData = Awaited<ReturnType<typeof loadInbox>>;
 
 export async function loadDashboard() {
   const [agents, threads, activity] = await Promise.all([
