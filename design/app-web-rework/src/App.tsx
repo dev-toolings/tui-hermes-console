@@ -24,6 +24,7 @@ import {
 import { useAppHeight } from "./components/mobile/use-app-height";
 import { useMediaQuery } from "./components/mobile/use-media-query";
 import { useChannelReadCounts } from "./state/channel-reads";
+import { missionById } from "./state/mission-events";
 import {
   applyUpdate,
   isStandalone,
@@ -175,6 +176,10 @@ const routeMeta: Record<string, { label: string; subtitle: string }> = {
   "/menu": { label: "Menu", subtitle: "Toutes les vues de la console" },
   "/inbox": { label: "File", subtitle: "Éléments à traiter" },
   "/channels": { label: "Salons", subtitle: "Discussions locales de l'espace" },
+  "/missions": {
+    label: "Missions",
+    subtitle: "Une timeline par mission, décisions en tête",
+  },
   "/tasks/new": {
     label: "Nouvelle tâche",
     subtitle: "Lancer une mission avec une intention vérifiable",
@@ -1020,7 +1025,9 @@ function Shell() {
   const sidebarCollapsed = collapsed || railOnly;
   const pathname = location.pathname.startsWith("/inbox/")
     ? "/inbox"
-    : location.pathname;
+    : location.pathname.startsWith("/missions/")
+      ? "/missions"
+      : location.pathname;
   const channelId = decodeChannelId(location.pathname);
   const channel = channels.find((entry) => entry.id === channelId);
   const detailItem = location.pathname.startsWith("/inbox/")
@@ -1038,6 +1045,9 @@ function Shell() {
     workspaceId: activeWorkspace.id,
     channelName: channel?.name,
     itemTitle: detailItem?.title,
+    missionName: location.pathname.startsWith("/missions/")
+      ? missionById(decodeURIComponent(location.pathname.split("/")[2] ?? ""))?.name
+      : undefined,
   });
   const openSearch = () => window.dispatchEvent(new Event("hermes:open-search"));
   const openChannelDetails = () => {

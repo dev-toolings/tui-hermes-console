@@ -1,0 +1,374 @@
+/* Mission surface: one timeline, three levels of loudness.
+   The ladder is expressed as tokens so a renderer only reads `noise`, never a
+   per-kind exception. Tonal first: a fold is a sunken surface, not a border. */
+
+.mission-page {
+  --event-decision-surface: var(--card);
+  --event-decision-edge: var(--border-control);
+  --event-fact-gutter: 68px;
+  --event-trace-surface: var(--surface-sunken);
+  --mission-gap: 2px;
+
+  container-type: inline-size;
+  container-name: mission;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* --- Gate ---------------------------------------------------------------- */
+
+.mission-gate {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--event-decision-edge);
+  border-radius: 14px;
+  background: var(--event-decision-surface);
+  box-shadow: var(--shadow-card);
+  padding: 16px;
+}
+
+.mission-gate--danger {
+  border-color: color-mix(in srgb, var(--state-neg-fg) 45%, transparent);
+  background: var(--state-neg-soft);
+}
+
+.mission-gate--settled {
+  position: static;
+  opacity: 0.72;
+}
+
+.mission-gate__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  font-weight: 500;
+  letter-spacing: 0.15px;
+  color: var(--state-neg-fg);
+}
+
+.mission-gate--settled .mission-gate__eyebrow {
+  color: var(--muted-foreground);
+}
+
+.mission-gate__title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.mission-gate__detail {
+  margin: 0;
+  max-width: 70ch;
+  font-size: var(--text-row);
+  line-height: var(--text-row-lh);
+  color: var(--muted-foreground);
+}
+
+/* Blast radius: the numbers an operator needs before an irreversible click. */
+.mission-gate__radius {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--border-separator);
+}
+
+.mission-gate__radius > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--panel);
+  padding: 8px 10px;
+}
+
+.mission-gate__radius dt {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  color: var(--muted-foreground);
+}
+
+.mission-gate__radius dd {
+  margin: 0;
+  font-family: var(--font-jetbrains);
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  color: var(--foreground);
+}
+
+.mission-gate__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mission-gate__actions button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border-control);
+  background: var(--control);
+  padding: 0 12px;
+  font-size: var(--text-row);
+  font-weight: 500;
+  color: var(--foreground);
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.mission-gate__actions button:hover {
+  background: var(--surface-hover);
+}
+
+.mission-gate__actions .is-approve {
+  border-color: transparent;
+  background: var(--gradient-primary);
+  color: var(--accent-contrast);
+  box-shadow: var(--shadow-btn-primary);
+}
+
+.mission-gate__actions .is-approve:hover {
+  background: var(--gradient-primary-hover);
+}
+
+.mission-gate__actions .is-refuse {
+  border-color: color-mix(in srgb, var(--state-neg-fg) 45%, transparent);
+  color: var(--state-neg-fg);
+}
+
+.mission-gate__note {
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  color: var(--muted-foreground);
+}
+
+/* --- Lenses -------------------------------------------------------------- */
+
+.mission-lenses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-separator);
+  padding-bottom: 8px;
+}
+
+.mission-lenses button {
+  min-height: 32px;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  font-weight: 500;
+  color: var(--muted-foreground);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.mission-lenses button:hover {
+  background: var(--surface-hover);
+  color: var(--foreground);
+}
+
+.mission-lenses button[aria-pressed="true"] {
+  background: var(--surface-raised);
+  color: var(--foreground);
+}
+
+/* --- Timeline ------------------------------------------------------------ */
+
+/* No scroll container of its own: the page scrolls in `main`, which is what
+   lets the gate stay sticky above the stream instead of inside a nested box. */
+.mission-timeline {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--mission-gap);
+  padding-bottom: 8px;
+}
+
+.mission-day {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0 6px;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  color: var(--muted-foreground);
+}
+
+.mission-day::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--border-separator);
+}
+
+/* A fact is one line: time gutter, actor, sentence, optional technical value. */
+.mission-fact {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: var(--text-row);
+  line-height: var(--text-row-lh);
+}
+
+.mission-fact:hover {
+  background: var(--surface-hover);
+}
+
+.mission-fact__time {
+  font-family: var(--font-jetbrains);
+  font-size: var(--text-meta);
+  color: var(--text-tertiary);
+}
+
+.mission-fact__actor {
+  margin-inline-end: 6px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.mission-fact__actor[data-kind="agent"] {
+  color: var(--accent-600);
+}
+
+.mission-fact__actor[data-kind="system"] {
+  color: var(--muted-foreground);
+}
+
+.mission-fact__body {
+  min-width: 0;
+  color: var(--foreground);
+}
+
+.mission-fact__detail {
+  color: var(--muted-foreground);
+}
+
+.mission-fact__value {
+  display: inline-block;
+  border-radius: 6px;
+  background: var(--surface-sunken);
+  padding: 0 6px;
+  font-family: var(--font-jetbrains);
+  font-size: var(--text-meta);
+  color: var(--muted-foreground);
+}
+
+/* A trace is a fold. Closed it costs one line whatever the run produced. */
+.mission-trace {
+  border-radius: 8px;
+  background: var(--event-trace-surface);
+}
+
+.mission-trace__summary {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 6px 8px;
+  text-align: start;
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  color: var(--muted-foreground);
+}
+
+.mission-trace__summary:hover {
+  color: var(--foreground);
+}
+
+.mission-trace__label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.mission-trace__count {
+  font-family: var(--font-jetbrains);
+  color: var(--foreground);
+}
+
+.mission-trace__list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-separator);
+  padding: 4px 8px 8px;
+}
+
+.mission-trace__row {
+  display: grid;
+  grid-template-columns: 52px 92px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  color: var(--muted-foreground);
+}
+
+.mission-trace__row code {
+  font-family: var(--font-jetbrains);
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
+.mission-empty {
+  padding: 32px 8px;
+  text-align: center;
+  font-size: var(--text-row);
+  color: var(--muted-foreground);
+}
+
+/* --- Container response --------------------------------------------------
+   The column reacts to its own width, not to the viewport: opening the context
+   panel narrows it exactly like a smaller screen does. */
+
+@container mission (max-width: 560px) {
+  .mission-fact,
+  .mission-trace__summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mission-fact__time,
+  .mission-trace__summary > .mission-fact__time {
+    display: none;
+  }
+
+  .mission-trace__row {
+    grid-template-columns: 84px minmax(0, 1fr);
+  }
+
+  .mission-trace__row > .mission-fact__time {
+    display: none;
+  }
+
+  .mission-gate__actions button {
+    flex: 1 1 140px;
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mission-gate__actions button,
+  .mission-lenses button {
+    transition: none;
+  }
+}
