@@ -10,7 +10,9 @@ livré et vérifié localement : demande, plan, dépôt et commit gelés, worktr
 diff, preuves SHA-256 et validations plan/technique/outils/fonctionnelle distinctes. Agents, threads,
 runtime config, cancel/retry/approvals et artefacts (`HERMES_SHARED_WORKDIR`) restent en place. Axe
 produit : Buzz / Multica / hermes-webui sont une inspiration, pas des clones ; détails dans
-[`docs/PRD.md`](docs/PRD.md) et [`PRODUCT.md`](PRODUCT.md).
+[`docs/PRD.md`](docs/PRD.md) et [`PRODUCT.md`](PRODUCT.md). La veille sur Buzz, Hermes Desktop et
+hermes-webui, avec les dépôts à rouvrir et la procédure de revue, vit dans
+[`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 
 ```text
 Console = control plane + surface de travail
