@@ -4,6 +4,10 @@ node_modules/
 # Identifiants de test en clair — ne doit jamais partir dans un commit
 auth.md
 *.png
+!design/app-web-rework/public/apple-touch-icon.png
+!design/app-web-rework/public/icon-192.png
+!design/app-web-rework/public/icon-512.png
+!design/app-web-rework/public/icon-maskable-512.png
 *.jpg
 *.jpeg
 *.gif
