@@ -18,7 +18,7 @@ import {
 import { Modal, ModalButton } from "./components/ui/modal";
 import { MembersDialog } from "./components/members/members-dialog";
 import { MobileHeader, MobileHeaderAction } from "./components/mobile/mobile-header";
-import { MobileBottomNav } from "./components/mobile/mobile-bottom-nav";
+import { MobileNavDrawer } from "./components/mobile/mobile-nav-drawer";
 import {
   decodeChannelId,
   mobileTabForPath,
@@ -39,6 +39,7 @@ import {
 import {
   ATTENTION_LABEL,
   channelAttention,
+  channelAttentionSummary,
   formatElapsed,
   ATTENTION_ORDER,
 } from "./state/channel-attention";
@@ -105,6 +106,7 @@ import {
   CircleHelpIcon,
   Clock3Icon,
   FilterIcon,
+  MenuIcon,
   MoonIcon,
   MoreHorizontalIcon,
   PlusIcon,
@@ -1210,6 +1212,7 @@ function Shell() {
   const navigate = useNavigate();
   const mainScrollRef = useRef<HTMLElement>(null);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [navDrawerOpen, setNavDrawerOpen] = useState(false);
   useAppHeight();
   // Offcanvas from 1024px up, exactly like shadcn `dashboard-01`: the panel is
   // either present at full width or slid out. Below 1024px the mobile stack owns
@@ -1264,58 +1267,51 @@ function Shell() {
     Boolean(params.get("thread")) || params.get("details") === "1";
   const mobileTab = mobileTabForPath(barePath);
   const assistantRoute = barePath === "/hermes" || barePath.startsWith("/hermes/");
-  // Hermes is a tab you enter, not a tab you sit in: the conversation takes the
-  // full height and the bar leaves, so the composer never competes with it.
-  const mobileRoot = ["/activity", "/inbox"].includes(barePath);
-  const mobileFab =
+  // The primary action of a screen belongs to its header, not to a floating
+  // button: nothing is pinned over the content and the thumb keeps the fold.
+  const mobilePrimaryAction =
     barePath === "/channels"
       ? {
           label: "Créer un canal",
           onClick: () => window.dispatchEvent(new Event("hermes:create-channel")),
         }
       : barePath === "/activity" || barePath === "/inbox" || barePath === "/missions"
-        ? {
-            label: "Nouvelle tâche",
-            onClick: openTaskDialog,
-          }
+        ? { label: "Nouvelle tâche", onClick: openTaskDialog }
         : null;
+  const searchAction = (
+    <MobileHeaderAction label="Rechercher" onClick={openSearch}>
+      <SearchIcon className="size-4" />
+    </MobileHeaderAction>
+  );
+  const primaryAction = mobilePrimaryAction ? (
+    <MobileHeaderAction
+      label={mobilePrimaryAction.label}
+      onClick={mobilePrimaryAction.onClick}
+    >
+      <PlusIcon className="size-5" />
+    </MobileHeaderAction>
+  ) : null;
   const mobileActions =
     channel && !inChannelPanel ? (
       <>
-        <MobileHeaderAction label="Rechercher" onClick={openSearch}>
-          <SearchIcon className="size-4" />
-        </MobileHeaderAction>
+        {searchAction}
         <MobileHeaderAction label="Informations du canal" onClick={openChannelDetails}>
           <InfoIcon className="size-4" />
         </MobileHeaderAction>
       </>
-    ) : pathname === "/inbox" ? (
+    ) : (
       <>
-        <MobileHeaderAction label="Rechercher" onClick={openSearch}>
-          <SearchIcon className="size-4" />
-        </MobileHeaderAction>
-        <MobileHeaderAction
-          label="Ouvrir le menu et le profil"
-          onClick={() => navigate(orgPath(activeWorkspace.id, "/menu"))}
-        >
-          <span className="inline-flex size-7 items-center justify-center rounded-full bg-[var(--accent-200)] text-[10px] font-semibold text-[var(--accent-700)]">
-            {profile.name
-              .split(" ")
-              .map((part) => part[0])
-              .join("")
-              .slice(0, 2)
-              .toUpperCase()}
-          </span>
-        </MobileHeaderAction>
+        {searchAction}
+        {primaryAction}
       </>
-    ) : pathname === "/activity" ? (
-      <MobileHeaderAction label="Rechercher" onClick={openSearch}>
-        <SearchIcon className="size-4" />
-      </MobileHeaderAction>
-    ) : null;
+    );
   useEffect(() => {
     document.title = `Hermes Console — ${meta.label}`;
   }, [meta.label]);
+  // Navigating is what a drawer is for, so reaching a new screen closes it.
+  useEffect(() => {
+    setNavDrawerOpen(false);
+  }, [location.pathname]);
   useEffect(() => {
     if (!mobileTab) return;
     const frame = window.requestAnimationFrame(() => {
@@ -1371,7 +1367,18 @@ function Shell() {
             conversation), so the stack header would only stack a second title
             bar on top of it. */}
         {assistantRoute ? null : (
-          <MobileHeader stack={stack} actions={mobileActions} />
+          <MobileHeader
+            stack={stack}
+            actions={mobileActions}
+            leading={
+              <MobileHeaderAction
+                label="Ouvrir la navigation"
+                onClick={() => setNavDrawerOpen(true)}
+              >
+                <MenuIcon className="size-5" />
+              </MobileHeaderAction>
+            }
+          />
         )}
         {!channel && (
           <header className="desktop-content-header sticky top-0 z-30 hidden h-12 shrink-0 items-center justify-between gap-1 border-b border-[var(--border)] bg-[var(--panel)] px-4 lg:flex lg:gap-2 lg:px-6">
@@ -1413,30 +1420,37 @@ function Shell() {
             className={
               channel || assistantRoute
                 ? "flex min-h-0 flex-1 flex-col"
-                : `w-full p-3 ${mobileRoot ? "mobile-root-content" : ""} pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:p-4`
+                : "mobile-content"
             }
           >
             <Outlet key={activeWorkspace.id} />
           </div>
         </main>
-        {mobileFab ? (
-          <button
-            type="button"
-            aria-label={mobileFab.label}
-            className="mobile-fab lg:hidden"
-            onClick={mobileFab.onClick}
-          >
-            <PlusIcon aria-hidden="true" className="size-5" />
-          </button>
-        ) : null}
         <TaskDialog open={taskDialogOpen} onClose={closeTaskDialog} />
-        {mobileRoot ? (
-          <MobileBottomNav
-            workspaceId={activeWorkspace.id}
-            pendingItems={items.filter((item) => !item.read).length}
-          />
-        ) : null}
       </div>
+      <MobileNavDrawer
+        open={navDrawerOpen}
+        onClose={() => setNavDrawerOpen(false)}
+        label="Navigation workspace"
+      >
+        <WorkspaceSidebar
+          variant="drawer"
+          workspaces={workspaces}
+          activeWorkspace={activeWorkspace}
+          profile={profile}
+          onWorkspaceChange={changeWorkspace}
+          members={members}
+          pendingCount={items.filter((item) => !item.read).length}
+          collapsed={false}
+          dark={dark}
+          setDark={setDark}
+          channels={channels}
+          channelCategories={channelCategories}
+          channelMessageCounts={channelMessageCounts}
+          createChannel={createChannel}
+          channelActions={channelActions}
+        />
+      </MobileNavDrawer>
     </div>
   );
 }
@@ -2033,16 +2047,12 @@ export function ChannelsPage() {
                   const runningMission = attention.missions.find(
                     (mission) => mission.status === "running",
                   );
-                  const detail =
-                    attention.state === "decision"
-                      ? `${attention.gates.length} décision${attention.gates.length > 1 ? "s" : ""} en attente · ${attention.gates[0].mission.name}`
-                      : attention.state === "question"
-                        ? `Réponse attendue · ${attention.missions[0].name}`
-                        : attention.state === "working" && runningMission
-                          ? `${runningMission.agent} actif · ${runningMission.name}`
-                          : last
-                            ? `${last.author} : ${last.body || "pièce jointe"}`
-                            : channel.topic || "Aucun message";
+                  const detail = channelAttentionSummary(
+                    attention,
+                    last
+                      ? `${last.author} : ${last.body || "pièce jointe"}`
+                      : channel.topic || "Aucun message",
+                  );
                   return (
                     <div
                       key={channel.id}

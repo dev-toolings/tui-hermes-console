@@ -56,8 +56,22 @@
   --text-meta-lh: 15px;
   --row-h: 32px;
   --row-h-lg: 36px;
+  /* Touch row: one height for every tappable list line on mobile. */
+  --row-h-touch: 52px;
   --icon: 16px;
   --icon-lg: 20px;
+
+  /* Spacing scale, base 4. Dense surfaces stay on --space-1..3; --space-4 and
+     above separate blocks. Nothing outside this scale should appear in CSS. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  /* Minimum comfortable touch target, per the mobile guidelines. */
+  --touch-target: 44px;
 
   /* BoardUI semantic color system, manual light is the initial theme.
      Keep the light surfaces neutral like the reference UI; the previous

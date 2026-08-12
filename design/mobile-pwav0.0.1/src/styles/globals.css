@@ -29,6 +29,65 @@
   button:disabled { cursor: default; }
 }
 
+/*
+ * Scrollbars. The platform default is a wide, high-contrast bar that reads as
+ * a border on a 240px panel. Every scrolling surface gets a thin one that
+ * only gains contrast while the area is hovered, so a long list stays legible
+ * at rest and still says "there is more" when the pointer arrives.
+ *
+ * `scrollbar-gutter: stable` reserves the track: without it, content shifts
+ * sideways the moment a list becomes long enough to scroll.
+ */
+@supports (scrollbar-width: thin) {
+  .app-shell *,
+  .mobile-drawer * {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .app-shell *:hover,
+  .app-shell *:focus-within,
+  .mobile-drawer *:hover {
+    scrollbar-color: var(--border-control) transparent;
+  }
+}
+/* WebKit ignores scrollbar-color below Safari 18, hence the twin rules. */
+.app-shell ::-webkit-scrollbar,
+.mobile-drawer ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.app-shell ::-webkit-scrollbar-track,
+.mobile-drawer ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.app-shell ::-webkit-scrollbar-thumb,
+.mobile-drawer ::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  background-clip: content-box;
+  transition: background-color 140ms ease-out;
+}
+.app-shell *:hover > ::-webkit-scrollbar-thumb,
+.app-shell *:hover::-webkit-scrollbar-thumb,
+.app-shell *:focus-within::-webkit-scrollbar-thumb,
+.mobile-drawer *:hover::-webkit-scrollbar-thumb {
+  background: var(--border-control);
+  background-clip: content-box;
+}
+.app-shell ::-webkit-scrollbar-thumb:hover,
+.mobile-drawer ::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+  background-clip: content-box;
+}
+/* Touch surfaces have overlay scrollbars already; nothing to reserve there. */
+@media (hover: hover) and (pointer: fine) {
+  .app-shell [class*="overflow-y-"],
+  .mobile-drawer [class*="overflow-y-"] {
+    scrollbar-gutter: stable;
+  }
+}
+
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 /* Fields already answer focus with a border + halo of their own; the global
    outline would stack a third ring on top and read as a bug. */

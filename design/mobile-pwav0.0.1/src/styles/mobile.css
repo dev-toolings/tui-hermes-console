@@ -6,7 +6,9 @@
 
 :root {
   --mobile-header-h: 52px;
-  --mobile-bottom-nav-h: 64px;
+  /* Single source for the content gutter: surfaces that bleed to the edges
+     (.mobile-inbox) cancel it from here instead of re-typing the value. */
+  --mobile-content-pad: var(--space-3);
 }
 
 /* The shell tracks the visual viewport so the virtual keyboard cannot push the
@@ -28,25 +30,29 @@
   background: var(--panel);
   padding-top: env(safe-area-inset-top);
 }
+/* Symmetric side columns: the title is centred on the bar, not on whatever the
+   left slot happens to hold, so it does not shift between screens. */
 .mobile-header__bar {
   display: grid;
   height: var(--mobile-header-h);
   align-items: center;
-  gap: 4px;
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
-  padding-inline: 4px;
+  gap: var(--space-1);
+  grid-template-columns:
+    minmax(var(--touch-target), auto) minmax(0, 1fr)
+    minmax(var(--touch-target), auto);
+  padding-inline: var(--space-1);
 }
 .mobile-header__back {
   display: inline-flex;
   max-width: 40vw;
-  min-height: 44px;
+  min-height: var(--touch-target);
   align-items: center;
-  gap: 1px;
+  gap: var(--space-1);
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--accent-600);
-  padding: 0 6px 0 2px;
+  padding-inline: var(--space-1);
   font-size: var(--text-row);
   line-height: var(--text-row-lh);
   font-weight: 500;
@@ -56,7 +62,7 @@
 }
 .mobile-header__spacer {
   display: block;
-  width: 6px;
+  width: var(--touch-target);
 }
 .mobile-header__title {
   overflow: hidden;
@@ -74,17 +80,17 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 2px;
+  gap: var(--space-1);
 }
 .mobile-header__action {
   display: inline-flex;
-  width: 44px;
-  height: 44px;
+  width: var(--touch-target);
+  height: var(--touch-target);
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--muted-foreground);
 }
@@ -92,23 +98,42 @@
   background: var(--surface-hover);
   color: var(--foreground);
 }
+.mobile-header__action:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+/* Content gutter of every scrolling screen. */
+.mobile-content {
+  width: 100%;
+  padding: var(--mobile-content-pad);
+  padding-bottom: max(
+    var(--mobile-content-pad),
+    env(safe-area-inset-bottom)
+  );
+}
+@media (min-width: 1024px) {
+  .mobile-content {
+    --mobile-content-pad: var(--space-4);
+  }
+}
 
 /* Grouped lists: the mobile counterpart of the desktop tables and sidebars. */
 /* Sits inside the shell's own padding, so it only owns vertical rhythm. */
 .mobile-stack {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 .mobile-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
 }
 .mobile-group__label {
   margin: 0;
   color: var(--muted-foreground);
-  padding-inline: 4px;
+  padding-inline: var(--space-1);
   font-size: var(--text-label);
   line-height: var(--text-label-lh);
   font-weight: 500;
@@ -117,20 +142,20 @@
 .mobile-list {
   overflow: hidden;
   border: 1px solid var(--border-card);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--card);
   box-shadow: var(--shadow-card);
 }
 .mobile-row {
   display: flex;
   width: 100%;
-  min-height: var(--row-h);
+  min-height: var(--row-h-touch);
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   border: 0;
   background: transparent;
   color: var(--foreground);
-  padding: 5px 8px;
+  padding: var(--space-2) var(--space-3);
   text-align: left;
   transition: background-color 120ms ease-out;
 }
@@ -145,12 +170,12 @@
 }
 .mobile-row__icon {
   display: inline-flex;
-  width: 22px;
-  height: 22px;
+  width: var(--space-6);
+  height: var(--space-6);
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--muted-foreground);
 }
@@ -159,6 +184,11 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
+}
+/* A list mixes rows with and without an icon; the text column stays put so the
+   group reads as one list instead of two ragged ones. */
+.mobile-list .mobile-row:not(:has(.mobile-row__icon)) .mobile-row__body {
+  padding-left: calc(var(--space-6) + var(--space-2));
 }
 .mobile-row__title {
   overflow: hidden;
@@ -176,61 +206,73 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Toggle sized on the row scale (22px icon, 24px control), not iOS-scale. */
+/* Mirrors the shadcn Switch: 32x18 track, 16px thumb, 1px transparent border. */
 .mobile-switch {
   position: relative;
   display: inline-flex;
-  width: 44px;
-  height: 24px;
+  width: 32px;
+  height: 18px;
+  /* Opts out of the coarse-pointer 44px min-size: the ::after carries it. */
+  min-width: 0;
+  min-height: 0;
   flex: 0 0 auto;
-  border: 0;
+  align-items: center;
+  border: 1px solid transparent;
   border-radius: 999px;
   background: var(--input);
   padding: 0;
-  transition: background-color 140ms ease-out;
+  box-shadow: var(--shadow-xs);
+  outline: none;
+  transition:
+    background-color 140ms ease-out,
+    box-shadow 140ms ease-out;
 }
 /* Keeps a 44px touch target without inflating the row. */
 .mobile-switch::after {
   content: "";
   position: absolute;
-  inset: -10px -8px;
+  inset: -13px -6px;
+}
+.mobile-switch:focus-visible {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
 }
 .mobile-switch[aria-checked="true"] {
   background: var(--accent-600);
 }
 .mobile-switch__thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 20px;
-  height: 20px;
+  display: block;
+  width: 16px;
+  height: 16px;
   border-radius: 999px;
-  background: #ffffff;
-  box-shadow: var(--shadow-xs);
+  background: var(--accent-contrast);
   transition: transform 140ms ease-out;
 }
 .mobile-switch[aria-checked="true"] .mobile-switch__thumb {
-  transform: translateX(20px);
+  transform: translateX(14px);
 }
 .mobile-row__meta {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   color: var(--text-tertiary);
   font-size: var(--text-label);
+  line-height: var(--text-label-lh);
 }
+/* Count pill. Never tappable on its own, so it stays off the touch scale. */
 .mobile-badge {
   display: inline-flex;
-  min-width: 18px;
-  height: 16px;
+  min-width: var(--space-5);
+  height: var(--space-4);
   align-items: center;
   justify-content: center;
   border-radius: 999px;
   background: var(--accent-600);
   color: var(--accent-contrast);
-  padding-inline: 5px;
-  font-size: 10px;
+  padding-inline: var(--space-1);
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -240,10 +282,10 @@
   display: flex;
   width: 100%;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-2);
   border: 0;
   background: transparent;
-  padding: 8px;
+  padding: var(--space-3);
   text-align: left;
 }
 .mobile-card + .mobile-card {
@@ -254,10 +296,10 @@
 }
 .mobile-card__dot {
   display: block;
-  width: 6px;
-  height: 6px;
+  width: var(--space-2);
+  height: var(--space-2);
   flex: 0 0 auto;
-  margin-top: 6px;
+  margin-top: var(--space-1);
   border-radius: 999px;
 }
 .mobile-card__title {
@@ -269,7 +311,7 @@
   overflow-wrap: anywhere;
 }
 .mobile-card__context {
-  margin: 2px 0 0;
+  margin: var(--space-1) 0 0;
   color: var(--muted-foreground);
   font-size: var(--text-label);
   line-height: var(--text-label-lh);
@@ -278,86 +320,94 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin-top: 6px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
-.mobile-bottom-nav {
-  position: sticky;
-  z-index: 45;
-  bottom: 0;
-  display: grid;
-  min-height: calc(var(--mobile-bottom-nav-h) + env(safe-area-inset-bottom));
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-top: 1px solid var(--border);
-  background: var(--panel);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-.mobile-bottom-nav__item {
-  display: flex;
-  width: 100%;
-  min-height: var(--mobile-bottom-nav-h);
-  min-width: 0;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  color: var(--muted-foreground);
-  font-size: 10px;
-  font-weight: 600;
-  border: 0;
-  background: transparent;
-  padding: 4px;
-}
-.mobile-bottom-nav__item:active { background: var(--surface-hover); }
-.mobile-bottom-nav__item.is-active { color: var(--accent-600); }
-.mobile-bottom-nav__item:focus-visible,
-.mobile-header__action:focus-visible,
 .mobile-header__back:focus-visible,
 .mobile-row:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: -2px;
 }
-.mobile-bottom-nav__icon { position: relative; display: inline-flex; }
-.mobile-bottom-nav__badge {
-  position: absolute;
-  top: -6px;
-  right: -10px;
-  display: inline-flex;
-  min-width: 15px;
-  height: 15px;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid var(--panel);
-  border-radius: 999px;
-  background: var(--accent-600);
-  color: var(--accent-contrast);
-  padding-inline: 3px;
-  font-size: 9px;
-  font-variant-numeric: tabular-nums;
-}
-.mobile-fab {
+
+/* Navigation drawer. It overlays the shell instead of pushing it, so the
+   layout underneath keeps its geometry while the drawer is open. */
+.mobile-drawer {
+  --mobile-drawer-progress: 0;
   position: fixed;
-  z-index: 46;
-  right: 16px;
-  bottom: calc(var(--mobile-bottom-nav-h) + env(safe-area-inset-bottom) + 12px);
+  z-index: 60;
+  inset: 0;
+  visibility: hidden;
+  transition: visibility 0s linear 200ms;
+}
+.mobile-drawer[data-open] {
+  visibility: visible;
+  transition-delay: 0s;
+}
+.mobile-drawer__backdrop {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border: 0;
+  background: color-mix(in srgb, var(--foreground) 42%, transparent);
+  opacity: var(--mobile-drawer-progress);
+  pointer-events: none;
+  transition: opacity 200ms ease-out;
+}
+.mobile-drawer[data-open] .mobile-drawer__backdrop {
+  pointer-events: auto;
+}
+.mobile-drawer__panel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  width: min(88vw, 20rem);
+  flex-direction: column;
+  background: var(--sidebar);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 8px 0 20px color-mix(in srgb, var(--foreground) 16%, transparent);
+  touch-action: pan-y;
+  transform: translate3d(calc((var(--mobile-drawer-progress) - 1) * 100%), 0, 0);
+  transition: transform 200ms cubic-bezier(.22, 1, .36, 1);
+}
+.mobile-drawer[data-open] {
+  --mobile-drawer-progress: 1;
+}
+.mobile-drawer[data-dragging] .mobile-drawer__panel,
+.mobile-drawer[data-dragging] .mobile-drawer__backdrop {
+  transition: none;
+}
+.mobile-drawer__bar {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding: var(--space-1) var(--space-1) 0;
+}
+.mobile-drawer__close {
   display: inline-flex;
-  width: 44px;
-  height: 44px;
+  width: var(--touch-target);
+  height: var(--touch-target);
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 999px;
-  background: var(--accent-600);
-  color: var(--accent-contrast);
-  box-shadow: var(--shadow-elevated);
-  transition: opacity 160ms ease-out, transform 160ms ease-out;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted-foreground);
 }
-.mobile-fab:active { transform: scale(.94); }
-body:has(input:focus, textarea:focus, select:focus) .mobile-fab {
-  transform: translateY(180%);
-  opacity: 0;
-  pointer-events: none;
+.mobile-drawer__close:active {
+  background: var(--surface-hover);
+  color: var(--foreground);
+}
+.mobile-drawer__close:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.mobile-drawer__body {
+  min-height: 0;
+  flex: 1;
 }
 
 /* Both platforms keep reporting the home-indicator inset while the keyboard is
@@ -367,40 +417,65 @@ body:has(input:focus, textarea:focus, select:focus) .mobile-fab {
 body:has(input:focus, textarea:focus, select:focus) .slack-channel-view__composer,
 body:has(input:focus, textarea:focus, select:focus) .slack-context-panel__composer,
 body:has(input:focus, textarea:focus, select:focus) .assistant-page__composer-wrap {
-  padding-bottom: 8px;
+  padding-bottom: var(--space-2);
 }
 
-.mobile-inbox { margin: -12px -12px 0; }
+/* Full-bleed feed: cancels the content gutter from the same variable that
+   sets it, so the two can never drift apart. */
+.mobile-inbox {
+  margin: calc(var(--mobile-content-pad) * -1);
+  margin-bottom: 0;
+}
 .mobile-inbox__toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 4px 12px 10px;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-2);
 }
-.mobile-inbox__chips { display: flex; min-width: 0; flex-wrap: wrap; gap: 6px; }
+.mobile-inbox__chips {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+/* Filter chip: tappable, so it carries the full touch target. */
 .mobile-inbox__chips button {
   display: inline-flex;
-  min-height: 44px;
+  min-height: var(--touch-target);
   align-items: center;
-  gap: 5px;
-  border: 1px solid var(--border);
+  gap: var(--space-1);
+  border: 1px solid var(--border-control);
   border-radius: 999px;
   background: var(--card);
   color: var(--muted-foreground);
-  padding: 0 9px;
+  padding-inline: var(--space-3);
   font-size: var(--text-label);
+  line-height: var(--text-label-lh);
   font-weight: 600;
   white-space: nowrap;
 }
 .mobile-inbox__chips button span { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
 .mobile-inbox__chips button.is-active { border-color: var(--accent-300); background: var(--state-info-soft); color: var(--accent-700); }
-.mobile-inbox__read { display: inline-flex; min-height: 44px; flex: 0 0 auto; align-items: center; gap: 4px; border: 0; background: transparent; color: var(--accent-600); font-size: var(--text-label); font-weight: 600; padding: 0 4px; }
+.mobile-inbox__read {
+  display: inline-flex;
+  min-height: var(--touch-target);
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
+  border: 0;
+  background: transparent;
+  color: var(--accent-600);
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  font-weight: 600;
+  padding-inline: var(--space-2);
+}
 .mobile-inbox__read:disabled { color: var(--text-tertiary); }
 .mobile-inbox__feed { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--panel); }
-.mobile-inbox .mobile-card { min-height: 68px; padding: 10px 12px; }
+.mobile-inbox .mobile-card { min-height: 68px; }
 .mobile-inbox .mobile-card__context { overflow-wrap: anywhere; }
-.mobile-channel-groups { display: flex; flex-direction: column; gap: 16px; }
+.mobile-channel-groups { display: flex; flex-direction: column; gap: var(--space-4); }
 
 /* Channel attention — the channels index presents each room by what it asks of
    the operator. One closed dot vocabulary, shared with the sidebar; the state
@@ -408,15 +483,15 @@ body:has(input:focus, textarea:focus, select:focus) .assistant-page__composer-wr
 .channel-gates {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--state-warn-fg) 30%, var(--border-card));
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--state-warn-soft);
 }
 .channel-gates__label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   margin: 0;
-  padding: 8px 10px 4px;
+  padding: var(--space-2) var(--space-3) var(--space-1);
   color: var(--state-warn-fg);
   font-size: var(--text-label);
   line-height: var(--text-label-lh);
@@ -427,13 +502,13 @@ body:has(input:focus, textarea:focus, select:focus) .assistant-page__composer-wr
 .channel-gates__row {
   display: flex;
   width: 100%;
-  min-height: var(--row-h);
+  min-height: var(--row-h-touch);
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   border: 0;
   background: transparent;
   color: var(--foreground);
-  padding: 6px 10px;
+  padding: var(--space-2) var(--space-3);
   text-align: left;
 }
 .channel-gates__row + .channel-gates__row {
@@ -516,19 +591,22 @@ body:has(input:focus, textarea:focus, select:focus) .assistant-page__composer-wr
 .channel-dot--decision { background: var(--state-warn-fg); }
 .channel-dot--question {
   background: transparent;
-  border: 1.5px solid var(--state-warn-fg);
+  border: 1px solid var(--state-warn-fg);
 }
 .channel-dot--working { background: var(--accent-600); }
-.channel-dot--activity { background: var(--text-secondary, var(--muted-foreground)); }
+.channel-dot--activity { background: var(--text-secondary); }
 .channel-row__title--unread { font-weight: 600; }
+/* Status pill: same metrics as .mobile-badge, only the palette differs. */
 .channel-pill {
   display: inline-flex;
+  height: var(--space-4);
   flex: 0 0 auto;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 11px;
+  padding-inline: var(--space-2);
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -544,18 +622,18 @@ body:has(input:focus, textarea:focus, select:focus) .assistant-page__composer-wr
 .channel-row__panel {
   border-top: 1px solid var(--border);
   background: var(--surface);
-  padding: 2px 0;
+  padding-block: var(--space-1);
 }
 .channel-panel__row {
   display: flex;
   width: 100%;
-  min-height: var(--row-h);
+  min-height: var(--row-h-touch);
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   border: 0;
   background: transparent;
   color: var(--foreground);
-  padding: 5px 10px 5px 14px;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-5);
   text-align: left;
   font-size: var(--text-label);
   line-height: var(--text-label-lh);
@@ -574,7 +652,7 @@ body:has(input:focus, textarea:focus, select:focus) .assistant-page__composer-wr
   overflow: hidden;
   margin: 0;
   color: var(--muted-foreground);
-  padding: 5px 10px 8px 14px;
+  padding: var(--space-1) var(--space-3) var(--space-2) var(--space-5);
   font-size: var(--text-label);
   line-height: var(--text-label-lh);
   text-overflow: ellipsis;
@@ -601,30 +679,22 @@ body:has(input:focus, textarea:focus, select:focus) .assistant-page__composer-wr
   body {
     overflow-x: hidden;
   }
-  .mobile-row {
-    min-height: 52px;
-    padding: 8px 12px;
-  }
-}
-
-@media (min-width: 1024px) {
-  .mobile-bottom-nav, .mobile-fab { display: none; }
 }
 
 @media (min-width: 1024px) and (max-width: 1279px) {
   .workspace-sidebar-panel a,
   .workspace-sidebar-panel button,
   .desktop-content-header button {
-    min-height: 44px;
+    min-height: var(--touch-target);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mobile-row {
-    transition: none;
-  }
+  .mobile-row,
   .mobile-switch,
-  .mobile-switch__thumb {
+  .mobile-switch__thumb,
+  .mobile-drawer__panel,
+  .mobile-drawer__backdrop {
     transition: none;
   }
 }

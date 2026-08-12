@@ -10,22 +10,21 @@ export type MobileStack = {
   parent: { to: string; label: string } | null;
 };
 
-export const MOBILE_TAB_ENTRIES = [
-  { id: "home", path: "/inbox", label: "Accueil" },
-  { id: "activity", path: "/activity", label: "Activité" },
-  { id: "hermes", path: "/hermes", label: "Hermes" },
-  { id: "search", path: "", label: "Recherche" },
+/**
+ * The roots that keep their own scroll position across navigations. This is a
+ * scroll-restoration model, not a navigation one: the drawer owns navigation.
+ */
+export const MOBILE_SCROLL_ROOTS = [
+  { id: "home", path: "/inbox" },
+  { id: "activity", path: "/activity" },
+  { id: "hermes", path: "/hermes" },
 ] as const;
 
-export type MobileTabId = (typeof MOBILE_TAB_ENTRIES)[number]["id"];
+export type MobileTabId = (typeof MOBILE_SCROLL_ROOTS)[number]["id"];
 
 export function mobileTabForPath(pathname: string): MobileTabId | null {
   if (pathname.startsWith("/hermes/")) return "hermes";
-  return (
-    MOBILE_TAB_ENTRIES.find(
-      (entry) => entry.path.length > 0 && entry.path === pathname,
-    )?.id ?? null
-  );
+  return MOBILE_SCROLL_ROOTS.find((entry) => entry.path === pathname)?.id ?? null;
 }
 
 const MOBILE_TAB_SCROLL_PREFIX = "hermes-mobile-tab-scroll";

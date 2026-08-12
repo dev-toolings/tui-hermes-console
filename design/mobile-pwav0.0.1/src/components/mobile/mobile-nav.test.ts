@@ -2,7 +2,7 @@
 // @ts-expect-error Bun test types are not part of the application build.
 import { describe, expect, test } from "bun:test";
 import {
-  MOBILE_TAB_ENTRIES,
+  MOBILE_SCROLL_ROOTS,
   mobileTabForPath,
   orgPath,
   resolveMobileStack,
@@ -25,13 +25,12 @@ describe("org path helpers", () => {
   });
 });
 
-describe("mobile tab model", () => {
-  test("exposes the four product tabs without the legacy File/Missions/Salons/Plus shell", () => {
-    expect(MOBILE_TAB_ENTRIES.map((entry) => entry.label)).toEqual([
-      "Accueil",
-      "Activité",
-      "Hermes",
-      "Recherche",
+describe("mobile scroll roots", () => {
+  test("only the three scroll-restoring roots exist, navigation lives in the drawer", () => {
+    expect(MOBILE_SCROLL_ROOTS.map((entry) => entry.path)).toEqual([
+      "/inbox",
+      "/activity",
+      "/hermes",
     ]);
     expect(mobileTabForPath("/inbox")).toBe("home");
     expect(mobileTabForPath("/channels")).toBeNull();

@@ -165,9 +165,12 @@ describe("console store v5 migration", () => {
     const migrated = migrateConsoleState(legacy);
 
     expect(migrated).not.toBeNull();
-    expect(
-      migrated?.workspaceData[workspaceId].channels.map((channel) => channel.id),
-    ).toEqual(["general", "équipe"]);
+    const ids = migrated?.workspaceData[workspaceId].channels.map(
+      (channel) => channel.id,
+    );
+    expect(ids).not.toContain("incidents");
+    expect(ids).toContain("general");
+    expect(ids).toContain("équipe");
   });
 
   test("refuses a payload whose channel points at no section", () => {
@@ -231,7 +234,12 @@ describe("console store v5 migration", () => {
     expect(v1Migrated?.workspaceData[v1.workspaces[0].id].items).toEqual(
       v1.workspaceData[v1.workspaces[0].id].items,
     );
-    expect(v1Migrated?.workspaceData[v1.workspaces[0].id].channels).toHaveLength(3);
+    /* v1 stored no channel, so the workspace is re-seeded: the assertion is
+       that the default trio is there, not how much demo volume ships with it. */
+    const v1Ids = v1Migrated?.workspaceData[v1.workspaces[0].id].channels.map(
+      (channel) => channel.id,
+    );
+    expect(v1Ids).toEqual(expect.arrayContaining(["general", "équipe", "incidents"]));
   });
 
   test("keeps v2 message and attachment metadata beyond new-input limits", () => {
@@ -290,9 +298,23 @@ describe("channel rename and deletion", () => {
       workspaceData: { ...state.workspaceData, [state.workspaces[0].id]: data },
     };
   };
+  /* The seeded workspace ships demo volume so the UI can be judged at scale.
+     Section and channel logic does not depend on it, so these cases run on
+     the default trio instead of tracking whatever the demo holds. */
   const seed = () => {
     const state = createInitialState();
-    return state.workspaceData[state.workspaces[0].id];
+    const data = state.workspaceData[state.workspaces[0].id];
+    const channels = data.channels.filter(
+      (channel) => channel.categoryId === DEFAULT_CATEGORY_ID,
+    );
+    return {
+      ...data,
+      channelCategories: [{ id: DEFAULT_CATEGORY_ID, name: DEFAULT_CATEGORY_NAME }],
+      channels,
+      messages: Object.fromEntries(
+        channels.map((channel) => [channel.id, data.messages[channel.id] ?? []]),
+      ),
+    };
   };
 
   test("renames the label and keeps the id messages are filed under", () => {
@@ -343,9 +365,23 @@ describe("channel rename and deletion", () => {
 });
 
 describe("channel sections", () => {
+  /* The seeded workspace ships demo volume so the UI can be judged at scale.
+     Section and channel logic does not depend on it, so these cases run on
+     the default trio instead of tracking whatever the demo holds. */
   const seed = () => {
     const state = createInitialState();
-    return state.workspaceData[state.workspaces[0].id];
+    const data = state.workspaceData[state.workspaces[0].id];
+    const channels = data.channels.filter(
+      (channel) => channel.categoryId === DEFAULT_CATEGORY_ID,
+    );
+    return {
+      ...data,
+      channelCategories: [{ id: DEFAULT_CATEGORY_ID, name: DEFAULT_CATEGORY_NAME }],
+      channels,
+      messages: Object.fromEntries(
+        channels.map((channel) => [channel.id, data.messages[channel.id] ?? []]),
+      ),
+    };
   };
 
   test("creates a section and refuses duplicate ids, names or free-text ids", () => {

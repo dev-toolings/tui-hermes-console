@@ -51,7 +51,24 @@ import {
 } from "./composer-attachments";
 import { truncateFileName } from "../ui/file-name";
 import { orgPath } from "../mobile/mobile-nav";
+import {
+  DEFAULT_DRAWER_WIDTH,
+  DRAWER_EDGE_SIZE,
+  clampDrawerProgress,
+  drawerFocusable,
+  getDrawerSwipeAxis,
+  shouldOpenDrawer,
+  shouldRestoreDrawerTriggerFocus,
+} from "../mobile/drawer";
 import "./assistant.css";
+
+// Re-exported for the existing unit tests, which cover the drawer maths here.
+export {
+  clampDrawerProgress,
+  getDrawerSwipeAxis,
+  shouldOpenDrawer,
+  shouldRestoreDrawerTriggerFocus,
+};
 
 /**
  * No composer control may take the focus off the textarea: the blur closes the
@@ -73,32 +90,6 @@ export function shouldFollowThreadResize(
   activeElement: Node | null,
 ) {
   return pinned && !composer?.contains(activeElement);
-}
-
-export function shouldRestoreDrawerTriggerFocus(wasOpen: boolean, drawerOpen: boolean) {
-  return wasOpen && !drawerOpen;
-}
-
-const DRAWER_EDGE_SIZE = 28;
-const DRAWER_LOCK_DISTANCE = 8;
-const DRAWER_VELOCITY = 0.5;
-const DEFAULT_DRAWER_WIDTH = 320;
-
-export function clampDrawerProgress(progress: number) {
-  return Math.min(1, Math.max(0, progress));
-}
-
-export function shouldOpenDrawer(progress: number, velocity: number) {
-  if (velocity >= DRAWER_VELOCITY) return true;
-  if (velocity <= -DRAWER_VELOCITY) return false;
-  return progress >= 0.5;
-}
-
-export function getDrawerSwipeAxis(distanceX: number, distanceY: number) {
-  if (Math.max(Math.abs(distanceX), Math.abs(distanceY)) < DRAWER_LOCK_DISTANCE) {
-    return "pending" as const;
-  }
-  return Math.abs(distanceY) >= Math.abs(distanceX) ? "vertical" as const : "horizontal" as const;
 }
 
 type DrawerSwipe = {
@@ -422,11 +413,7 @@ function SessionSidebar({
       return;
     }
     if (event.key !== "Tab") return;
-    const focusable = Array.from(
-      panelRef.current?.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ) ?? [],
-    ).filter((element) => element.getClientRects().length > 0);
+    const focusable = drawerFocusable(panelRef.current);
     const first = focusable[0];
     const last = focusable.at(-1);
     if (!first || !last) return;

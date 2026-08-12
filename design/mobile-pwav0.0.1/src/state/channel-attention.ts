@@ -97,6 +97,30 @@ export function channelAttention(
   };
 }
 
+/**
+ * One-line summary of what a channel currently asks of the operator. Written
+ * once so the channels index, the sidebar and any future surface phrase the
+ * same state identically; `fallback` covers a calm channel (last message,
+ * topic, whatever the caller has at hand).
+ */
+export function channelAttentionSummary(
+  attention: ChannelAttention,
+  fallback = "",
+): string {
+  if (attention.state === "decision" && attention.gates.length) {
+    const plural = attention.gates.length > 1 ? "s" : "";
+    return `${attention.gates.length} décision${plural} en attente · ${attention.gates[0].mission.name}`;
+  }
+  if (attention.state === "question" && attention.missions.length) {
+    return `Réponse attendue · ${attention.missions[0].name}`;
+  }
+  const running = attention.missions.find((mission) => mission.status === "running");
+  if (attention.state === "working" && running) {
+    return `${running.agent} actif · ${running.name}`;
+  }
+  return fallback;
+}
+
 /** Elapsed time as an operator reads it: "3 min", "2 h", "5 j". */
 export function formatElapsed(fromIso: string, nowMs = Date.now()): string {
   const from = Date.parse(fromIso);

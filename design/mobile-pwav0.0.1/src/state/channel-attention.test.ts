@@ -5,6 +5,7 @@ import {
   ATTENTION_LABEL,
   ATTENTION_ORDER,
   channelAttention,
+  channelAttentionSummary,
   formatElapsed,
   missionsForChannel,
   resolveAttentionState,
@@ -99,6 +100,25 @@ describe("channelAttention over the mission fixtures", () => {
     expect(missionsForChannel("équipe")).toHaveLength(0);
     expect(channelAttention("équipe", { hasUnread: true }).state).toBe("activity");
     expect(channelAttention("équipe").state).toBe("calm");
+  });
+});
+
+describe("channelAttentionSummary", () => {
+  test("names the pending decision and its mission", () => {
+    const summary = channelAttentionSummary(channelAttention("incidents"));
+    expect(summary).toContain("décision");
+    expect(summary).toContain("en attente");
+  });
+
+  test("names the running agent", () => {
+    expect(channelAttentionSummary(channelAttention("general"))).toContain("actif");
+  });
+
+  test("a calm channel falls back to what the caller offers", () => {
+    expect(channelAttentionSummary(channelAttention("équipe"), "Aucun message")).toBe(
+      "Aucun message",
+    );
+    expect(channelAttentionSummary(channelAttention("équipe"))).toBe("");
   });
 });
 

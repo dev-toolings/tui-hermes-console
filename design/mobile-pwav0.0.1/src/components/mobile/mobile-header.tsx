@@ -10,9 +10,12 @@ import type { MobileStack } from "./mobile-nav";
 export function MobileHeader({
   stack,
   actions,
+  leading,
 }: {
   stack: MobileStack;
   actions?: ReactNode;
+  /** Rendered in the left slot on roots, where there is no back target. */
+  leading?: ReactNode;
 }) {
   const navigate = useNavigate();
   return (
@@ -28,7 +31,7 @@ export function MobileHeader({
             <span className="truncate">{stack.parent.label}</span>
           </button>
         ) : (
-          <span aria-hidden className="mobile-header__spacer" />
+          leading ?? <span aria-hidden className="mobile-header__spacer" />
         )}
         <h1 className="mobile-header__title">{stack.title}</h1>
         <div className="mobile-header__actions">{actions}</div>

@@ -228,9 +228,21 @@ const memberRows: Member[] = [
   { name: "padawan", role: "exécution", state: "Occupé", initials: "PA" },
 ];
 
+/**
+ * The single section a migrated or reset workspace starts from. Demo volume
+ * lives in the seed (DEMO_CATEGORIES), never here: a v4 payload upgrading to
+ * v5 must land on exactly one section.
+ */
 export function createDefaultChannelCategories(): ChannelCategory[] {
   return [{ id: DEFAULT_CATEGORY_ID, name: DEFAULT_CATEGORY_NAME }];
 }
+
+const DEMO_CATEGORIES: ChannelCategory[] = [
+  { id: "produit", name: "Produit" },
+  { id: "ingenierie", name: "Ingénierie" },
+  { id: "operations", name: "Opérations" },
+  { id: "clients", name: "Clients" },
+];
 
 export function createDefaultChannels(memberNames: string[] = []): Channel[] {
   return [
@@ -258,6 +270,49 @@ export function createDefaultChannels(memberNames: string[] = []): Channel[] {
   ];
 }
 
+/**
+ * Volume for the seeded workspace, spread across DEMO_CATEGORIES. A
+ * one-section, three-channel workspace hides every layout problem a real one
+ * has: scrolling, truncation and attention grouping only show up here.
+ */
+export function createDemoChannels(memberNames: string[] = []): Channel[] {
+  return DEMO_CHANNELS.map((entry) =>
+    createChannel(
+      entry.id,
+      entry.name,
+      memberNames,
+      entry.topic,
+      entry.topic,
+      entry.categoryId,
+    ),
+  );
+}
+
+const DEMO_CHANNELS: Array<{
+  id: string;
+  name: string;
+  categoryId: string;
+  topic: string;
+}> = [
+  { id: "roadmap", name: "roadmap", categoryId: "produit", topic: "Jalons et arbitrages du trimestre" },
+  { id: "design-system", name: "design-system", categoryId: "produit", topic: "Tokens, composants et revues d'interface" },
+  { id: "recherche", name: "recherche", categoryId: "produit", topic: "Entretiens utilisateurs et enseignements" },
+  { id: "tarification", name: "tarification", categoryId: "produit", topic: "Offres, paliers et expérimentations de prix" },
+  { id: "backend", name: "backend", categoryId: "ingenierie", topic: "Services, schémas et migrations" },
+  { id: "frontend", name: "frontend", categoryId: "ingenierie", topic: "Console, performances et accessibilité" },
+  { id: "infra", name: "infra", categoryId: "ingenierie", topic: "Déploiements, réseau et sauvegardes" },
+  { id: "revue-de-code", name: "revue-de-code", categoryId: "ingenierie", topic: "Relectures et revues adversariales" },
+  { id: "releases", name: "releases", categoryId: "ingenierie", topic: "Fenêtres de livraison et journaux de version" },
+  { id: "astreinte", name: "astreinte", categoryId: "operations", topic: "Rotation, escalades et post-mortems" },
+  { id: "monitoring", name: "monitoring", categoryId: "operations", topic: "Alertes, seuils et tableaux de bord" },
+  { id: "couts-cloud", name: "coûts-cloud", categoryId: "operations", topic: "Consommation, quotas et optimisations" },
+  { id: "fournisseurs", name: "fournisseurs", categoryId: "operations", topic: "Contrats, quotas d'API et renouvellements" },
+  { id: "support", name: "support", categoryId: "clients", topic: "Demandes entrantes et suivis" },
+  { id: "onboarding", name: "onboarding", categoryId: "clients", topic: "Mise en route des nouveaux espaces" },
+  { id: "retours", name: "retours", categoryId: "clients", topic: "Verbatims, irritants et demandes récurrentes" },
+  { id: "comptes-cles", name: "comptes-clés", categoryId: "clients", topic: "Suivi des comptes stratégiques" },
+];
+
 function createChannel(
   id: string,
   name: string,
@@ -281,7 +336,11 @@ function createChannel(
 }
 
 function seedData(workspace: Workspace): WorkspaceData {
-  const channels = createDefaultChannels(memberRows.map((member) => member.name));
+  const memberNames = memberRows.map((member) => member.name);
+  const channels = [
+    ...createDefaultChannels(memberNames),
+    ...createDemoChannels(memberNames),
+  ];
   return {
     items: baseItems.map((item, itemIndex) => ({
       ...item,
@@ -300,9 +359,12 @@ function seedData(workspace: Workspace): WorkspaceData {
     ],
     notifications: true,
     selectedMember: "John Doe",
-    channelCategories: createDefaultChannelCategories(),
+    channelCategories: [...createDefaultChannelCategories(), ...DEMO_CATEGORIES],
     channels,
+    /* Every channel owes `messages` an entry — the validator rejects a payload
+       whose channels and message threads describe different sets. */
     messages: {
+      ...Object.fromEntries(channels.map((channel) => [channel.id, []])),
       general: [
         {
           id: `${workspace.id}-general-1`,

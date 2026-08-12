@@ -14,6 +14,7 @@ import { useChannelReadCounts } from "../../state/channel-reads";
 import {
   ATTENTION_LABEL,
   channelAttention,
+  channelAttentionSummary,
   formatElapsed,
 } from "../../state/channel-attention";
 import { workspaceToneClasses } from "../shell/workspace-tone";
@@ -21,15 +22,8 @@ import {
   ChannelDialogs,
   RowMenu,
   channelMenuItems,
-  sectionMenuItems,
   type ChannelActions,
 } from "../channels/channel-menu";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
 import type {
   Channel,
   ChannelCategory,
@@ -38,7 +32,6 @@ import type {
 import { useAuthStore } from "../../state/auth-store";
 import {
   RiAddLine,
-  RiArrowDownSLine,
   RiCompass3Line,
   RiDashboardLine,
   RiFileSearchLine,
@@ -48,14 +41,18 @@ import {
   RiGroupLine,
   RiHashtag,
   RiLogoutBoxRLine,
+  RiMenuLine,
   RiMoonLine,
   RiNotification3Line,
+  RiPulseLine,
   RiSearchLine,
   RiSettings4Line,
+  RiSparkling2Line,
   RiStarFill,
   RiSunLine,
   RiTaskLine,
   RiUser3Line,
+  RiUserLine,
 } from "@remixicon/react";
 
 /* Exact BoardUI sidebar glyphs — inlined so the strokes and metrics match the
@@ -125,6 +122,8 @@ type Props = {
   channelMessageCounts: Record<string, number>;
   createChannel: ChannelActions["createChannel"];
   channelActions: ChannelActions;
+  /** "drawer" drops the desktop wrappers so the panel can fill a mobile sheet. */
+  variant?: "desktop" | "drawer";
 };
 
 type NavEntry = { label: string; to: string; icon: typeof RiDashboardLine };
@@ -132,9 +131,21 @@ type NavEntry = { label: string; to: string; icon: typeof RiDashboardLine };
 /** Console module: everything that owns a mission, a proof or a decision. */
 const CONSOLE_NAV: NavEntry[] = [
   { label: "File", to: "/inbox", icon: RiDashboardLine },
+  { label: "Activité", to: "/activity", icon: RiPulseLine },
   { label: "Missions", to: "/missions", icon: RiFlowChart },
+  { label: "Hermes", to: "/hermes", icon: RiSparkling2Line },
   { label: "Historique", to: "/history", icon: RiFolderHistoryLine },
   { label: "Membres", to: "/members", icon: RiGroupLine },
+];
+
+/**
+ * Mobile-only destinations: on desktop they live in the user menu and the
+ * workspace switcher, which the drawer shows too but behind a popover.
+ */
+const MOBILE_NAV: NavEntry[] = [
+  { label: "Profil opérateur", to: "/account", icon: RiUserLine },
+  { label: "Workspaces", to: "/workspaces", icon: RiCompass3Line },
+  { label: "Menu", to: "/menu", icon: RiMenuLine },
 ];
 
 /** Pinned regardless of the active module: audit trail and settings. */
@@ -294,34 +305,6 @@ export function CreateChannelDialog({
   );
 }
 
-function useCollapsedSections(workspaceId: string) {
-  const storageKey = `hermes-channels-collapsed:${workspaceId}`;
-  const [collapsedIds, setCollapsedIds] = useState<string[]>(() => {
-    try {
-      const raw = window.localStorage.getItem(storageKey);
-      const parsed: unknown = raw ? JSON.parse(raw) : [];
-      /* Pre-v5 this same key held "true"/"false" for the single group, which
-         parses fine and is simply not an array: every section starts open. */
-      return Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : [];
-    } catch {
-      /* Storage can be unavailable, or hold something that is not JSON. */
-      return [];
-    }
-  });
-  const toggle = (categoryId: string) => {
-    const next = collapsedIds.includes(categoryId)
-      ? collapsedIds.filter((id) => id !== categoryId)
-      : [...collapsedIds, categoryId];
-    setCollapsedIds(next);
-    try {
-      window.localStorage.setItem(storageKey, JSON.stringify(next));
-    } catch {
-      /* The section still collapses for the current session. */
-    }
-  };
-  return { collapsedIds, toggle };
-}
-
 function ChannelsSection({
   collapsed,
   channels,
@@ -343,9 +326,9 @@ function ChannelsSection({
   const [renameTarget, setRenameTarget] = useState<Channel | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Channel | null>(null);
   const [moveTarget, setMoveTarget] = useState<Channel | null>(null);
-  const [sectionTarget, setSectionTarget] = useState<ChannelCategory | null>(null);
+  /* Sections are not drawn here anymore, but moving a channel can still ask
+     for a new one, so the creation dialog stays reachable. */
   const [createSectionOpen, setCreateSectionOpen] = useState(false);
-  const { collapsedIds, toggle } = useCollapsedSections(workspaceId);
   const createTrigger = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -360,6 +343,53 @@ function ChannelsSection({
       (channel) => !query || channel.name.toLocaleLowerCase().includes(query),
     )
     .sort((a, b) => Number(Boolean(b.starred)) - Number(Boolean(a.starred)));
+
+  /* Two lines: the name, then what the channel currently asks for in words. */
+  const channelInboxLink = (channel: Channel) => {
+    const attention = channelAttention(channel.id, {
+      hasUnread: unreadFor(channel.id) > 0,
+    });
+    const stateLabel = ATTENTION_LABEL[attention.state];
+    const summary = channelAttentionSummary(
+      attention,
+      channel.topic || "Aucune mission en cours",
+    );
+    return (
+      <NavLink
+        to={orgPath(workspaceId, `/channels/${channel.id}`)}
+        onClick={() => markRead(channel.id)}
+        className={({ isActive }) =>
+          /* `relative` anchors the sr-only state text: absolutely positioned
+             against a distant ancestor, it widened the scroll container. */
+          `relative flex min-w-0 flex-1 flex-col gap-0.5 rounded-[8px] px-2 py-1.5 ${isActive ? "bg-[var(--surface-hover)] text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:bg-[var(--surface-hover)]"}`
+        }
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <RiHashtag className="size-4 shrink-0" />
+          <span
+            className={`min-w-0 truncate text-body-2-medium ${attention.state === "activity" ? "font-semibold text-[var(--foreground)]" : ""}`}
+          >
+            {channel.name}
+          </span>
+          {channel.starred && (
+            <RiStarFill className="size-3 shrink-0 opacity-70" aria-label="Favori" />
+          )}
+          {attention.state !== "calm" && (
+            <span
+              aria-hidden="true"
+              className={`channel-dot channel-dot--${attention.state} channel-dot--inline ml-auto`}
+            />
+          )}
+        </span>
+        <span className="min-w-0 truncate pl-6 text-caption-1 text-[var(--text-tertiary)]">
+          {summary}
+        </span>
+        {/* Outside the truncated line: its static position sits after the
+            clipped text, which would stretch the scroll container. */}
+        {stateLabel ? <span className="sr-only">{stateLabel}</span> : null}
+      </NavLink>
+    );
+  };
 
   const channelLink = (channel: Channel) => {
     const attention = channelAttention(channel.id, {
@@ -433,8 +463,25 @@ function ChannelsSection({
         onDelete: () => setDeleteTarget(channel),
       })}
     >
-      {channelLink(channel)}
+      {channelInboxLink(channel)}
     </RowMenu>
+  );
+
+  const addChannelRow = (
+    categoryId: string | null,
+    ref?: React.RefObject<HTMLButtonElement | null>,
+  ) => (
+    <button
+      ref={ref}
+      type="button"
+      onClick={() => setDialogCategoryId(categoryId ?? channelCategories[0]?.id ?? null)}
+      className="flex h-8 min-w-0 items-center gap-2 rounded-[8px] px-2 text-body-2-medium text-[var(--muted-foreground)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]"
+    >
+      <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-[6px] bg-[var(--surface-raised)]">
+        <RiAddLine className="size-3.5" aria-hidden="true" />
+      </span>
+      <span className="truncate">Ajouter un canal</span>
+    </button>
   );
 
   const createDialog = (
@@ -479,95 +526,18 @@ function ChannelsSection({
 
   return (
     <>
-      <div className="group/channels flex w-full flex-col gap-2 pb-2">
-        <div className="flex h-6 items-center justify-end px-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                ref={createTrigger}
-                type="button"
-                aria-label="Ajouter un canal ou une section"
-                className="inline-flex size-6 items-center justify-center rounded-[6px] text-[var(--muted-foreground)] opacity-100 transition-[opacity,background-color,color] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] data-[state=open]:bg-[var(--surface-hover)] md:opacity-0 md:group-hover/channels:opacity-100 md:focus-visible:opacity-100"
-              >
-                <RiAddLine className="size-3.5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onSelect={() => setDialogCategoryId(channelCategories[0]?.id ?? null)}
-              >
-                <RiHashtag /> Nouveau canal
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setCreateSectionOpen(true)}>
-                <RiAddLine /> Nouvelle section
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        {channelCategories.map((category, index) => {
-          const sectionChannels = visibleChannels.filter(
-            (channel) => channel.categoryId === category.id,
-          );
-          const isCollapsed = collapsedIds.includes(category.id);
-          return (
-            <section
-              key={category.id}
-              className="flex w-full flex-col gap-0.5"
-              aria-label={category.name}
-            >
-              <RowMenu
-                label={`la section ${category.name}`}
-                className="h-6 items-center px-2"
-                items={sectionMenuItems({
-                  category,
-                  index,
-                  count: channelCategories.length,
-                  actions,
-                  onRename: () => setSectionTarget(category),
-                  onAddChannel: () => setDialogCategoryId(category.id),
-                })}
-              >
-                <button
-                  type="button"
-                  aria-expanded={!isCollapsed}
-                  onClick={() => toggle(category.id)}
-                  className="flex min-w-0 flex-1 items-center gap-1 rounded-md text-caption-1 font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-                >
-                  <RiArrowDownSLine
-                    className={`size-3.5 shrink-0 transition-transform duration-200 ${isCollapsed ? "-rotate-90" : "rotate-0"}`}
-                  />
-                  <span className="truncate">{category.name}</span>
-                  <span className="shrink-0 text-[var(--text-tertiary)]">
-                    {sectionChannels.length}
-                  </span>
-                </button>
-              </RowMenu>
-              {!isCollapsed && (
-                <>
-                  {sectionChannels.length ? (
-                    sectionChannels.map(channelRow)
-                  ) : (
-                    <p className="px-2 py-1 text-caption-1 text-[var(--text-tertiary)]">
-                      {query ? "Aucun canal ne correspond" : "Aucun canal"}
-                    </p>
-                  )}
-                  {/* Slack-style ghost row: the primary, always-visible way in;
-                      the header + and kebab stay as secondary affordances. */}
-                  <button
-                    type="button"
-                    onClick={() => setDialogCategoryId(category.id)}
-                    className="flex h-8 min-w-0 items-center gap-2 rounded-[8px] px-2 text-body-2-medium text-[var(--muted-foreground)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]"
-                  >
-                    <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-[6px] bg-[var(--surface-raised)]">
-                      <RiAddLine className="size-3.5" aria-hidden="true" />
-                    </span>
-                    <span className="truncate">Ajouter un canal</span>
-                  </button>
-                </>
-              )}
-            </section>
-          );
-        })}
+      <div className="flex w-full flex-1 flex-col gap-0.5 pb-2">
+        {/* The way in sits above the list, where the eye starts. */}
+        {addChannelRow(null, createTrigger)}
+        <nav aria-label="Canaux" className="flex w-full flex-col gap-0.5">
+          {visibleChannels.length ? (
+            visibleChannels.map((channel) => channelRow(channel))
+          ) : (
+            <p className="px-2 py-1 text-caption-1 text-[var(--text-tertiary)]">
+              {query ? "Aucun canal ne correspond" : "Aucun canal"}
+            </p>
+          )}
+        </nav>
       </div>
       {createDialog}
       <ChannelDialogs
@@ -577,13 +547,11 @@ function ChannelsSection({
         renameTarget={renameTarget}
         deleteTarget={deleteTarget}
         moveTarget={moveTarget}
-        sectionTarget={sectionTarget}
         createSectionOpen={createSectionOpen}
         focusAfterDelete={createTrigger}
         onCloseRename={() => setRenameTarget(null)}
         onCloseDelete={() => setDeleteTarget(null)}
         onCloseMove={() => setMoveTarget(null)}
-        onCloseSection={() => setSectionTarget(null)}
         onCloseCreateSection={() => setCreateSectionOpen(false)}
         onRequestCreateSection={() => setCreateSectionOpen(true)}
       />
@@ -1080,7 +1048,11 @@ export function WorkspaceSidebar({
   channelCategories,
   channelMessageCounts,
   channelActions,
+  variant = "desktop",
 }: Props) {
+  const drawer = variant === "drawer";
+  // A drawer is already narrow: collapsing the panel would only hide the labels.
+  const railCollapsed = drawer ? false : collapsed;
   const navigate = useNavigate();
   const location = useLocation();
   const teamTriggerRef = useRef<HTMLButtonElement>(null);
@@ -1126,19 +1098,10 @@ export function WorkspaceSidebar({
       </NavLink>
     );
   };
-  return (
-    <>
-      {/* Spacer: holds the content column in flow. The rail never leaves, only
-          the 240px panel collapses, so the floor is 64px and not zero. */}
-      <div
-        aria-hidden
-        className={`hidden shrink-0 transition-[width] duration-200 ease-linear lg:block ${collapsed ? "lg:w-16" : "lg:w-[321px]"}`}
-      />
-      <aside
-        aria-label="Navigation workspace"
-        className="fixed inset-y-0 left-0 z-50 hidden p-2 lg:flex"
-      >
-        <div className="workspace-sidebar-panel flex h-full bg-[var(--sidebar)]">
+  const panel = (
+    <div
+      className={`workspace-sidebar-panel flex h-full bg-[var(--sidebar)] ${drawer ? "w-full" : ""}`}
+    >
           <nav
             aria-label="Modules"
             className="flex w-12 shrink-0 flex-col items-center justify-between"
@@ -1167,7 +1130,7 @@ export function WorkspaceSidebar({
             <div className="flex flex-col items-center gap-2 pb-1">
               {/* The panel owns the theme switch when expanded; the rail keeps
                   one only while collapsed so the control never disappears. */}
-              {collapsed ? (
+              {railCollapsed ? (
                 <ThemeToggle collapsed dark={dark} setDark={setDark} />
               ) : null}
             </div>
@@ -1175,13 +1138,15 @@ export function WorkspaceSidebar({
 
           <span
             aria-hidden
-            className={`-my-2 shrink-0 self-stretch bg-[var(--border)] transition-[width,margin,opacity] duration-200 ${collapsed ? "mx-0 w-0 opacity-0" : "mx-2 w-px opacity-100"}`}
+            className={`-my-2 shrink-0 self-stretch bg-[var(--border)] transition-[width,margin,opacity] duration-200 ${railCollapsed ? "mx-0 w-0 opacity-0" : "mx-2 w-px opacity-100"}`}
           />
 
           <div
-            className={`overflow-hidden transition-[width] duration-200 ease-linear ${collapsed ? "w-0" : "w-60"}`}
+            className={`overflow-hidden transition-[width] duration-200 ease-linear ${drawer ? "min-w-0 flex-1" : railCollapsed ? "w-0" : "w-60"}`}
           >
-            <div className="flex h-full w-60 flex-col justify-between py-2 pr-2 pl-2">
+            <div
+              className={`flex h-full flex-col justify-between py-2 pr-2 pl-2 ${drawer ? "w-full" : "w-60"}`}
+            >
               <div className="flex min-h-0 flex-1 flex-col gap-3">
                 <div className="flex h-10 w-full shrink-0 items-center">
                   <UserMenu
@@ -1234,7 +1199,9 @@ export function WorkspaceSidebar({
               <div className="flex w-full flex-col gap-3 pt-3">
                 <ThemeSwitch dark={dark} setDark={setDark} />
                 <nav className="flex w-full flex-col gap-1">
-                  {PINNED_NAV.map(navRow)}
+                  {(drawer ? [...PINNED_NAV, ...MOBILE_NAV] : PINNED_NAV).map(
+                    navRow,
+                  )}
                 </nav>
                 <button
                   ref={teamTriggerRef}
@@ -1279,7 +1246,24 @@ export function WorkspaceSidebar({
               </div>
             </div>
           </div>
-        </div>
+    </div>
+  );
+
+  if (drawer) return panel;
+
+  return (
+    <>
+      {/* Spacer: holds the content column in flow. The rail never leaves, only
+          the 240px panel collapses, so the floor is 64px and not zero. */}
+      <div
+        aria-hidden
+        className={`hidden shrink-0 transition-[width] duration-200 ease-linear lg:block ${railCollapsed ? "lg:w-16" : "lg:w-[321px]"}`}
+      />
+      <aside
+        aria-label="Navigation workspace"
+        className="fixed inset-y-0 left-0 z-50 hidden p-2 lg:flex"
+      >
+        {panel}
       </aside>
     </>
   );

@@ -133,7 +133,10 @@ export function RowMenu({
                 type="button"
                 aria-label={`Actions pour ${label}`}
                 onClick={(event) => event.stopPropagation()}
-                className="inline-flex size-7 shrink-0 items-center justify-center rounded-[6px] text-[var(--muted-foreground)] transition-[opacity,background-color,color] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] data-[state=open]:bg-[var(--surface-hover)] data-[state=open]:opacity-100 md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100"
+                /* Permanently rendered, not hover-revealed: a hidden affordance
+                   is undiscoverable, unreachable on touch, and its appearance
+                   shifts the row it belongs to. */
+                className="inline-flex size-7 shrink-0 items-center justify-center rounded-[6px] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] data-[state=open]:bg-[var(--surface-hover)] data-[state=open]:text-[var(--foreground)]"
               >
                 <RiMore2Fill className="size-4" />
               </button>
@@ -281,13 +284,13 @@ export function ChannelDialogs({
   renameTarget,
   deleteTarget,
   moveTarget,
-  sectionTarget,
+  sectionTarget = null,
   createSectionOpen,
   focusAfterDelete,
   onCloseRename,
   onCloseDelete,
   onCloseMove,
-  onCloseSection,
+  onCloseSection = () => {},
   onCloseCreateSection,
   onRequestCreateSection,
 }: {
@@ -297,7 +300,8 @@ export function ChannelDialogs({
   renameTarget: Channel | null;
   deleteTarget: Channel | null;
   moveTarget: Channel | null;
-  sectionTarget: ChannelCategory | null;
+  /** Optional: a surface that shows no section never renames one. */
+  sectionTarget?: ChannelCategory | null;
   createSectionOpen: boolean;
   /**
    * Where focus lands after a deletion. The row that carried the kebab is gone
@@ -308,7 +312,7 @@ export function ChannelDialogs({
   onCloseRename: () => void;
   onCloseDelete: () => void;
   onCloseMove: () => void;
-  onCloseSection: () => void;
+  onCloseSection?: () => void;
   onCloseCreateSection: () => void;
   onRequestCreateSection: () => void;
 }) {
