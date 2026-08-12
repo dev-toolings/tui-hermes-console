@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -8,34 +9,52 @@ import {
   type ReactNode,
 } from "react";
 import { flushSync } from "react-dom";
-import { Outlet, useLocation, useNavigate, useParams } from "react-router";
+import { Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import {
   CreateChannelDialog,
   WorkspaceSidebar,
   type Workspace,
 } from "./components/sidebar/workspace-sidebar";
 import { Modal, ModalButton } from "./components/ui/modal";
+import { MembersDialog } from "./components/members/members-dialog";
 import { MobileHeader, MobileHeaderAction } from "./components/mobile/mobile-header";
 import { MobileBottomNav } from "./components/mobile/mobile-bottom-nav";
 import {
   decodeChannelId,
   mobileTabForPath,
+  orgPath,
   persistMobileTabScroll,
   restoreMobileTabScroll,
   resolveMobileStack,
-  withWorkspace,
+  stripOrg,
 } from "./components/mobile/mobile-nav";
 import { useAppHeight } from "./components/mobile/use-app-height";
-import { useMediaQuery } from "./components/mobile/use-media-query";
+import { useAuthStore } from "./state/auth-store";
 import { SidebarTrigger } from "./components/shell/sidebar-trigger";
-import { useChannelReadCounts } from "./state/channel-reads";
+import { workspaceToneClasses } from "./components/shell/workspace-tone";
+import {
+  dropChannelReadCount,
+  useChannelReadCounts,
+} from "./state/channel-reads";
+import {
+  ATTENTION_LABEL,
+  channelAttention,
+  formatElapsed,
+  ATTENTION_ORDER,
+} from "./state/channel-attention";
+import {
+  ChannelDialogs,
+  RowMenu,
+  channelMenuItems,
+  sectionMenuItems,
+  type ChannelActions,
+} from "./components/channels/channel-menu";
 import {
   eventsForMission,
   missionById,
   MISSIONS,
   pendingGates,
 } from "./state/mission-events";
-import { isStandalone, onInstallAvailability, promptInstall } from "./pwa";
 import {
   SlackChannelView,
   type SlackChannelTab,
@@ -44,9 +63,17 @@ import {
 import {
   addAudit,
   canAccessChannel,
+  createChannelCategory as createCategoryInData,
+  createDefaultChannelCategories,
   createDefaultChannels,
+  deleteChannel as deleteChannelInData,
+  deleteChannelCategory as deleteCategoryInData,
   deleteChannelMessage,
   editChannelMessage,
+  moveChannelCategory as moveCategoryInData,
+  moveChannelToCategory as moveChannelInData,
+  renameChannel as renameChannelInData,
+  renameChannelCategory as renameCategoryInData,
   sendChannelMessage,
   setMessagePinned,
   toggleChannelStar,
@@ -56,6 +83,7 @@ import {
   type AuditEvent,
   type Channel,
   type ChannelAttachment,
+  type ChannelCategory,
   type ChannelMessage,
   type ConsoleState,
   type InboxItem,
@@ -66,6 +94,7 @@ import {
   MAX_CHANNEL_ATTACHMENT_NAME_LENGTH,
   MAX_CHANNEL_ATTACHMENT_TYPE_LENGTH,
   MAX_CHANNEL_MESSAGE_LENGTH,
+  DEFAULT_CATEGORY_ID,
   loadConsoleState,
   readLocalPreference,
   saveConsoleState,
@@ -85,18 +114,17 @@ import {
   UsersRoundIcon,
   ArrowLeftIcon,
   CheckIcon,
-  BookOpenIcon,
   ActivityIcon,
   AlertTriangleIcon,
   SlidersHorizontalIcon,
   UserRoundIcon,
   SparklesIcon,
   XIcon,
-  ArchiveIcon,
+  ChevronDownIcon,
   ChevronRightIcon,
   CompassIcon,
-  DownloadIcon,
   FileSearchIcon,
+  FlaskConicalIcon,
   HashIcon,
   HistoryIcon,
   InboxIcon,
@@ -105,8 +133,17 @@ import {
   MessageSquareTextIcon,
   MessagesSquareIcon,
   Settings2Icon,
+  ShieldAlertIcon,
   StarIcon,
+  CopyIcon,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type Filter = "all" | "decisions" | "agents";
 
@@ -130,12 +167,11 @@ type AppModel = {
   ) => InboxItem;
   resolveItem: (id: string) => void;
   markAllRead: () => void;
-  enabledSkills: string[];
-  toggleSkill: (skill: string) => void;
   members: Member[];
   selectedMember: string;
   selectMember: (name: string) => void;
   auditEvents: AuditEvent[];
+  logAudit: (label: string, level?: AuditEvent["level"]) => void;
   addMember: (name: string, role: string) => boolean;
   notifications: boolean;
   setNotifications: (value: boolean) => void;
@@ -146,14 +182,22 @@ type AppModel = {
   restoreWorkspace: (id: string) => void;
   archivedWorkspaces: Workspace[];
   channels: Channel[];
-  createChannel: (name: string) => Channel | null;
+  channelCategories: ChannelCategory[];
+  createChannel: (name: string, categoryId?: string) => Channel | null;
+  /** False when the store refused the new label: blank, or already taken. */
+  renameChannel: (channelId: string, name: string) => boolean;
+  deleteChannel: (channelId: string) => void;
+  moveChannelToCategory: (channelId: string, categoryId: string) => void;
+  createCategory: (name: string) => boolean;
+  renameCategory: (categoryId: string, name: string) => boolean;
+  deleteCategory: (categoryId: string) => void;
+  moveCategory: (categoryId: string, offset: -1 | 1) => void;
   messagesFor: (channelId: string) => ChannelMessage[];
   sendMessage: (
     channelId: string,
     body: string,
     attachments?: ChannelAttachment[],
     parentMessageId?: string,
-    broadcastToChannel?: boolean,
   ) => boolean;
   toggleReaction: (channelId: string, messageId: string, emoji: string) => void;
   togglePin: (channelId: string, messageId: string) => void;
@@ -167,7 +211,7 @@ type AppModel = {
 };
 
 const AppContext = createContext<AppModel | null>(null);
-const useApp = () => {
+export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) throw new Error("useApp must be used in the application shell");
   return context;
@@ -184,12 +228,20 @@ const routeMeta: Record<string, { label: string; subtitle: string }> = {
     label: "Hermes",
     subtitle: "Assistant local de l'espace",
   },
-  "/channels": { label: "Salons", subtitle: "Discussions locales de l'espace" },
+  "/channels": { label: "Canaux", subtitle: "Discussions locales de l'espace" },
   "/missions": {
     label: "Missions",
     subtitle: "Une timeline par mission, décisions en tête",
   },
-  "/layouts": {
+  "/labs": {
+    label: "Labs",
+    subtitle: "Expériences opt-in de la console",
+  },
+  "/labs/training": {
+    label: "Terrain d'entraînement",
+    subtitle: "Apprendre à trancher des gates sur une mission fictive",
+  },
+  "/labs/layout-lab": {
     label: "Layout lab",
     subtitle: "Dix compositions de la surface mission, à comparer",
   },
@@ -204,10 +256,6 @@ const routeMeta: Record<string, { label: string; subtitle: string }> = {
   "/members": {
     label: "Membres",
     subtitle: "Équipe opérateur et agents disponibles",
-  },
-  "/registry": {
-    label: "Registre",
-    subtitle: "Compétences activées dans le runtime",
   },
   "/audit": {
     label: "Audit",
@@ -226,6 +274,7 @@ const routeMeta: Record<string, { label: string; subtitle: string }> = {
 
 export default function App() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [consoleState, setConsoleState] =
     useState<ConsoleState>(loadConsoleState);
   const [toast, setToast] = useState("");
@@ -237,13 +286,13 @@ export default function App() {
     return stored === "true";
   });
   const notify = (message: string) => setToast(message);
-  const requestedWorkspaceId = new URLSearchParams(location.search).get(
-    "workspace",
+  // The org URL segment is the route authority for the active workspace.
+  const { org } = useParams();
+  const orgIsKnown = consoleState.workspaces.some(
+    (workspace) => workspace.id === org,
   );
-  const effectiveWorkspaceId = consoleState.workspaces.some(
-    (workspace) => workspace.id === requestedWorkspaceId,
-  )
-    ? requestedWorkspaceId
+  const effectiveWorkspaceId = orgIsKnown
+    ? org
     : consoleState.activeWorkspaceId;
   const activeWorkspace =
     consoleState.workspaces.find(
@@ -369,19 +418,8 @@ export default function App() {
         "Tous les éléments ont été marqués comme lus",
       ),
     );
-  const toggleSkill = (skill: string) =>
-    updateWorkspaceData((data) => {
-      const enabled = data.enabledSkills.includes(skill);
-      return addAudit(
-        {
-          ...data,
-          enabledSkills: enabled
-            ? data.enabledSkills.filter((entry) => entry !== skill)
-            : [...data.enabledSkills, skill],
-        },
-        `${skill} ${enabled ? "désactivée" : "activée"}`,
-      );
-    });
+  const logAudit = (label: string, level: AuditEvent["level"] = "info") =>
+    updateWorkspaceData((data) => addAudit(data, label, level));
   const selectMember = (name: string) =>
     updateWorkspaceData((data) => ({ ...data, selectedMember: name }));
   const addMember = (name: string, role: string) => {
@@ -447,9 +485,17 @@ export default function App() {
             ),
             channels: data.channels.map((channel) => ({
               ...channel,
-              memberNames: channel.memberNames.map((memberName) =>
-                memberName === previousName ? name : memberName,
-              ),
+              /* Renaming onto a name that is already a member would otherwise
+                 duplicate it, and `isChannel` rejects duplicate memberNames —
+                 which makes the whole persisted state unreadable, so the next
+                 load silently replaces it with the seed. */
+              memberNames: [
+                ...new Set(
+                  channel.memberNames.map((memberName) =>
+                    memberName === previousName ? name : memberName,
+                  ),
+                ),
+              ],
             })),
             selectedMember:
               data.selectedMember === previousName ? name : data.selectedMember,
@@ -495,7 +541,6 @@ export default function App() {
                 .toUpperCase(),
             },
           ],
-          enabledSkills: [],
           audit: [
             {
               id: `audit-${Date.now()}`,
@@ -506,6 +551,7 @@ export default function App() {
           ],
           notifications: true,
           selectedMember: current.profile.name,
+          channelCategories: createDefaultChannelCategories(),
           channels: createDefaultChannels([current.profile.name]),
           messages: { general: [], "équipe": [], incidents: [] },
         },
@@ -545,7 +591,7 @@ export default function App() {
           }
         : current;
     });
-  const createChannel = (name: string) => {
+  const createChannel = (name: string, categoryId?: string) => {
     const normalized = name.trim().toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     if (
       !normalized ||
@@ -562,10 +608,17 @@ export default function App() {
       )
     )
       return null;
+    /* An unknown section would leave the channel unreachable in the sidebar, so
+       it falls back to the first one rather than trusting the caller. */
+    const targetCategoryId =
+      categoryId &&
+      workspaceData.channelCategories.some((entry) => entry.id === categoryId)
+        ? categoryId
+        : workspaceData.channelCategories[0]?.id ?? DEFAULT_CATEGORY_ID;
     const channel: Channel = {
       id: normalized,
       name: normalized,
-      kind: "custom",
+      categoryId: targetCategoryId,
       createdAt: new Date().toISOString(),
       topic: "",
       description: "",
@@ -574,15 +627,129 @@ export default function App() {
       memberNames: workspaceData.members.map((member) => member.name),
       pinnedMessageIds: [],
     };
-    updateWorkspaceData((data) => addAudit({ ...data, channels: [...data.channels, channel], messages: { ...data.messages, [channel.id]: [] } }, `Salon #${channel.name} créé`));
+    updateWorkspaceData((data) => addAudit({ ...data, channels: [...data.channels, channel], messages: { ...data.messages, [channel.id]: [] } }, `Canal #${channel.name} créé`));
     return channel;
   };
+  const renameChannel = (channelId: string, name: string) => {
+    const channel = workspaceData?.channels.find((entry) => entry.id === channelId);
+    if (!channel || !workspaceData) return false;
+    const preview = renameChannelInData(workspaceData, channelId, name);
+    if (!preview) return false;
+    const renamed = preview.channels.find((entry) => entry.id === channelId);
+    updateWorkspaceData((data) => {
+      const next = renameChannelInData(data, channelId, name);
+      return next
+        ? addAudit(
+            next,
+            `Canal #${channel.name} renommé en #${renamed?.name} · identifiant ${channelId} conservé`,
+          )
+        : data;
+    });
+    return true;
+  };
+  const deleteChannel = (channelId: string) => {
+    const channel = workspaceData?.channels.find((entry) => entry.id === channelId);
+    if (!channel || !workspaceData) return;
+    const messageCount = (workspaceData.messages[channelId] ?? []).length;
+    updateWorkspaceData((data) => {
+      const next = deleteChannelInData(data, channelId);
+      return next
+        ? addAudit(
+            next,
+            `Canal #${channel.name} supprimé · ${messageCount} ${messageCount > 1 ? "messages" : "message"}`,
+            "attention",
+          )
+        : data;
+    });
+    dropChannelReadCount(activeWorkspace.id, channelId);
+    /* Standing on a channel that no longer exists would render the "introuvable"
+       card, so the route steps back to a surviving channel or to the index. */
+    if (decodeChannelId(stripOrg(location.pathname)) === channelId) {
+      const fallback = workspaceData.channels.find(
+        (entry) => entry.id !== channelId,
+      );
+      navigate(
+        orgPath(
+          activeWorkspace.id,
+          fallback ? `/channels/${encodeURIComponent(fallback.id)}` : "/channels",
+        ),
+        { replace: true },
+      );
+    }
+  };
+  const moveChannelToCategory = (channelId: string, categoryId: string) => {
+    const channel = workspaceData?.channels.find((entry) => entry.id === channelId);
+    const category = workspaceData?.channelCategories.find(
+      (entry) => entry.id === categoryId,
+    );
+    if (!channel || !category) return;
+    updateWorkspaceData((data) => {
+      const next = moveChannelInData(data, channelId, categoryId);
+      return next
+        ? addAudit(next, `Canal #${channel.name} déplacé vers « ${category.name} »`)
+        : data;
+    });
+  };
+  const createCategory = (name: string) => {
+    if (!workspaceData) return false;
+    /* Section ids are technical and never displayed, so a timestamp beats a
+       slug: it can never normalize to something the id pattern rejects. */
+    const id = `section-${Date.now().toString(36)}`;
+    if (!createCategoryInData(workspaceData, id, name)) return false;
+    updateWorkspaceData((data) => {
+      const next = createCategoryInData(data, id, name);
+      return next ? addAudit(next, `Section « ${name.trim()} » créée`) : data;
+    });
+    return true;
+  };
+  const renameCategory = (categoryId: string, name: string) => {
+    const category = workspaceData?.channelCategories.find(
+      (entry) => entry.id === categoryId,
+    );
+    if (!category || !workspaceData) return false;
+    if (!renameCategoryInData(workspaceData, categoryId, name)) return false;
+    updateWorkspaceData((data) => {
+      const next = renameCategoryInData(data, categoryId, name);
+      return next
+        ? addAudit(
+            next,
+            `Section « ${category.name} » renommée en « ${name.trim()} »`,
+          )
+        : data;
+    });
+    return true;
+  };
+  const deleteCategory = (categoryId: string) => {
+    if (!workspaceData) return;
+    const category = workspaceData.channelCategories.find(
+      (entry) => entry.id === categoryId,
+    );
+    const survivor = workspaceData.channelCategories.find(
+      (entry) => entry.id !== categoryId,
+    );
+    if (!category || !survivor) return;
+    const moved = workspaceData.channels.filter(
+      (channel) => channel.categoryId === categoryId,
+    ).length;
+    updateWorkspaceData((data) => {
+      const next = deleteCategoryInData(data, categoryId);
+      return next
+        ? addAudit(
+            next,
+            `Section « ${category.name} » supprimée · ${moved} ${moved > 1 ? "canaux rendus" : "canal rendu"} à « ${survivor.name} »`,
+          )
+        : data;
+    });
+  };
+  const moveCategory = (categoryId: string, offset: -1 | 1) =>
+    updateWorkspaceData(
+      (data) => moveCategoryInData(data, categoryId, offset) ?? data,
+    );
   const sendMessage = (
     channelId: string,
     body: string,
     attachments: ChannelAttachment[] = [],
     parentMessageId?: string,
-    broadcastToChannel = false,
   ) => {
     const message = body.trim();
     if (
@@ -601,7 +768,7 @@ export default function App() {
         createdAt: new Date().toISOString(),
         reactions: [],
         ...(attachments.length > 0 ? { attachments } : {}),
-        ...(parentMessageId ? { parentMessageId, broadcastToChannel } : {}),
+        ...(parentMessageId ? { parentMessageId } : {}),
       }) ?? data,
     );
     return true;
@@ -672,24 +839,14 @@ export default function App() {
       );
     });
 
+  // URL → store: the visited org becomes the remembered one (used by "/").
   useEffect(() => {
-    if (
-      !requestedWorkspaceId ||
-      requestedWorkspaceId === consoleState.activeWorkspaceId ||
-      !consoleState.workspaces.some(
-        (workspace) => workspace.id === requestedWorkspaceId,
-      )
-    )
-      return;
+    if (!orgIsKnown || !org || org === consoleState.activeWorkspaceId) return;
     setConsoleState((current) => ({
       ...current,
-      activeWorkspaceId: requestedWorkspaceId,
+      activeWorkspaceId: org,
     }));
-  }, [
-    consoleState.activeWorkspaceId,
-    consoleState.workspaces,
-    requestedWorkspaceId,
-  ]);
+  }, [consoleState.activeWorkspaceId, org, orgIsKnown]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -709,8 +866,18 @@ export default function App() {
     const id = window.setTimeout(() => setToast(""), 2600);
     return () => window.clearTimeout(id);
   }, [toast]);
-
   if (!activeWorkspace || !workspaceData) return null;
+  // An unknown slug falls back to the remembered org on the same sub-path.
+  if (!orgIsKnown)
+    return (
+      <Navigate
+        to={orgPath(
+          activeWorkspace.id,
+          `${stripOrg(location.pathname)}${location.search}`,
+        )}
+        replace
+      />
+    );
   const accessibleChannels = workspaceData.channels.filter(
     (channel) => canAccessChannel(channel, consoleState.profile.name),
   );
@@ -729,13 +896,12 @@ export default function App() {
         addTask,
         resolveItem,
         markAllRead,
-        enabledSkills: workspaceData.enabledSkills,
-        toggleSkill,
         members: workspaceData.members,
         selectedMember: workspaceData.selectedMember,
         selectMember,
         addMember,
         auditEvents: workspaceData.audit,
+        logAudit,
         notifications: workspaceData.notifications,
         setNotifications,
         profile: consoleState.profile,
@@ -745,7 +911,15 @@ export default function App() {
         restoreWorkspace,
         archivedWorkspaces: consoleState.archivedWorkspaces,
         channels: accessibleChannels,
+        channelCategories: workspaceData.channelCategories,
         createChannel,
+        renameChannel,
+        deleteChannel,
+        moveChannelToCategory,
+        createCategory,
+        renameCategory,
+        deleteCategory,
+        moveCategory,
         messagesFor: (channelId) => workspaceData.messages[channelId] ?? [],
         sendMessage,
         toggleReaction,
@@ -814,9 +988,9 @@ function GlobalSearch() {
       .map((channel) => ({
         id: `channel-${channel.id}`,
         label: `# ${channel.name}`,
-        detail: channel.topic || "Salon",
+        detail: channel.topic || "Canal",
         to: `/channels/${encodeURIComponent(channel.id)}`,
-        kind: "Salons",
+        kind: "Canaux",
       }));
     const taskResults = items
       .filter((item) =>
@@ -899,10 +1073,7 @@ function GlobalSearch() {
   }, [open]);
 
   const choose = (to: string) => {
-    const [pathname, ownSearch] = to.split("?");
-    const search = new URLSearchParams(ownSearch ?? "");
-    search.set("workspace", activeWorkspace.id);
-    navigate({ pathname, search: `?${search.toString()}` });
+    navigate(orgPath(activeWorkspace.id, to));
     close();
   };
 
@@ -939,7 +1110,7 @@ function GlobalSearch() {
               if (first) choose(first.to);
             }}
             aria-label={`Rechercher dans ${activeWorkspace.name}`}
-            placeholder="Rechercher une vue, un salon ou une mission…"
+            placeholder="Rechercher une vue, un canal ou une mission…"
             className="h-full min-w-0 flex-1 bg-transparent text-body-1 text-[var(--foreground)] outline-none placeholder:text-[var(--text-tertiary)]"
           />
           <button type="button" aria-label="Fermer la recherche" onClick={close} className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--surface-hover)] lg:size-7">
@@ -990,6 +1161,33 @@ function GlobalSearch() {
   );
 }
 
+/**
+ * The channel mutators as one object, so the desktop sidebar and the mobile
+ * index are wired from the same source and cannot drift apart.
+ */
+function useChannelActions(): ChannelActions {
+  const {
+    createChannel,
+    renameChannel,
+    deleteChannel,
+    moveChannelToCategory,
+    createCategory,
+    renameCategory,
+    deleteCategory,
+    moveCategory,
+  } = useApp();
+  return {
+    createChannel,
+    renameChannel,
+    deleteChannel,
+    moveChannelToCategory,
+    createCategory,
+    renameCategory,
+    deleteCategory,
+    moveCategory,
+  };
+}
+
 function Shell() {
   const {
     collapsed,
@@ -1000,40 +1198,41 @@ function Shell() {
     activeWorkspace,
     setWorkspace,
     profile,
-    members,
     channels,
+    channelCategories,
     messagesFor,
     createChannel,
     items,
+    members,
   } = useApp();
+  const channelActions = useChannelActions();
   const location = useLocation();
   const navigate = useNavigate();
   const mainScrollRef = useRef<HTMLElement>(null);
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   useAppHeight();
   // Offcanvas from 1024px up, exactly like shadcn `dashboard-01`: the panel is
   // either present at full width or slid out. Below 1024px the mobile stack owns
   // navigation and the panel never renders.
   const sidebarCollapsed = collapsed;
-  const pathname = location.pathname.startsWith("/inbox/")
+  const barePath = stripOrg(location.pathname);
+  const pathname = barePath.startsWith("/inbox/")
     ? "/inbox"
-    : location.pathname.startsWith("/missions/")
+    : barePath.startsWith("/missions/")
       ? "/missions"
-      : location.pathname.startsWith("/hermes/")
+      : barePath.startsWith("/hermes/")
         ? "/hermes"
-      : location.pathname;
-  const channelId = decodeChannelId(location.pathname);
+      : barePath;
+  const channelId = decodeChannelId(barePath);
   const channel = channels.find((entry) => entry.id === channelId);
   const channelMessageCounts = Object.fromEntries(
     channels.map((entry) => [entry.id, messagesFor(entry.id).length]),
   );
-  const { unreadFor: unreadChannel } = useChannelReadCounts(
-    activeWorkspace.id,
-    channelMessageCounts,
-    channelId,
-  );
-  const detailItem = location.pathname.startsWith("/inbox/")
+  // Keeps the read watermark of the open channel up to date as messages land.
+  useChannelReadCounts(activeWorkspace.id, channelMessageCounts, channelId);
+  const detailItem = barePath.startsWith("/inbox/")
     ? items.find(
-        (entry) => entry.id === decodeURIComponent(location.pathname.split("/")[2] ?? ""),
+        (entry) => entry.id === decodeURIComponent(barePath.split("/")[2] ?? ""),
       )
     : undefined;
   const meta = channel ? { label: `# ${channel.name}`, subtitle: "Discussion locale de l'espace" } : routeMeta[pathname] ?? {
@@ -1041,19 +1240,20 @@ function Shell() {
     subtitle: "Cette vue n'existe pas",
   };
   const stack = resolveMobileStack({
-    pathname: location.pathname,
+    pathname: barePath,
     search: location.search,
-    workspaceId: activeWorkspace.id,
+    org: activeWorkspace.id,
     channelName: channel?.name,
     itemTitle: detailItem?.title,
-    missionName: location.pathname.startsWith("/missions/")
-      ? missionById(decodeURIComponent(location.pathname.split("/")[2] ?? ""))?.name
+    missionName: barePath.startsWith("/missions/")
+      ? missionById(decodeURIComponent(barePath.split("/")[2] ?? ""))?.name
       : undefined,
   });
   const openSearch = () => window.dispatchEvent(new Event("hermes:open-search"));
+  const openTaskDialog = () => setTaskDialogOpen(true);
+  const closeTaskDialog = useCallback(() => setTaskDialogOpen(false), []);
   const openChannelDetails = () => {
     const next = new URLSearchParams(location.search);
-    next.set("workspace", activeWorkspace.id);
     next.delete("tab");
     next.delete("thread");
     next.set("details", "1");
@@ -1062,21 +1262,21 @@ function Shell() {
   const params = new URLSearchParams(location.search);
   const inChannelPanel =
     Boolean(params.get("thread")) || params.get("details") === "1";
-  const mobileTab = mobileTabForPath(location.pathname);
-  const assistantRoute = location.pathname === "/hermes" || location.pathname.startsWith("/hermes/");
+  const mobileTab = mobileTabForPath(barePath);
+  const assistantRoute = barePath === "/hermes" || barePath.startsWith("/hermes/");
   // Hermes is a tab you enter, not a tab you sit in: the conversation takes the
   // full height and the bar leaves, so the composer never competes with it.
-  const mobileRoot = ["/activity", "/channels"].includes(location.pathname);
+  const mobileRoot = ["/activity", "/inbox"].includes(barePath);
   const mobileFab =
-    location.pathname === "/channels"
+    barePath === "/channels"
       ? {
-          label: "Créer un salon",
+          label: "Créer un canal",
           onClick: () => window.dispatchEvent(new Event("hermes:create-channel")),
         }
-      : location.pathname === "/activity" || location.pathname === "/inbox" || location.pathname === "/missions"
+      : barePath === "/activity" || barePath === "/inbox" || barePath === "/missions"
         ? {
             label: "Nouvelle tâche",
-            onClick: () => navigate(withWorkspace("/tasks/new", activeWorkspace.id)),
+            onClick: openTaskDialog,
           }
         : null;
   const mobileActions =
@@ -1085,18 +1285,18 @@ function Shell() {
         <MobileHeaderAction label="Rechercher" onClick={openSearch}>
           <SearchIcon className="size-4" />
         </MobileHeaderAction>
-        <MobileHeaderAction label="Informations du salon" onClick={openChannelDetails}>
+        <MobileHeaderAction label="Informations du canal" onClick={openChannelDetails}>
           <InfoIcon className="size-4" />
         </MobileHeaderAction>
       </>
-    ) : pathname === "/channels" ? (
+    ) : pathname === "/inbox" ? (
       <>
         <MobileHeaderAction label="Rechercher" onClick={openSearch}>
           <SearchIcon className="size-4" />
         </MobileHeaderAction>
         <MobileHeaderAction
           label="Ouvrir le menu et le profil"
-          onClick={() => navigate(withWorkspace("/menu", activeWorkspace.id))}
+          onClick={() => navigate(orgPath(activeWorkspace.id, "/menu"))}
         >
           <span className="inline-flex size-7 items-center justify-center rounded-full bg-[var(--accent-200)] text-[10px] font-semibold text-[var(--accent-700)]">
             {profile.name
@@ -1117,30 +1317,6 @@ function Shell() {
     document.title = `Hermes Console — ${meta.label}`;
   }, [meta.label]);
   useEffect(() => {
-    const search = new URLSearchParams(location.search);
-    const requestedWorkspace = search.get("workspace");
-    if (
-      requestedWorkspace &&
-      workspaces.some((workspace) => workspace.id === requestedWorkspace)
-    ) {
-      if (requestedWorkspace !== activeWorkspace.id)
-        setWorkspace(requestedWorkspace);
-      return;
-    }
-    search.set("workspace", activeWorkspace.id);
-    navigate(
-      { pathname: location.pathname, search: `?${search.toString()}` },
-      { replace: true },
-    );
-  }, [
-    activeWorkspace.id,
-    location.pathname,
-    location.search,
-    navigate,
-    setWorkspace,
-    workspaces,
-  ]);
-  useEffect(() => {
     if (!mobileTab) return;
     const frame = window.requestAnimationFrame(() => {
       if (mainScrollRef.current)
@@ -1160,13 +1336,15 @@ function Shell() {
   }, [activeWorkspace.id, mobileTab]);
   const changeWorkspace = (id: string) => {
     setWorkspace(id);
-    const search = new URLSearchParams(location.search);
-    search.set("workspace", id);
+    // Channel ids are not portable across workspaces, so a channel view resets
+    // to the index: no id is guaranteed to exist in the workspace being entered,
+    // now that every channel can be deleted or renamed.
     navigate({
-      pathname: location.pathname.startsWith("/channels/")
-        ? "/channels/general"
-        : location.pathname,
-      search: `?${search.toString()}`,
+      pathname: orgPath(
+        id,
+        barePath.startsWith("/channels/") ? "/channels" : barePath,
+      ),
+      search: location.search,
     });
   };
   return (
@@ -1176,14 +1354,17 @@ function Shell() {
         workspaces={workspaces}
         activeWorkspace={activeWorkspace}
         profile={profile}
-        members={members}
         onWorkspaceChange={changeWorkspace}
+        members={members}
+        pendingCount={items.filter((item) => !item.read).length}
         collapsed={sidebarCollapsed}
         dark={dark}
         setDark={setDark}
         channels={channels}
+        channelCategories={channelCategories}
         channelMessageCounts={channelMessageCounts}
         createChannel={createChannel}
+        channelActions={channelActions}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--panel)] lg:mt-2 lg:mr-2 lg:mb-2 lg:ml-0 lg:overflow-hidden lg:rounded-[14px] lg:shadow-[var(--shadow-card)]">
         {/* Hermes ships a complete header of its own (sessions, title, new
@@ -1212,17 +1393,14 @@ function Shell() {
                 <span className="hidden items-center gap-1.5 rounded-full bg-[var(--state-info)] px-2.5 py-1 text-caption-1 font-medium text-[var(--state-info-fg)] sm:inline-flex">
                   <ShieldCheckIcon className="size-3.5" /> Opérateur
                 </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate(`/tasks/new?workspace=${activeWorkspace.id}`)
-                  }
-                  className="inline-flex h-7 items-center gap-1.5 rounded-[8px] bg-[image:var(--gradient-primary)] px-2.5 text-body-2 font-medium text-[var(--accent-contrast)] shadow-[var(--shadow-btn-primary)] hover:bg-[image:var(--gradient-primary-hover)]"
+                <Button
+                  variant="primary"
+                  onClick={openTaskDialog}
                 >
                   <PlusIcon className="size-4" />
                   <span className="hidden sm:inline">Nouvelle tâche</span>
                   <span className="sm:hidden">Tâche</span>
-                </button>
+                </Button>
             </div>
           </header>
         )}
@@ -1251,13 +1429,10 @@ function Shell() {
             <PlusIcon aria-hidden="true" className="size-5" />
           </button>
         ) : null}
+        <TaskDialog open={taskDialogOpen} onClose={closeTaskDialog} />
         {mobileRoot ? (
           <MobileBottomNav
             workspaceId={activeWorkspace.id}
-            unreadChannels={channels.reduce(
-              (total, entry) => total + unreadChannel(entry.id),
-              0,
-            )}
             pendingItems={items.filter((item) => !item.read).length}
           />
         ) : null}
@@ -1281,13 +1456,13 @@ function status(item: InboxItem) {
     return {
       label: "Décision",
       classes: "bg-[var(--state-warn)] text-[var(--state-warn-fg)]",
-      dot: "bg-[#f0b100]",
+      dot: "bg-[var(--state-warn-fg)]",
     };
   if (item.tone === "neg")
     return {
       label: "Bloqué",
       classes: "bg-[var(--state-neg)] text-[var(--state-neg-fg)]",
-      dot: "bg-[#e7000b]",
+      dot: "bg-[var(--state-neg-fg)]",
     };
   if (item.tone === "info")
     return {
@@ -1304,7 +1479,7 @@ function status(item: InboxItem) {
   return {
     label: "Brouillon",
     classes: "bg-[var(--muted)] text-[var(--muted-foreground)]",
-    dot: "bg-[#a1a1a1]",
+    dot: "bg-[var(--text-tertiary)]",
   };
 }
 function Card({
@@ -1429,11 +1604,9 @@ export function MenuPage() {
     messagesFor,
     dark,
     setDark,
-    notify,
   } = useApp();
   const navigate = useNavigate();
-  const [installable, setInstallable] = useState(false);
-  const go = (to: string) => navigate(withWorkspace(to, activeWorkspace.id));
+  const go = (to: string) => navigate(orgPath(activeWorkspace.id, to));
   const messageCounts = Object.fromEntries(
     channels.map((channel) => [channel.id, messagesFor(channel.id).length]),
   );
@@ -1448,8 +1621,6 @@ export function MenuPage() {
   );
   const pending = items.filter((item) => !item.read).length;
 
-  useEffect(() => onInstallAvailability(setInstallable), []);
-
   return (
     <div className="mobile-stack mx-auto w-full max-w-2xl">
       <section className="mobile-list">
@@ -1459,7 +1630,7 @@ export function MenuPage() {
           className="mobile-row"
         >
           <span
-            className={`inline-flex size-6 shrink-0 items-center justify-center rounded-full ${activeWorkspace.tone} text-[9px] font-semibold text-white`}
+            className={`inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold ${workspaceToneClasses(activeWorkspace.tone)}`}
           >
             {activeWorkspace.short}
           </span>
@@ -1474,7 +1645,7 @@ export function MenuPage() {
         <MenuRow
           icon={SearchIcon}
           label="Rechercher"
-          detail="Vues, salons, missions et messages"
+          detail="Vues, canaux, missions et messages"
           onClick={() => window.dispatchEvent(new Event("hermes:open-search"))}
         />
       </section>
@@ -1504,8 +1675,8 @@ export function MenuPage() {
       <MenuGroup label="Collaboration">
         <MenuRow
           icon={MessagesSquareIcon}
-          label="Salons"
-          detail={`${channels.length} salon${channels.length > 1 ? "s" : ""} dans cet espace`}
+          label="Canaux"
+          detail={`${channels.length} ${channels.length > 1 ? "canaux" : "canal"} dans cet espace`}
           badge={unreadChannels}
           onClick={() => go("/channels")}
         />
@@ -1519,16 +1690,16 @@ export function MenuPage() {
 
       <MenuGroup label="Console">
         <MenuRow
-          icon={ArchiveIcon}
-          label="Registre"
-          detail="Compétences activées"
-          onClick={() => go("/registry")}
-        />
-        <MenuRow
           icon={FileSearchIcon}
           label="Journal d'audit"
           detail="Décisions et changements"
           onClick={() => go("/audit")}
+        />
+        <MenuRow
+          icon={FlaskConicalIcon}
+          label="Labs"
+          detail="Expériences opt-in de la console"
+          onClick={() => go("/labs")}
         />
         <MenuRow
           icon={Settings2Icon}
@@ -1571,43 +1742,12 @@ export function MenuPage() {
             aria-checked={dark}
             aria-label="Activer le thème sombre"
             onClick={(event) => setDark(!dark, event.currentTarget)}
-            className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${dark ? "bg-[var(--accent-600)]" : "bg-[var(--input)]"}`}
+            className="mobile-switch"
           >
-            <span
-              className={`absolute top-1/2 left-1 size-6 -translate-y-1/2 rounded-full bg-white shadow-[var(--shadow-xs)] transition-transform ${dark ? "translate-x-6" : "translate-x-0"}`}
-            />
+            <span className="mobile-switch__thumb" aria-hidden />
           </button>
         </div>
       </MenuGroup>
-
-      {installable || isStandalone() ? (
-        <MenuGroup label="Application">
-          {installable ? (
-            <MenuRow
-              icon={DownloadIcon}
-              label="Installer l'application"
-              detail="Ajouter Hermes à l'écran d'accueil"
-              onClick={async () => {
-                const outcome = await promptInstall();
-                if (outcome === "accepted") notify("Hermes Console installée");
-                else if (outcome === "dismissed") notify("Installation annulée");
-              }}
-            />
-          ) : (
-            <div className="mobile-row">
-              <span className="mobile-row__icon">
-                <CheckIcon className="size-4" strokeWidth={1.9} />
-              </span>
-              <span className="mobile-row__body">
-                <span className="mobile-row__title">Application installée</span>
-                <span className="mobile-row__detail">
-                  Lancée en mode autonome sur cet appareil
-                </span>
-              </span>
-            </div>
-          )}
-        </MenuGroup>
-      ) : null}
 
       <p className="pb-1 text-center text-caption-1 text-[var(--text-tertiary)]">
         Hermes Console · v0.0.1 · données locales à ce navigateur
@@ -1630,7 +1770,7 @@ export function ActivityPage() {
       pendingGates(eventsForMission(mission.id)).length > 0 ||
       mission.status === "running",
   );
-  const go = (to: string) => navigate(withWorkspace(to, activeWorkspace.id));
+  const go = (to: string) => navigate(orgPath(activeWorkspace.id, to));
 
   return (
     <div className="mobile-stack mx-auto w-full max-w-2xl">
@@ -1714,11 +1854,18 @@ export function ActivityPage() {
 
 /** Channel directory: the mobile replacement for the sidebar channel list. */
 export function ChannelsPage() {
-  const { channels, messagesFor, activeWorkspace, createChannel } = useApp();
+  const { channels, channelCategories, messagesFor, activeWorkspace, createChannel } =
+    useApp();
+  const channelActions = useChannelActions();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const isMobile = useMediaQuery("(max-width: 1023px)");
+  const [dialogCategoryId, setDialogCategoryId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [renameTarget, setRenameTarget] = useState<Channel | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Channel | null>(null);
+  const [moveTarget, setMoveTarget] = useState<Channel | null>(null);
+  const [sectionTarget, setSectionTarget] = useState<ChannelCategory | null>(null);
+  const [createSectionOpen, setCreateSectionOpen] = useState(false);
   const createTrigger = useRef<HTMLButtonElement>(null);
   const messageCounts = Object.fromEntries(
     channels.map((channel) => [channel.id, messagesFor(channel.id).length]),
@@ -1729,25 +1876,54 @@ export function ChannelsPage() {
     null,
   );
   const needle = query.trim().toLocaleLowerCase();
-  const visible = [...channels]
+  const entries = [...channels]
     .filter((channel) =>
       !needle ||
       `${channel.name} ${channel.topic ?? ""}`
         .toLocaleLowerCase()
         .includes(needle),
     )
-    .sort((a, b) => Number(Boolean(b.starred)) - Number(Boolean(a.starred)));
+    .map((channel) => ({
+      channel,
+      attention: channelAttention(channel.id, {
+        hasUnread: unreadFor(channel.id) > 0,
+      }),
+    }))
+    /* Sections group, attention orders: inside a section the channel asking for
+       a decision comes first, and favourites break the tie among calm ones. */
+    .sort(
+      (a, b) =>
+        ATTENTION_ORDER.indexOf(a.attention.state) -
+          ATTENTION_ORDER.indexOf(b.attention.state) ||
+        Number(Boolean(b.channel.starred)) - Number(Boolean(a.channel.starred)),
+    );
+  // Sections drive the grouping, on mobile as on desktop: one organization of
+  // the channel tree, owned by the operator, identical on both surfaces. The
+  // attention ladder is not lost — it still orders the rows inside a section and
+  // still carries the dot, the pill and the pinned decisions above the search.
+  const groups = channelCategories.map((category, index) => ({
+    category,
+    index,
+    grouped: entries.filter(({ channel }) => channel.categoryId === category.id),
+  }));
+  // Pinned above search and immune to it: a pending decision can never be
+  // filtered away, which is the whole point of pinning it.
+  const pinnedDecisions = channels.flatMap((channel) =>
+    channelAttention(channel.id).gates.map((entry) => ({ channel, ...entry })),
+  );
 
   useEffect(() => {
-    const openCreate = () => setDialogOpen(true);
+    /* The mobile FAB lives in the shell, so it asks for the dialog by event.
+       It lands in the first section, which the dialog's picker can change. */
+    const openCreate = () => setDialogCategoryId(channelCategories[0]?.id ?? null);
     window.addEventListener("hermes:create-channel", openCreate);
     return () => window.removeEventListener("hermes:create-channel", openCreate);
-  }, []);
+  }, [channelCategories]);
 
   const open = (channelId: string) => {
     markRead(channelId);
     navigate(
-      withWorkspace(`/channels/${encodeURIComponent(channelId)}`, activeWorkspace.id),
+      orgPath(activeWorkspace.id, `/channels/${encodeURIComponent(channelId)}`),
     );
   };
 
@@ -1755,11 +1931,11 @@ export function ChannelsPage() {
     <div className="mobile-stack mx-auto w-full max-w-2xl">
       <button
         type="button"
-        onClick={() => navigate(withWorkspace("/workspaces", activeWorkspace.id))}
+        onClick={() => navigate(orgPath(activeWorkspace.id, "/workspaces"))}
         className="mobile-row mobile-row--current lg:hidden"
       >
         <span
-          className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full ${activeWorkspace.tone} text-[10px] font-semibold text-white`}
+          className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${workspaceToneClasses(activeWorkspace.tone)}`}
         >
           {activeWorkspace.short}
         </span>
@@ -1769,6 +1945,38 @@ export function ChannelsPage() {
         </span>
         <ChevronRightIcon className="size-4 shrink-0 text-[var(--text-tertiary)]" />
       </button>
+      {pinnedDecisions.length > 0 ? (
+        <section className="channel-gates" aria-label="Décisions en attente">
+          <h2 className="channel-gates__label">
+            <ShieldAlertIcon aria-hidden="true" className="size-3.5" />
+            Décisions en attente
+          </h2>
+          {pinnedDecisions.map(({ channel, mission, gate }) => (
+            <button
+              key={gate.id}
+              type="button"
+              onClick={() =>
+                navigate(
+                  orgPath(
+                    activeWorkspace.id,
+                    `/missions/${encodeURIComponent(mission.id)}`,
+                  ),
+                )
+              }
+              className="channel-gates__row"
+            >
+              <span className="channel-gates__body">
+                <span className="channel-gates__title">{gate.title}</span>
+                <span className="channel-gates__meta">
+                  #{channel.name} · {mission.name}
+                  {gate.blastRadius ? ` · ${gate.blastRadius.environment}` : ""}
+                </span>
+              </span>
+              <ChevronRightIcon className="size-4 shrink-0 text-[var(--state-warn-fg)]" />
+            </button>
+          ))}
+        </section>
+      ) : null}
       <label className="flex h-11 items-center gap-2 rounded-[8px] border border-[var(--border-control)] bg-[var(--card)] px-2 text-[var(--muted-foreground)] shadow-[var(--shadow-xs)] focus-within:border-[var(--ring)] lg:h-8">
         <SearchIcon className="size-4 shrink-0" />
         <input
@@ -1778,124 +1986,287 @@ export function ChannelsPage() {
           autoComplete="off"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          aria-label="Rechercher un salon"
-          placeholder="Rechercher un salon"
+          name="channel-search"
+          aria-label="Rechercher un canal"
+          placeholder="Rechercher un canal"
           className="min-w-0 flex-1 bg-transparent text-body-1 text-[var(--foreground)] outline-none placeholder:text-[var(--text-tertiary)]"
         />
       </label>
 
       <div className="mobile-channel-groups">
-        {(isMobile
-          ? [
-              ["Favoris", visible.filter((channel) => channel.starred)],
-              [
-                "Non lus",
-                visible.filter(
-                  (channel) => !channel.starred && unreadFor(channel.id) > 0,
-                ),
-              ],
-              [
-                "Tous les salons",
-                visible.filter(
-                  (channel) =>
-                    !channel.starred && unreadFor(channel.id) === 0,
-                ),
-              ],
-            ]
-          : [["", visible]]
-        ).map(([label, grouped]) => {
-          const entries = grouped as typeof visible;
-          if (!entries.length) return null;
+        {groups.map(({ category, index: categoryIndex, grouped }) => {
           return (
-            <section key={label as string} className="mobile-group" aria-label={label as string}>
-              {label ? <h2 className="mobile-group__label">{label as string}</h2> : null}
-              <div className="mobile-list">
-                {entries.map((channel) => {
-          const messages = messagesFor(channel.id);
-          const last = messages[messages.length - 1];
-          const unread = unreadFor(channel.id);
-          return (
-            <button
-              key={channel.id}
-              type="button"
-              onClick={() => open(channel.id)}
-              className="mobile-row"
+            <section
+              key={category.id}
+              className="mobile-group"
+              aria-label={category.name}
             >
-              <span className="mobile-row__icon">
-                <HashIcon className="size-4" strokeWidth={1.9} />
-              </span>
-              <span className="mobile-row__body">
-                <span className="mobile-row__title">
-                  {channel.name}
-                  {channel.starred ? (
-                    <StarIcon
-                      aria-label="Favori"
-                      className="ml-1.5 inline size-3 align-[-1px] text-[var(--text-tertiary)]"
-                      fill="currentColor"
-                    />
-                  ) : null}
-                </span>
-                <span className="mobile-row__detail">
-                  {last
-                    ? `${last.author} : ${last.body || "pièce jointe"}`
-                    : channel.topic || "Aucun message"}
-                </span>
-              </span>
-              {unread > 0 ? (
-                <span className="mobile-badge">{Math.min(99, unread)}</span>
-              ) : null}
-              <ChevronRightIcon className="size-4 shrink-0 text-[var(--text-tertiary)]" />
-            </button>
-          );
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="mobile-group__label">{category.name}</h2>
+                <RowMenu
+                  className="items-center"
+                  label={`la section ${category.name}`}
+                  items={sectionMenuItems({
+                    category,
+                    index: categoryIndex,
+                    count: channelCategories.length,
+                    actions: channelActions,
+                    onRename: () => setSectionTarget(category),
+                    onAddChannel: () => setDialogCategoryId(category.id),
+                  })}
+                >
+                  <span className="min-w-0 flex-1" />
+                </RowMenu>
+              </div>
+              {!grouped.length && (
+                <p className="px-4 py-3 text-body-2-regular text-[var(--text-tertiary)]">
+                  {needle ? "Aucun canal ne correspond" : "Aucun canal"}
+                </p>
+              )}
+              <div className="mobile-list">
+                {grouped.map(({ channel, attention }) => {
+                  const messages = messagesFor(channel.id);
+                  const last = messages[messages.length - 1];
+                  const hasUnread = unreadFor(channel.id) > 0;
+                  const expandable = attention.missions.length > 0;
+                  const expanded = expandedId === channel.id;
+                  const runningMission = attention.missions.find(
+                    (mission) => mission.status === "running",
+                  );
+                  const detail =
+                    attention.state === "decision"
+                      ? `${attention.gates.length} décision${attention.gates.length > 1 ? "s" : ""} en attente · ${attention.gates[0].mission.name}`
+                      : attention.state === "question"
+                        ? `Réponse attendue · ${attention.missions[0].name}`
+                        : attention.state === "working" && runningMission
+                          ? `${runningMission.agent} actif · ${runningMission.name}`
+                          : last
+                            ? `${last.author} : ${last.body || "pièce jointe"}`
+                            : channel.topic || "Aucun message";
+                  return (
+                    <div
+                      key={channel.id}
+                      className={`channel-row ${expanded ? "channel-row--open" : ""}`}
+                    >
+                      <RowMenu
+                        className="channel-row__line"
+                        label={`# ${channel.name}`}
+                        items={channelMenuItems({
+                          onRename: () => setRenameTarget(channel),
+                          onMove: () => setMoveTarget(channel),
+                          onDelete: () => setDeleteTarget(channel),
+                        })}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => open(channel.id)}
+                          className="mobile-row channel-row__main"
+                        >
+                          <span className="mobile-row__icon channel-row__icon">
+                            <HashIcon className="size-4" strokeWidth={1.9} />
+                            {attention.state !== "calm" ? (
+                              <span
+                                aria-hidden="true"
+                                className={`channel-dot channel-dot--${attention.state}`}
+                              />
+                            ) : null}
+                          </span>
+                          <span className="mobile-row__body">
+                            <span
+                              className={`mobile-row__title ${hasUnread ? "channel-row__title--unread" : ""}`}
+                            >
+                              {channel.name}
+                              {channel.starred ? (
+                                <StarIcon
+                                  aria-label="Favori"
+                                  className="ml-1.5 inline size-3 align-[-1px] text-[var(--text-tertiary)]"
+                                  fill="currentColor"
+                                />
+                              ) : null}
+                              {attention.state !== "calm" ? (
+                                <span className="sr-only">
+                                  {" "}
+                                  · {ATTENTION_LABEL[attention.state]}
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="mobile-row__detail">{detail}</span>
+                          </span>
+                          {attention.workingAgent && attention.workingSince ? (
+                            <span className="channel-pill channel-pill--working">
+                              {attention.workingAgent} ·{" "}
+                              {formatElapsed(attention.workingSince)}
+                            </span>
+                          ) : attention.gates.length ? (
+                            <span className="channel-pill channel-pill--decision">
+                              Décider
+                            </span>
+                          ) : null}
+                          {!expandable ? (
+                            <ChevronRightIcon className="size-4 shrink-0 text-[var(--text-tertiary)]" />
+                          ) : null}
+                        </button>
+                        {expandable ? (
+                          <button
+                            type="button"
+                            aria-expanded={expanded}
+                            aria-label={`${expanded ? "Replier" : "Déplier"} l'activité de ${channel.name}`}
+                            onClick={() =>
+                              setExpandedId(expanded ? null : channel.id)
+                            }
+                            className="channel-row__toggle"
+                          >
+                            <ChevronDownIcon
+                              className={`size-4 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+                            />
+                          </button>
+                        ) : null}
+                      </RowMenu>
+                      {expanded ? (
+                        <div className="channel-row__panel">
+                          {attention.gates.map(({ mission, gate }) => (
+                            <button
+                              key={gate.id}
+                              type="button"
+                              onClick={() =>
+                                navigate(
+                                  orgPath(
+                                    activeWorkspace.id,
+                                    `/missions/${encodeURIComponent(mission.id)}`,
+                                  ),
+                                )
+                              }
+                              className="channel-panel__row"
+                            >
+                              <ShieldAlertIcon
+                                aria-hidden="true"
+                                className="size-3.5 shrink-0 text-[var(--state-warn-fg)]"
+                              />
+                              <span className="channel-panel__text">
+                                {gate.title}
+                              </span>
+                              <ChevronRightIcon className="size-3.5 shrink-0 text-[var(--text-tertiary)]" />
+                            </button>
+                          ))}
+                          {runningMission ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                navigate(
+                                  orgPath(
+                                    activeWorkspace.id,
+                                    `/missions/${encodeURIComponent(runningMission.id)}`,
+                                  ),
+                                )
+                              }
+                              className="channel-panel__row"
+                            >
+                              <ActivityIcon
+                                aria-hidden="true"
+                                className="size-3.5 shrink-0 text-[var(--accent-600)]"
+                              />
+                              <span className="channel-panel__text">
+                                {runningMission.agent} actif depuis{" "}
+                                {formatElapsed(runningMission.startedAt)} ·{" "}
+                                {runningMission.name}
+                              </span>
+                              <ChevronRightIcon className="size-3.5 shrink-0 text-[var(--text-tertiary)]" />
+                            </button>
+                          ) : null}
+                          {last ? (
+                            <p className="channel-panel__last">
+                              {last.author} : {last.body || "pièce jointe"}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
                 })}
               </div>
             </section>
           );
         })}
-        {!visible.length ? (
+        {!entries.length && needle ? (
           <p className="px-4 py-8 text-center text-body-1 text-[var(--muted-foreground)]">
-            Aucun salon ne correspond à cette recherche.
+            Aucun canal ne correspond à cette recherche.
           </p>
         ) : null}
       </div>
 
-      <section className="mobile-list hidden lg:block">
+      <section className="mobile-list">
         <button
           ref={createTrigger}
           type="button"
           aria-haspopup="dialog"
-          aria-expanded={dialogOpen}
-          onClick={() => setDialogOpen(true)}
+          aria-expanded={dialogCategoryId !== null}
+          onClick={() => setDialogCategoryId(channelCategories[0]?.id ?? null)}
           className="mobile-row"
         >
           <span className="mobile-row__icon">
             <PlusIcon className="size-4" strokeWidth={1.9} />
           </span>
           <span className="mobile-row__body">
-            <span className="mobile-row__title">Créer un salon</span>
+            <span className="mobile-row__title">Créer un canal</span>
             <span className="mobile-row__detail">
               Organiser les échanges autour d'un sujet
+            </span>
+          </span>
+        </button>
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          aria-expanded={createSectionOpen}
+          onClick={() => setCreateSectionOpen(true)}
+          className="mobile-row"
+        >
+          <span className="mobile-row__icon">
+            <PlusIcon className="size-4" strokeWidth={1.9} />
+          </span>
+          <span className="mobile-row__body">
+            <span className="mobile-row__title">Nouvelle section</span>
+            <span className="mobile-row__detail">
+              Regrouper des canaux dans la navigation
             </span>
           </span>
         </button>
       </section>
 
       <CreateChannelDialog
-        open={dialogOpen}
+        open={dialogCategoryId !== null}
         trigger={createTrigger}
         createChannel={createChannel}
-        onClose={() => setDialogOpen(false)}
+        categories={channelCategories}
+        defaultCategoryId={dialogCategoryId ?? undefined}
+        onClose={() => setDialogCategoryId(null)}
         onCreated={(id) => {
-          setDialogOpen(false);
-          navigate(withWorkspace(`/channels/${id}`, activeWorkspace.id));
+          setDialogCategoryId(null);
+          navigate(orgPath(activeWorkspace.id, `/channels/${id}`));
         }}
+      />
+      <ChannelDialogs
+        actions={channelActions}
+        categories={channelCategories}
+        channelMessageCounts={messageCounts}
+        renameTarget={renameTarget}
+        deleteTarget={deleteTarget}
+        moveTarget={moveTarget}
+        sectionTarget={sectionTarget}
+        createSectionOpen={createSectionOpen}
+        focusAfterDelete={createTrigger}
+        onCloseRename={() => setRenameTarget(null)}
+        onCloseDelete={() => setDeleteTarget(null)}
+        onCloseMove={() => setMoveTarget(null)}
+        onCloseSection={() => setSectionTarget(null)}
+        onCloseCreateSection={() => setCreateSectionOpen(false)}
+        onRequestCreateSection={() => setCreateSectionOpen(true)}
       />
     </div>
   );
 }
 
 export function InboxPage() {
-  const { items, notify, markAllRead, activeWorkspace } = useApp();
+  const { items, notify, markAllRead, resolveItem, activeWorkspace } = useApp();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -1983,7 +2354,7 @@ export function InboxPage() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => navigate(`/inbox/${item.id}?workspace=${activeWorkspace.id}`)}
+                onClick={() => navigate(orgPath(activeWorkspace.id, `/inbox/${item.id}`))}
                 className="mobile-card"
               >
                 <span className={`mobile-card__dot ${state.dot}`} />
@@ -2115,7 +2486,7 @@ export function InboxPage() {
                     className="cursor-pointer transition-colors hover:bg-[var(--accent)]"
                     onClick={() =>
                       navigate(
-                        `/inbox/${item.id}?workspace=${activeWorkspace.id}`,
+                        orgPath(activeWorkspace.id, `/inbox/${item.id}`),
                       )
                     }
                   >
@@ -2144,19 +2515,60 @@ export function InboxPage() {
                       {item.age}
                     </td>
                     <td className="px-3 py-2.5">
-                      <button
-                        type="button"
-                        aria-label={`Ouvrir ${item.title}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          navigate(
-                            `/inbox/${item.id}?workspace=${activeWorkspace.id}`,
-                          );
-                        }}
-                        className="inline-flex size-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
-                      >
-                        <MoreHorizontalIcon className="size-4" />
-                      </button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={`Actions pour ${item.title}`}
+                            onClick={(event) => event.stopPropagation()}
+                            className="inline-flex size-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--muted)] data-[state=open]:bg-[var(--muted)]"
+                          >
+                            <MoreHorizontalIcon className="size-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        {/* The portal keeps React-tree bubbling: without this,
+                            item clicks reach the row's onClick and navigate. */}
+                        <DropdownMenuContent
+                          align="end"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              navigate(
+                                orgPath(activeWorkspace.id, `/inbox/${item.id}`),
+                              )
+                            }
+                          >
+                            <ChevronRightIcon /> Ouvrir
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={
+                              item.category === "agent_activity" && item.read
+                            }
+                            onSelect={() => {
+                              resolveItem(item.id);
+                              notify("Élément marqué comme traité");
+                            }}
+                          >
+                            <CheckIcon /> Marquer traité
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onSelect={async () => {
+                              try {
+                                await navigator.clipboard?.writeText(
+                                  `${item.title}\n${item.context}\n${item.preview}`,
+                                );
+                                notify("Contexte copié dans le presse-papiers");
+                              } catch {
+                                notify("Contexte prêt à être copié");
+                              }
+                            }}
+                          >
+                            <CopyIcon /> Copier le contexte
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 );
@@ -2195,7 +2607,7 @@ export function InboxDetailPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <Button
-        onClick={() => navigate(`/inbox?workspace=${activeWorkspace.id}`)}
+        onClick={() => navigate(orgPath(activeWorkspace.id, "/inbox"))}
       >
         <ArrowLeftIcon className="size-4" /> Retour à la file
       </Button>
@@ -2243,9 +2655,16 @@ export function InboxDetailPage() {
   );
 }
 
-export function TaskPage() {
+function TaskForm({
+  onCancel,
+  onCreated,
+  showHeading,
+}: {
+  onCancel: () => void;
+  onCreated: (item: InboxItem) => void;
+  showHeading: boolean;
+}) {
   const { addTask, notify, activeWorkspace } = useApp();
-  const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [context, setContext] = useState(
     activeWorkspace.name.toLocaleLowerCase(),
@@ -2253,10 +2672,6 @@ export function TaskPage() {
   const [preview, setPreview] = useState("");
   const [agent, setAgent] = useState("hermes");
   const [error, setError] = useState("");
-  const defaultContext = activeWorkspace.name.toLocaleLowerCase();
-  const dirty = Boolean(
-    title || preview || context !== defaultContext || agent !== "hermes",
-  );
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (title.trim().length < 4 || preview.trim().length < 12) {
@@ -2272,83 +2687,122 @@ export function TaskPage() {
       agent,
     );
     notify("Mission ajoutée à la file");
-    navigate(`/inbox/${item.id}?workspace=${activeWorkspace.id}`);
+    onCreated(item);
   };
+  return (
+    <form onSubmit={submit} className="grid gap-5 p-5 sm:p-6">
+      {showHeading ? (
+        <div>
+          <h2 className="text-[14px] font-semibold text-[var(--foreground)]">
+            Définir une nouvelle mission
+          </h2>
+          <p className="mt-1 text-body-1 text-[var(--muted-foreground)]">
+            L'élément est ajouté à la file puis ouvre sa vue de suivi.
+          </p>
+        </div>
+      ) : null}
+      {error && (
+        <p
+          role="alert"
+          className="rounded-xl bg-[var(--state-neg)] px-3 py-2 text-body-1 text-[var(--state-neg-fg)]"
+        >
+          {error}
+        </p>
+      )}
+      <Field label="Titre">
+        <input
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          autoComplete="off"
+          autoCapitalize="sentences"
+          enterKeyHint="next"
+          placeholder="Ex. Vérifier la migration des factures"
+          className="control"
+        />
+      </Field>
+      <Field label="Contexte">
+        <input
+          value={context}
+          onChange={(event) => setContext(event.target.value)}
+          className="control"
+        />
+      </Field>
+      <Field label="Agent">
+        <select
+          value={agent}
+          onChange={(event) => setAgent(event.target.value)}
+          className="control"
+        >
+          <option value="hermes">hermes</option>
+          <option value="obiwan">obiwan</option>
+          <option value="padawan">padawan</option>
+        </select>
+      </Field>
+      <Field label="Intention et résultat attendu">
+        <textarea
+          value={preview}
+          onChange={(event) => setPreview(event.target.value)}
+          rows={5}
+          placeholder="Décris ce qui doit être vérifié, produit ou décidé…"
+          className="control resize-y"
+        />
+      </Field>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" onClick={onCancel}>
+          Annuler
+        </Button>
+        <Button type="submit" variant="primary">
+          <PlusIcon className="size-4" /> Créer la mission
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+export function TaskPage() {
+  const { activeWorkspace } = useApp();
+  const navigate = useNavigate();
   return (
     <div className="mx-auto max-w-3xl">
       <Card>
-        <form
-          onSubmit={submit}
-          className="grid gap-5 p-5 sm:p-6"
-          data-pwa-dirty={dirty ? "true" : undefined}
-        >
-          <div>
-            <h2 className="text-[14px] font-semibold text-[var(--foreground)]">
-              Définir une nouvelle mission
-            </h2>
-            <p className="mt-1 text-body-1 text-[var(--muted-foreground)]">
-              L'élément est ajouté à la file puis ouvre sa vue de suivi.
-            </p>
-          </div>
-          {error && (
-            <p
-              role="alert"
-              className="rounded-xl bg-[var(--state-neg)] px-3 py-2 text-body-1 text-[var(--state-neg-fg)]"
-            >
-              {error}
-            </p>
-          )}
-          <Field label="Titre">
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              autoComplete="off"
-              autoCapitalize="sentences"
-              enterKeyHint="next"
-              placeholder="Ex. Vérifier la migration des factures"
-              className="control"
-            />
-          </Field>
-          <Field label="Contexte">
-            <input
-              value={context}
-              onChange={(event) => setContext(event.target.value)}
-              className="control"
-            />
-          </Field>
-          <Field label="Agent">
-            <select
-              value={agent}
-              onChange={(event) => setAgent(event.target.value)}
-              className="control"
-            >
-              <option value="hermes">hermes</option>
-              <option value="obiwan">obiwan</option>
-              <option value="padawan">padawan</option>
-            </select>
-          </Field>
-          <Field label="Intention et résultat attendu">
-            <textarea
-              value={preview}
-              onChange={(event) => setPreview(event.target.value)}
-              rows={5}
-              placeholder="Décris ce qui doit être vérifié, produit ou décidé…"
-              className="control resize-y"
-            />
-          </Field>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              onClick={() => navigate(`/inbox?workspace=${activeWorkspace.id}`)}
-            >
-              Annuler
-            </Button>
-            <Button type="submit" variant="primary">
-              <PlusIcon className="size-4" /> Créer la mission
-            </Button>
-          </div>
-        </form>
+        <TaskForm
+          showHeading
+          onCancel={() => navigate(orgPath(activeWorkspace.id, "/inbox"))}
+          onCreated={(item) =>
+            navigate(orgPath(activeWorkspace.id, `/inbox/${item.id}`))
+          }
+        />
       </Card>
     </div>
+  );
+}
+
+function TaskDialog({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const { activeWorkspace } = useApp();
+  const navigate = useNavigate();
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Nouvelle tâche"
+      description="Lancer une mission avec une intention vérifiable."
+      maxWidth="max-w-xl"
+    >
+      <TaskForm
+        showHeading={false}
+        onCancel={onClose}
+        onCreated={(item) => {
+          onClose();
+          navigate(orgPath(activeWorkspace.id, `/inbox/${item.id}`));
+        }}
+      />
+    </Modal>
   );
 }
 function Field({
@@ -2378,11 +2832,14 @@ export function ChannelPage() {
     deleteMessage,
     toggleStar,
     saveChannelInfo,
+    renameChannel,
     activeWorkspace,
     profile,
     notify,
     collapsed,
     setCollapsed,
+    members,
+    selectMember,
   } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
@@ -2399,6 +2856,7 @@ export function ChannelPage() {
   const [actionMessageId, setActionMessageId] = useState<string | null>(null);
   const [editBody, setEditBody] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
   const actionTriggerRef = useRef<HTMLElement | null>(null);
   const actionMessage = messages.find(
     (message) => message.id === actionMessageId,
@@ -2416,7 +2874,6 @@ export function ChannelPage() {
 
   const updateQuery = (mutate: (next: URLSearchParams) => void) => {
     const next = new URLSearchParams(location.search);
-    next.set("workspace", activeWorkspace.id);
     mutate(next);
     navigate({ pathname: location.pathname, search: `?${next.toString()}` });
   };
@@ -2444,22 +2901,10 @@ export function ChannelPage() {
     }));
   };
 
-  const publish = (
-    draft: SlackDraft,
-    parentMessageId?: string,
-    broadcastToChannel = false,
-  ) => {
+  const publish = (draft: SlackDraft, parentMessageId?: string) => {
     if (!channel) return;
     const attachments = toAttachments(draft.attachments);
-    if (
-      !sendMessage(
-        channel.id,
-        draft.body,
-        attachments,
-        parentMessageId,
-        broadcastToChannel,
-      )
-    ) {
+    if (!sendMessage(channel.id, draft.body, attachments, parentMessageId)) {
       notify("Écris un message ou ajoute une pièce jointe valide");
     }
   };
@@ -2468,14 +2913,14 @@ export function ChannelPage() {
     return (
       <div className="p-4 lg:p-6">
         <Card className="p-6">
-          <h2 className="font-semibold">Salon introuvable</h2>
+          <h2 className="font-semibold">Canal introuvable</h2>
           <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-            Ce salon n'existe pas dans {activeWorkspace.name}.
+            Ce canal n'existe pas dans {activeWorkspace.name}.
           </p>
           <div className="mt-4">
             <Button
               onClick={() =>
-                navigate(`/inbox?workspace=${activeWorkspace.id}`)
+                navigate(orgPath(activeWorkspace.id, "/inbox"))
               }
             >
               Retour à la file
@@ -2512,9 +2957,7 @@ export function ChannelPage() {
           onAttach: () => undefined,
         }}
         onSendMessage={(draft) => publish(draft)}
-        onSendThreadMessage={(parentId, draft, broadcast) =>
-          publish(draft, parentId, broadcast)
-        }
+        onSendThreadMessage={(parentId, draft) => publish(draft, parentId)}
         onTabChange={(tab) =>
           updateQuery((next) => {
             if (tab === "messages") next.delete("tab");
@@ -2524,10 +2967,7 @@ export function ChannelPage() {
           })
         }
         onToggleStar={() => toggleStar(channel.id)}
-        onShowMembers={() =>
-          navigate(`/members?workspace=${activeWorkspace.id}`)
-        }
-        onSearch={() => window.dispatchEvent(new Event("hermes:open-search"))}
+        onShowMembers={() => setMembersOpen(true)}
         onOpenDetails={() =>
           updateQuery((next) => {
             next.delete("tab");
@@ -2537,7 +2977,12 @@ export function ChannelPage() {
         }
         onUpdateDetails={(patch) => {
           saveChannelInfo(channel.id, patch);
-          notify("Informations du salon enregistrées");
+          notify("Informations du canal enregistrées");
+        }}
+        onRenameChannel={(name) => {
+          if (!renameChannel(channel.id, name)) return false;
+          notify(`Canal renommé en #${name.trim()}`);
+          return true;
         }}
         onClosePanel={() =>
           updateQuery((next) => {
@@ -2557,6 +3002,21 @@ export function ChannelPage() {
         }
         onTogglePin={(messageId) => togglePin(channel.id, messageId)}
         onMoreMessageActions={openActions}
+      />
+      <MembersDialog
+        open={membersOpen}
+        onOpenChange={setMembersOpen}
+        members={members}
+        workspaceName={activeWorkspace.name}
+        onSelectMember={(name) => {
+          selectMember(name);
+          setMembersOpen(false);
+          navigate(orgPath(activeWorkspace.id, "/members"));
+        }}
+        onOpenPage={() => {
+          setMembersOpen(false);
+          navigate(orgPath(activeWorkspace.id, "/members"));
+        }}
       />
       {actionMessage && (
         <Modal
@@ -2641,15 +3101,7 @@ export function ChannelPage() {
           ) : (
             /* Touch collapses the hover toolbar into this sheet, so reacting and
                replying have to be reachable from here too. */
-            <div
-              className="grid gap-4"
-              data-pwa-dirty={
-                actionMessage.author === profile.name &&
-                editBody !== actionMessage.body
-                  ? "true"
-                  : undefined
-              }
-            >
+            <div className="grid gap-4">
               <div className="grid gap-2">
                 <span className="text-body-medium">Réagir</span>
                 <div className="flex flex-wrap gap-2">
@@ -2845,12 +3297,7 @@ export function MembersPage() {
           </p>
         </Card>
         <Card className="p-4">
-          <form
-            id="add-member"
-            onSubmit={submit}
-            className="grid gap-3"
-            data-pwa-dirty={name || role ? "true" : undefined}
-          >
+          <form id="add-member" onSubmit={submit} className="grid gap-3">
             <div><h2 className="font-medium">Ajouter un accès</h2><p className="mt-1 text-xs text-[var(--muted-foreground)]">Le membre reste isolé dans ce workspace.</p></div>
             {error && <p role="alert" className="rounded-lg bg-[var(--state-neg)] p-2 text-xs text-[var(--state-neg-fg)]">{error}</p>}
             <Field label="Nom"><input value={name} onChange={(event) => setName(event.target.value)} className="control" /></Field>
@@ -2859,84 +3306,6 @@ export function MembersPage() {
           </form>
         </Card>
       </div>
-    </div>
-  );
-}
-
-const skills = [
-  {
-    id: "pdf-report",
-    label: "pdf-report",
-    desc: "Produit un rapport PDF avec gabarit maison.",
-  },
-  {
-    id: "workspace-audit",
-    label: "workspace-audit",
-    desc: "Analyse un espace de travail avant modification.",
-  },
-  {
-    id: "postgres-readonly",
-    label: "postgres-readonly",
-    desc: "Lit les données sans autoriser d'écriture.",
-  },
-  {
-    id: "notion-sync",
-    label: "notion-sync",
-    desc: "Synchronise un espace Notion après autorisation.",
-  },
-];
-export function RegistryPage() {
-  const { enabledSkills, toggleSkill } = useApp();
-  const [query, setQuery] = useState("");
-  const entries = skills.filter((skill) =>
-    `${skill.label} ${skill.desc}`.toLowerCase().includes(query.toLowerCase()),
-  );
-  return (
-    <div className="mx-auto max-w-5xl">
-      <Card>
-        <div className="flex flex-col gap-3 border-b border-[var(--border)] p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-medium">Registre des compétences</h2>
-            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-              {enabledSkills.length} compétence(s) activée(s).
-            </p>
-          </div>
-          <label className="flex h-11 items-center gap-2 rounded-[8px] border border-[var(--input)] px-2 focus-within:border-[var(--ring)] sm:h-8">
-            <SearchIcon className="size-4 shrink-0 text-[var(--muted-foreground)]" />
-            <input
-              type="search"
-              inputMode="search"
-              enterKeyHint="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              aria-label="Rechercher une compétence"
-              placeholder="Rechercher"
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none sm:w-36 sm:flex-none"
-            />
-          </label>
-        </div>
-        <div className="divide-y divide-[var(--border)]">
-          {entries.map((skill) => {
-            const enabled = enabledSkills.includes(skill.id);
-            return (
-              <div key={skill.id} className="flex flex-wrap items-center gap-x-4 gap-y-3 p-4">
-                <BookOpenIcon className="size-5 shrink-0 text-[var(--accent-500)]" />
-                <div className="min-w-[12rem] flex-1">
-                  <p className="font-medium text-[var(--foreground)]">
-                    {skill.label}
-                  </p>
-                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                    {skill.desc}
-                  </p>
-                </div>
-                <Button onClick={() => toggleSkill(skill.id)}>
-                  {enabled ? "Désactiver" : "Activer"}
-                </Button>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
     </div>
   );
 }
@@ -3075,12 +3444,7 @@ export function AccountPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <Card>
-        <div
-          className="p-5 sm:p-6"
-          data-pwa-dirty={
-            name !== profile.name || role !== profile.role ? "true" : undefined
-          }
-        >
+        <div className="p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <span className="inline-flex size-9 items-center justify-center rounded-full bg-[var(--accent-200)] text-[12px] font-semibold text-[var(--accent-700)]">
               {name
@@ -3137,7 +3501,37 @@ export function AccountPage() {
           </div>
         </div>
       </Card>
+      <div className="mt-4">
+        <SessionCard />
+      </div>
     </div>
+  );
+}
+
+/** Fake local session, surfaced so sign-out is reachable from the profile. */
+function SessionCard() {
+  const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
+  if (!user) return null;
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-3 p-5 sm:p-6">
+        <div>
+          <h2 className="font-semibold">Session</h2>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Connecté en tant que {user.email} (démo locale).
+          </p>
+        </div>
+        <Button
+          onClick={() => {
+            useAuthStore.getState().logout();
+            navigate("/login", { replace: true });
+          }}
+        >
+          Se déconnecter
+        </Button>
+      </div>
+    </Card>
   );
 }
 
@@ -3164,7 +3558,7 @@ export function WorkspacesPage() {
       return;
     }
     notify(`Workspace ${workspace.name} créé`);
-    navigate(`/inbox?workspace=${workspace.id}`);
+    navigate(orgPath(workspace.id, "/inbox"));
   };
   return (
     <div className="mx-auto grid max-w-5xl gap-4 lg:grid-cols-[1fr_320px]">
@@ -3179,7 +3573,7 @@ export function WorkspacesPage() {
           {workspaces.map((workspace) => (
             <div key={workspace.id} className="flex flex-wrap items-center gap-x-3 gap-y-3 p-4">
               <span
-                className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full ${workspace.tone} text-[10px] font-semibold text-white`}
+                className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${workspaceToneClasses(workspace.tone)}`}
               >
                 {workspace.short}
               </span>
@@ -3200,7 +3594,7 @@ export function WorkspacesPage() {
                 <Button
                   onClick={() => {
                     setWorkspace(workspace.id);
-                    navigate(`/inbox?workspace=${workspace.id}`);
+                    navigate(orgPath(workspace.id, "/inbox"));
                   }}
                 >
                   Ouvrir
@@ -3248,11 +3642,7 @@ export function WorkspacesPage() {
         )}
       </Card>
       <Card className="h-fit">
-        <form
-          onSubmit={create}
-          className="grid gap-4 p-5"
-          data-pwa-dirty={name || description ? "true" : undefined}
-        >
+        <form onSubmit={create} className="grid gap-4 p-5">
           <div>
             <h2 className="font-medium">Créer un workspace</h2>
             <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -3307,7 +3697,7 @@ export function NotFound() {
         <Button
           variant="primary"
           onClick={() =>
-            navigate(`/inbox?workspace=${activeWorkspace.id}`, {
+            navigate(orgPath(activeWorkspace.id, "/inbox"), {
               replace: true,
             })
           }
