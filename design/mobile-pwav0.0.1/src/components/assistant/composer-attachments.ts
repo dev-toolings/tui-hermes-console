@@ -2,17 +2,13 @@ import type {
   AppendMessage,
   AttachmentAdapter,
 } from "@assistant-ui/react";
-import { isStandalone } from "../../pwa";
 import type { AssistantAttachment } from "./assistant-state";
 
 export const MAX_ASSISTANT_ATTACHMENTS = 8;
 export const MAX_ASSISTANT_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
-type FocusableComposerInput = Pick<HTMLTextAreaElement, "blur" | "focus">;
-
 type AttachmentPickerOptions = {
   composer: ComposerAttachmentController;
-  composerInput: FocusableComposerInput | null;
 };
 
 type ComposerAttachmentController = {
@@ -53,29 +49,6 @@ export const assistantAttachmentAdapter = {
   },
 } satisfies AttachmentAdapter;
 
-/**
- * Browser tabs already restore their own input session after the native file
- * picker and must not be disturbed. In standalone, perform one synchronous
- * blur/focus while the trusted picker event and its connected file input still
- * exist, then detach the file input. Deferred focus retries have no activation
- * and can break the browser path.
- */
-export function settleAttachmentPicker({
-  composerInput,
-  standalone,
-  detach,
-}: {
-  composerInput: FocusableComposerInput | null;
-  standalone: boolean;
-  detach: () => void;
-}) {
-  if (standalone) {
-    composerInput?.blur();
-    composerInput?.focus({ preventScroll: true });
-  }
-  detach();
-}
-
 export async function addAcceptedAttachments(
   composer: ComposerAttachmentController,
   files: Iterable<File>,
@@ -94,7 +67,6 @@ export async function addAcceptedAttachments(
 
 export function openAssistantAttachmentPicker({
   composer,
-  composerInput,
 }: AttachmentPickerOptions) {
   let input: HTMLInputElement | null = document.createElement("input");
   input.type = "file";
@@ -105,7 +77,6 @@ export function openAssistantAttachmentPicker({
   document.body.appendChild(input);
 
   let active = true;
-  const standalone = isStandalone();
   const removeInput = () => {
     const currentInput = input;
     if (!currentInput) return;
@@ -114,14 +85,12 @@ export function openAssistantAttachmentPicker({
     currentInput.remove();
     input = null;
   };
+  // Browser tabs restore their own input session after the native file picker
+  // and must not be disturbed, so settling is only detaching the file input.
   const settlePicker = () => {
     if (!active) return;
     active = false;
-    settleAttachmentPicker({
-      composerInput,
-      standalone,
-      detach: removeInput,
-    });
+    removeInput();
   };
 
   input.onchange = async (event) => {

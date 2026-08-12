@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Generate the PWA icon set from code so the binaries stay reproducible.
+"""Generate the app icon set from code so the binaries stay reproducible.
 
 Run: python3 scripts/generate-icons.py
-Outputs into public/: icon-192.png, icon-512.png, icon-maskable-512.png,
-apple-touch-icon.png.
+Outputs into public/: apple-touch-icon.png.
 """
 
 import os
@@ -115,9 +114,6 @@ def main():
     os.makedirs(PUBLIC, exist_ok=True)
     targets = [
         # name, size, corner radius ratio, glyph scale, transparent corners
-        ("icon-192.png", 192, 0.22, 1.0, True),
-        ("icon-512.png", 512, 0.22, 1.0, True),
-        ("icon-maskable-512.png", 512, 0.0, 0.66, False),
         ("apple-touch-icon.png", 180, 0.0, 0.86, False),
     ]
     for name, size, radius, glyph, transparent in targets:

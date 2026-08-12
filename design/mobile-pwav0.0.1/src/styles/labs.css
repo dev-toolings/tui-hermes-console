@@ -1,0 +1,345 @@
+/* Labs: the console's opt-in experiments. One card per experiment, enabled
+   per workspace; the training surface reuses the mission ladder untouched. */
+
+.labs-page {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.labs-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+}
+
+/* The shell caps h1 at nav size; the page title needs its headline size back. */
+.labs-head h1 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.labs-head__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  padding: 2px 10px;
+  font-family: var(--font-jetbrains);
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  color: var(--muted-foreground);
+}
+
+.labs-head > p {
+  margin: 0;
+  width: 100%;
+  max-width: 78ch;
+  font-size: var(--text-row);
+  line-height: var(--text-row-lh);
+  color: var(--muted-foreground);
+}
+
+/* --- Experiment cards ----------------------------------------------------- */
+
+.labs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.labs-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--border-card);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 16px;
+}
+
+.labs-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.labs-card__head h2 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.labs-card__badge {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-family: var(--font-jetbrains);
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+}
+
+.labs-card__badge[data-tone="warn"] {
+  background: var(--state-warn-soft);
+  color: var(--state-warn-fg);
+}
+
+.labs-card__badge[data-tone="info"] {
+  background: var(--state-info-soft);
+  color: var(--state-info-fg);
+}
+
+.labs-card__description {
+  margin: 0;
+  font-size: var(--text-row);
+  line-height: var(--text-row-lh);
+  color: var(--muted-foreground);
+}
+
+.labs-card__state {
+  margin: 0;
+  font-family: var(--font-jetbrains);
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  color: var(--text-secondary);
+}
+
+.labs-card__actions {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.labs-card__open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-row);
+  line-height: var(--text-row-lh);
+  font-weight: 500;
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.labs-card__open:hover {
+  text-decoration: underline;
+}
+
+/* --- Opt-in switch --------------------------------------------------------- */
+
+.labs-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  padding: 2px;
+  font-size: var(--text-row);
+  line-height: var(--text-row-lh);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.labs-switch:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.labs-switch__track {
+  display: inline-flex;
+  align-items: center;
+  width: 32px;
+  height: 18px;
+  border: 1px solid var(--border-control);
+  border-radius: 999px;
+  background: var(--control);
+  padding: 2px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.labs-switch__thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--muted-foreground);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.labs-switch[aria-checked="true"] {
+  color: var(--foreground);
+}
+
+.labs-switch[aria-checked="true"] .labs-switch__track {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.labs-switch[aria-checked="true"] .labs-switch__thumb {
+  transform: translateX(13px);
+  background: var(--accent-contrast);
+}
+
+/* --- Training surface ------------------------------------------------------ */
+
+/* In the training column the gate is part of the lesson, not a floating card. */
+.labs-training .mission-gate {
+  position: static;
+}
+
+.labs-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: labs-step;
+}
+
+.labs-steps li {
+  counter-increment: labs-step;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-card);
+  border-radius: 999px;
+  background: var(--surface);
+  padding: 3px 12px 3px 5px;
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  color: var(--muted-foreground);
+}
+
+.labs-steps li::before {
+  content: counter(labs-step);
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  font-family: var(--font-jetbrains);
+  font-size: var(--text-meta);
+}
+
+.labs-steps li[aria-current="step"] {
+  border-color: var(--border-control);
+  background: var(--card);
+  color: var(--foreground);
+}
+
+.labs-steps li.is-done {
+  border-color: color-mix(in srgb, var(--state-pos-fg) 35%, transparent);
+  color: var(--state-pos-fg);
+}
+
+.labs-steps li.is-done::before {
+  content: "✓";
+  background: var(--state-pos-soft);
+  color: var(--state-pos-fg);
+}
+
+.labs-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 10px;
+  background: var(--state-pos-soft);
+  padding: 10px 12px;
+  font-size: var(--text-row);
+  line-height: var(--text-row-lh);
+  color: var(--state-pos-fg);
+}
+
+.labs-verdict--wrong {
+  background: var(--state-neg-soft);
+  color: var(--state-neg-fg);
+}
+
+.labs-verdict__title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.labs-verdict__message {
+  margin: 0;
+}
+
+.labs-verdict__retry {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-button);
+  border-radius: 8px;
+  background: var(--card);
+  padding: 4px 10px;
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  font-weight: 500;
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.labs-verdict__retry:hover {
+  background: var(--surface-hover);
+}
+
+.labs-diploma {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--state-pos-fg) 35%, transparent);
+  border-radius: 14px;
+  background: var(--state-pos-soft);
+  padding: 16px;
+}
+
+.labs-diploma__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-family: var(--font-jetbrains);
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  color: var(--state-pos-fg);
+}
+
+.labs-diploma h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.labs-diploma > p:not(.labs-diploma__eyebrow) {
+  margin: 0;
+  max-width: 66ch;
+  font-size: var(--text-row);
+  line-height: var(--text-row-lh);
+  color: var(--text-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .labs-switch__track,
+  .labs-switch__thumb {
+    transition: none;
+  }
+}

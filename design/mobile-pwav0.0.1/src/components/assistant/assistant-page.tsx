@@ -49,8 +49,8 @@ import {
   openAssistantAttachmentPicker,
   toAssistantAttachments,
 } from "./composer-attachments";
-import { isStandalone } from "../../pwa";
 import { truncateFileName } from "../ui/file-name";
+import { orgPath } from "../mobile/mobile-nav";
 import "./assistant.css";
 
 /**
@@ -113,7 +113,7 @@ type DrawerSwipe = {
 
 /** Local assistant surface with a runtime scoped to the active session. */
 export function AssistantPage() {
-  const { sessionId } = useParams();
+  const { org = "", sessionId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const [state, setState] = useState(loadAssistantState);
@@ -178,7 +178,7 @@ export function AssistantPage() {
   }, [drawerOpen]);
 
   const sessionPath = (id: string) => ({
-    pathname: `/hermes/${encodeURIComponent(id)}`,
+    pathname: orgPath(org, `/hermes/${encodeURIComponent(id)}`),
     search: location.search,
   });
   const selectSession = (id: string) => {
@@ -579,18 +579,15 @@ function RuntimeComposer({
   useEffect(() => () => pickerCleanupRef.current(), []);
 
   return (
-    <ComposerPrimitive.Root className="assistant-composer" data-pwa-dirty={canSend ? "true" : undefined}>
+    <ComposerPrimitive.Root className="assistant-composer">
       <div className="assistant-composer__attachments" aria-label="Pièces jointes sélectionnées">
         <ComposerPrimitive.Attachments>{() => <ComposerAttachment />}</ComposerPrimitive.Attachments>
       </div>
       <ComposerPrimitive.Input
         ref={textareaRef}
         // assistant-ui ≥0.15 gates every built-in focus restore (mount, run
-        // start, thread switch) behind this opt-in. It stays off in the
-        // installed iOS PWA: WebKit there focuses without raising the keyboard
-        // (WebKit #279904) and the phantom focus then swallows the next tap on
-        // the field, so standalone keeps a reliable tap-to-focus instead.
-        autoFocus={!isStandalone()}
+        // start, thread switch) behind this opt-in.
+        autoFocus
         rows={1}
         maxLength={10_000}
         placeholder="Message… (@ agents, / commandes)"
@@ -614,7 +611,6 @@ function RuntimeComposer({
             pickerCleanupRef.current();
             pickerCleanupRef.current = openAssistantAttachmentPicker({
               composer: aui.composer,
-              composerInput: textareaRef.current,
             });
           }}
           aria-label="Ajouter une pièce jointe"

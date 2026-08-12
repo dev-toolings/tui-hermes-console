@@ -6,12 +6,16 @@ import {
   SmilePlusIcon,
 } from "lucide-react";
 import type { SlackChannelMessage } from "./types";
+import { formatLastReply, initialsOf, type ThreadSummary } from "./thread-summary";
+import { useLongPress } from "../mobile/use-long-press";
+
+const FACEPILE_LIMIT = 4;
 
 export type SlackMessageProps = {
   message: SlackChannelMessage;
   grouped?: boolean;
   isPinned?: boolean;
-  replyCount?: number;
+  thread?: ThreadSummary;
   onOpenThread?: (messageId: string) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
   onReply?: (messageId: string) => void;
@@ -23,18 +27,20 @@ export function SlackMessage({
   message,
   grouped = false,
   isPinned = false,
-  replyCount = 0,
+  thread,
   onOpenThread,
   onToggleReaction,
   onReply,
   onTogglePin,
   onMore,
 }: SlackMessageProps) {
-  const initials = message.author.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  const initials = initialsOf(message.author);
   const hasToolbar = Boolean(onToggleReaction || onReply || onTogglePin || onMore);
+  const longPress = useLongPress(onMore ? () => onMore(message.id) : undefined);
+  const lastReply = thread ? formatLastReply(thread.lastReplyAt, Date.now()) : "";
 
   return (
-    <article className={`slack-message ${grouped ? "slack-message--grouped" : ""}`} aria-label={`Message de ${message.author}`}>
+    <article className={`slack-message ${grouped ? "slack-message--grouped" : ""}`} aria-label={`Message de ${message.author}`} {...longPress}>
       {grouped ? (
         <time className="slack-message__group-time" dateTime={asDateTime(message.createdAt)}>{formatMessageTime(message.createdAt)}</time>
       ) : <span className="slack-message__avatar" aria-hidden="true">{initials}</span>}
@@ -62,10 +68,19 @@ export function SlackMessage({
             ))}
           </div>
         ) : null}
-        {replyCount > 0 && onOpenThread ? (
+        {thread && onOpenThread ? (
           <button type="button" className="slack-message__replies" onClick={() => onOpenThread(message.id)}>
-            <MessageSquareTextIcon size={16} aria-hidden="true" />
-            {replyCount} {replyCount === 1 ? "réponse" : "réponses"}
+            <span className="slack-message__facepile" aria-hidden="true">
+              {thread.authors.slice(0, FACEPILE_LIMIT).map((author) => (
+                <span key={author}>{initialsOf(author)}</span>
+              ))}
+            </span>
+            <span className="slack-message__reply-count">
+              {thread.count} {thread.count === 1 ? "réponse" : "réponses"}
+            </span>
+            {lastReply ? (
+              <span className="slack-message__reply-last">Dernière réponse {lastReply}</span>
+            ) : null}
           </button>
         ) : null}
       </div>

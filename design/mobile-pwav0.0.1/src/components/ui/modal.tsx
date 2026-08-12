@@ -23,7 +23,7 @@ export function ModalButton({
     primary:
       "bg-[var(--primary)] text-[var(--accent-contrast)] hover:bg-[var(--accent-500)]",
     danger:
-      "bg-[var(--state-neg-fg)] text-white hover:opacity-90",
+      "bg-[var(--state-neg-fg)] text-white hover:opacity-90 dark:bg-[var(--state-neg-fg)]/60",
   } as const;
   return (
     <button
@@ -62,7 +62,18 @@ export function Modal({
   useEffect(() => {
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
     document.body.style.overflow = "hidden";
+    // A dialog that opens with focus still on the page behind it leaves the
+    // first Tab going nowhere. On touch the field is skipped on purpose: the
+    // keyboard would swallow the sheet before it finished opening.
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    const field = coarse
+      ? null
+      : panel.current?.querySelector<HTMLElement>(
+          "input:not([disabled]), textarea:not([disabled]), select:not([disabled])",
+        );
+    (field ?? panel.current)?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -96,6 +107,7 @@ export function Modal({
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", onKeyDown);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
     };
   }, [open, onClose]);
 

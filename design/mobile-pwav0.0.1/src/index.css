@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Enter/exit keyframes the shadcn/ui components reference (animate-in, fade-out…). */
+@import "tw-animate-css";
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/jetbrains-mono";
 @import "./styles/theme.css";

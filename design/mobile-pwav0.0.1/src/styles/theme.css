@@ -1,17 +1,41 @@
+/* The app owns its theme with a `.dark` class on <html>, so `dark:` utilities
+   must follow that class instead of Tailwind's default prefers-color-scheme. */
+@custom-variant dark (&:is(.dark *));
+
 @theme {
   --container-content: 1600px;
   --sidebar-width: 288px;
   --font-sans: var(--font-inter);
 }
 
+/* shadcn/ui components address colours as `bg-background`, `text-muted-foreground`,
+   `border-input`… Those utilities are these mappings onto the BoardUI tokens
+   defined below — shadcn brings no palette of its own into the app. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--foreground);
   --color-border: var(--border);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-primary: var(--primary);
+  --color-primary-foreground: var(--accent-contrast);
+  --color-secondary: var(--surface);
+  --color-secondary-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: var(--state-neg-fg);
+  --color-destructive-foreground: var(--accent-contrast);
+  --color-input: var(--border-control);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
 :root {
@@ -35,21 +59,23 @@
   --icon: 16px;
   --icon-lg: 20px;
 
-  /* BoardUI semantic color system, manual light is the initial theme. */
-  --background-full: lch(98.94% 0.5 282);
-  --background-primary: lch(98.94% 0.5 282);
-  --background-secondary: lch(95.94% 0.5 282);
-  --background-tertiary: lch(91.94% 0.5 282);
-  --background-inner: lch(98.94% 0.5 282);
+  /* BoardUI semantic color system, manual light is the initial theme.
+     Keep the light surfaces neutral like the reference UI; the previous
+     blue-violet chroma was visible in large flat areas and light controls. */
+  --background-full: lch(98.94% 0 0);
+  --background-primary: lch(98.94% 0 0);
+  --background-secondary: lch(95.94% 0 0);
+  --background-tertiary: lch(91.94% 0 0);
+  --background-inner: lch(98.94% 0 0);
   --text-primary: lch(9.894% 0 282);
-  --text-secondary: lch(39.576% 1.25 282);
-  --text-tertiary: lch(65.3% 1.25 282);
+  --text-secondary: lch(39.576% 0 0);
+  --text-tertiary: lch(65.3% 0 0);
   --border-button: lch(89.49% 0 282);
   --border-table: lch(89.49% 0 282);
   --border-separator: lch(89.49% 0 282);
   --border-card: lch(89.49% 0 282);
   --border-control: lch(85.44% 0 282);
-  --sidebar-muted-foreground: lch(39.576% 1.25 282);
+  --sidebar-muted-foreground: lch(39.576% 0 0);
   --focus: #3080ff;
   --theme-toggle-background: #ebebeb;
   --theme-toggle-selected: #ffffff;

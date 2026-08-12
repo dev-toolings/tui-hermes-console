@@ -1,7 +1,7 @@
 import type { Workspace } from "../components/sidebar/workspace-sidebar";
 
 export const CONSOLE_STORAGE_KEY = "hermes-console:v0.0.1";
-export const CONSOLE_STATE_VERSION = 4;
+export const CONSOLE_STATE_VERSION = 5;
 
 export type Category =
   | "needs_action"
@@ -34,10 +34,20 @@ export type AuditEvent = {
   label: string;
   time: string;
 };
-export type Channel = {
+/**
+ * A named group of channels in the sidebar. Order is the array order, so moving
+ * a section is a splice and never a renumbering of its siblings.
+ */
+export type ChannelCategory = {
   id: string;
   name: string;
-  kind: "default" | "custom";
+};
+export type Channel = {
+  id: string;
+  /** Display label. Mutable, unlike `id`, which is the key messages are filed under. */
+  name: string;
+  /** References a `ChannelCategory.id` of the same workspace. Never dangling. */
+  categoryId: string;
   createdAt: string;
   topic: string;
   description: string;
@@ -63,7 +73,6 @@ export type ChannelMessage = {
   parentMessageId?: string;
   reactions: ChannelMessageReaction[];
   editedAt?: string;
-  broadcastToChannel?: boolean;
   /** Marks a v2 payload kept verbatim even when it exceeds new-input limits. */
   legacyPayload?: true;
 };
@@ -87,10 +96,11 @@ export const MAX_CHANNEL_MESSAGE_LENGTH = 10_000;
 export type WorkspaceData = {
   items: InboxItem[];
   members: Member[];
-  enabledSkills: string[];
   audit: AuditEvent[];
   notifications: boolean;
   selectedMember: string;
+  /** Always holds at least one section, so a channel always has a home. */
+  channelCategories: ChannelCategory[];
   channels: Channel[];
   messages: Record<string, ChannelMessage[]>;
 };
@@ -104,8 +114,17 @@ export type ConsoleState = {
   workspaceData: Record<string, WorkspaceData>;
 };
 
+/** Shared by channel ids and section ids: both are slugs, never free text. */
 const CHANNEL_ID_PATTERN = /^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u;
-const DEFAULT_CHANNEL_IDS = ["general", "équipe", "incidents"] as const;
+/**
+ * The section every channel starts in. Seeded and materialized by the v4→v5
+ * migration so that no channel is ever uncategorized, which is what lets the
+ * grouping code drop its "no section" branch entirely. It is renameable,
+ * movable and deletable like any other section — only "the last section
+ * standing" is protected, whichever one that happens to be.
+ */
+export const DEFAULT_CATEGORY_ID = "canaux";
+export const DEFAULT_CATEGORY_NAME = "Canaux";
 
 const baseItems: InboxItem[] = [
   {
@@ -170,13 +189,6 @@ const baseItems: InboxItem[] = [
 
 const initialWorkspaces: Workspace[] = [
   {
-    id: "tilvest",
-    name: "Ruche tilvest-prod",
-    short: "TP",
-    tone: "bg-[#5865f2]",
-    description: "Opérations de production",
-  },
-  {
     id: "marketplace",
     name: "Marketplace IA",
     short: "IA",
@@ -201,10 +213,10 @@ const initialWorkspaces: Workspace[] = [
 
 const memberRows: Member[] = [
   {
-    name: "Kev Tourteau",
+    name: "John Doe",
     role: "opérateur",
     state: "En ligne",
-    initials: "KT",
+    initials: "JD",
   },
   { name: "hermes", role: "orchestrateur", state: "Actif", initials: "HE" },
   {
@@ -216,12 +228,15 @@ const memberRows: Member[] = [
   { name: "padawan", role: "exécution", state: "Occupé", initials: "PA" },
 ];
 
+export function createDefaultChannelCategories(): ChannelCategory[] {
+  return [{ id: DEFAULT_CATEGORY_ID, name: DEFAULT_CATEGORY_NAME }];
+}
+
 export function createDefaultChannels(memberNames: string[] = []): Channel[] {
   return [
     createChannel(
       "general",
       "général",
-      "default",
       memberNames,
       "Annonces et coordination de l’espace",
       "Le point d’entrée commun pour les décisions, les nouvelles et les échanges transverses.",
@@ -229,7 +244,6 @@ export function createDefaultChannels(memberNames: string[] = []): Channel[] {
     createChannel(
       "équipe",
       "équipe",
-      "default",
       memberNames,
       "Synchronisation de l’équipe",
       "Partagez l’avancement, les demandes d’aide et les informations utiles à l’équipe.",
@@ -237,7 +251,6 @@ export function createDefaultChannels(memberNames: string[] = []): Channel[] {
     createChannel(
       "incidents",
       "incidents",
-      "default",
       memberNames,
       "Suivi des incidents",
       "Centralisez les alertes, diagnostics et décisions prises pendant un incident.",
@@ -248,15 +261,15 @@ export function createDefaultChannels(memberNames: string[] = []): Channel[] {
 function createChannel(
   id: string,
   name: string,
-  kind: Channel["kind"],
   memberNames: string[] = [],
   topic = "",
   description = "",
+  categoryId = DEFAULT_CATEGORY_ID,
 ): Channel {
   return {
     id,
     name,
-    kind,
+    categoryId,
     createdAt: new Date().toISOString(),
     topic,
     description,
@@ -267,7 +280,7 @@ function createChannel(
   };
 }
 
-function seedData(workspace: Workspace, index: number): WorkspaceData {
+function seedData(workspace: Workspace): WorkspaceData {
   const channels = createDefaultChannels(memberRows.map((member) => member.name));
   return {
     items: baseItems.map((item, itemIndex) => ({
@@ -277,10 +290,6 @@ function seedData(workspace: Workspace, index: number): WorkspaceData {
       title: itemIndex === 0 ? `${item.title} — ${workspace.name}` : item.title,
     })),
     members: memberRows.map((member) => ({ ...member })),
-    enabledSkills:
-      index % 2 === 0
-        ? ["pdf-report", "workspace-audit", "postgres-readonly"]
-        : ["workspace-audit", "notion-sync"],
     audit: [
       {
         id: `${workspace.id}-seed`,
@@ -290,7 +299,8 @@ function seedData(workspace: Workspace, index: number): WorkspaceData {
       },
     ],
     notifications: true,
-    selectedMember: "Kev Tourteau",
+    selectedMember: "John Doe",
+    channelCategories: createDefaultChannelCategories(),
     channels,
     messages: {
       general: [
@@ -315,11 +325,11 @@ export function createInitialState(): ConsoleState {
     activeWorkspaceId: initialWorkspaces[0].id,
     workspaces: initialWorkspaces,
     archivedWorkspaces: [],
-    profile: { name: "Kev Tourteau", role: "opérateur" },
+    profile: { name: "John Doe", role: "opérateur" },
     workspaceData: Object.fromEntries(
-      initialWorkspaces.map((workspace, index) => [
+      initialWorkspaces.map((workspace) => [
         workspace.id,
-        seedData(workspace, index),
+        seedData(workspace),
       ]),
     ),
   };
@@ -378,11 +388,17 @@ function isAuditEvent(value: unknown): value is AuditEvent {
   );
 }
 
+/**
+ * Shape shared by every stored version: the collaboration fields and the
+ * channel/message coherence. Section validation is version-specific and lives
+ * in `isWorkspaceData` alone, so this stays a plain boolean rather than a
+ * predicate that would over-promise for legacy shapes.
+ */
 function isWorkspaceDataWith(
   value: unknown,
   isMessage: (message: unknown) => message is ChannelMessage,
-  isDataChannel: (channel: unknown) => channel is Channel = isChannel,
-): value is WorkspaceData {
+  isDataChannel: (channel: unknown) => boolean,
+): boolean {
   if (!isRecord(value)) return false;
   const channels = value.channels;
   const messages = value.messages;
@@ -392,8 +408,6 @@ function isWorkspaceDataWith(
     value.items.every(isInboxItem) &&
     Array.isArray(value.members) &&
     value.members.every(isMember) &&
-    Array.isArray(value.enabledSkills) &&
-    value.enabledSkills.every((entry) => typeof entry === "string") &&
     Array.isArray(value.audit) &&
     value.audit.every(isAuditEvent) &&
     typeof value.notifications === "boolean" &&
@@ -408,18 +422,12 @@ function isWorkspaceDataWith(
 
   const channelIds = channels.map((channel) => channel.id);
   if (new Set(channelIds).size !== channelIds.length) return false;
-  if (
-    !DEFAULT_CHANNEL_IDS.every((channelId) =>
-      channels.some(
-        (channel) => channel.id === channelId && channel.kind === "default",
-      ),
-    )
-  )
-    return false;
+  /* No channel id is structural since v5: any channel can be deleted, so the
+     only rule left is that messages and channels describe the same set. */
   if (Object.keys(messages).some((channelId) => !channelIds.includes(channelId)))
     return false;
 
-  return channels.every((channel) => {
+  return channels.every((channel: Channel) => {
     const channelMessages = messages[channel.id];
     return (
       Array.isArray(channelMessages) &&
@@ -431,15 +439,42 @@ function isWorkspaceDataWith(
 }
 
 function isWorkspaceData(value: unknown): value is WorkspaceData {
-  return isWorkspaceDataWith(value, isChannelMessage);
+  if (!isWorkspaceDataWith(value, isChannelMessage, isChannel)) return false;
+  const data = value as { channelCategories: unknown; channels: Channel[] };
+  const categories = data.channelCategories;
+  if (
+    !Array.isArray(categories) ||
+    categories.length === 0 ||
+    !categories.every(isChannelCategory)
+  )
+    return false;
+  const categoryIds = categories.map((category) => category.id);
+  if (new Set(categoryIds).size !== categoryIds.length) return false;
+  /* A dangling categoryId would leave a channel unreachable in the sidebar,
+     so it invalidates the payload rather than being repaired at read time. */
+  return data.channels.every((channel) => categoryIds.includes(channel.categoryId));
 }
 
-function isV3WorkspaceData(value: unknown): value is WorkspaceData {
+/** v4: channels carried a `kind` and no section. */
+function isV4WorkspaceData(value: unknown): boolean {
+  return isWorkspaceDataWith(value, isChannelMessage, isV4Channel);
+}
+
+function isV3WorkspaceData(value: unknown): boolean {
   return isWorkspaceDataWith(value, isV3ChannelMessage, isLegacyChannel);
 }
 
-function isV2WorkspaceData(value: unknown): value is WorkspaceData {
+function isV2WorkspaceData(value: unknown): boolean {
   return isWorkspaceDataWith(value, isV2ChannelMessage, isLegacyChannel);
+}
+
+function isChannelCategory(value: unknown): value is ChannelCategory {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    CHANNEL_ID_PATTERN.test(value.id) &&
+    isNonEmptyString(value.name)
+  );
 }
 
 function isChannel(value: unknown): value is Channel {
@@ -450,7 +485,8 @@ function isChannel(value: unknown): value is Channel {
     typeof value.name === "string" &&
     value.name.trim().length > 0 &&
     isIsoDate(value.createdAt) &&
-    (value.kind === "default" || value.kind === "custom") &&
+    typeof value.categoryId === "string" &&
+    CHANNEL_ID_PATTERN.test(value.categoryId) &&
     typeof value.topic === "string" &&
     typeof value.description === "string" &&
     typeof value.starred === "boolean" &&
@@ -493,12 +529,24 @@ function isChannelMessage(value: unknown): value is ChannelMessage {
     new Set(reactions.map((reaction) => reaction.emoji)).size === reactions.length &&
     (value.parentMessageId === undefined || isNonEmptyString(value.parentMessageId)) &&
     (value.editedAt === undefined || isIsoDate(value.editedAt)) &&
-    (value.broadcastToChannel === undefined || typeof value.broadcastToChannel === "boolean") &&
     (value.legacyPayload === undefined || value.legacyPayload === true)
   );
 }
 
-function isLegacyChannel(value: unknown): value is Channel {
+/**
+ * v4 channel: everything v5 has except the section, plus the retired `kind`
+ * discriminant. Kept lenient about which ids exist — a v4 payload that lost a
+ * seeded channel used to be unloadable, and that reset the whole prototype.
+ */
+function isV4Channel(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isChannel({ ...value, categoryId: DEFAULT_CATEGORY_ID }) &&
+    (value.kind === "default" || value.kind === "custom")
+  );
+}
+
+function isLegacyChannel(value: unknown): boolean {
   return (
     isRecord(value) &&
     typeof value.id === "string" &&
@@ -619,7 +667,7 @@ function isV2ChannelAttachment(value: unknown): value is ChannelAttachment {
 function isStateVersion(
   value: unknown,
   version: number,
-  isData: (data: unknown) => data is WorkspaceData,
+  isData: (data: unknown) => boolean,
 ): value is ConsoleState {
   if (!isRecord(value) || value.version !== version) return false;
   if (
@@ -674,7 +722,6 @@ function sanitizeLegacyMessage(
     parentMessageId: legacyParentMessageId,
     reactions: legacyReactions,
     editedAt: legacyEditedAt,
-    broadcastToChannel: legacyBroadcastToChannel,
     ...baseMessage
   } = message;
   const body = preserveOverflow
@@ -716,9 +763,6 @@ function sanitizeLegacyMessage(
     reactions: sanitizeReactions(legacyReactions),
     ...(parentMessageId ? { parentMessageId } : {}),
     ...(isIsoDate(legacyEditedAt) ? { editedAt: legacyEditedAt } : {}),
-    ...(parentMessageId && legacyBroadcastToChannel
-      ? { broadcastToChannel: true }
-      : {}),
     ...(preserveOverflow ? { legacyPayload: true as const } : {}),
     ...(attachments.length > 0 ? { attachments } : { attachments: undefined }),
   };
@@ -749,7 +793,7 @@ function toIsoDate(value: unknown, order: number): string {
 function migrateLegacyState(
   value: unknown,
   version: number,
-  isData: (data: unknown) => data is WorkspaceData,
+  isData: (data: unknown) => boolean,
 ): ConsoleState | null {
   if (!isStateVersion(value, version, isData)) return null;
   const workspaceData = Object.fromEntries(
@@ -788,12 +832,9 @@ function migrateLegacyState(
       ];
     }),
   );
-  const migrated: ConsoleState = {
-    ...value,
-    version: CONSOLE_STATE_VERSION,
-    workspaceData,
-  };
-  return isState(migrated) ? migrated : null;
+  /* v3 and v2 rebuild exactly the v4 channel shape, so they hand over to the
+     v4→v5 step instead of duplicating the section materialization. */
+  return migrateV4({ ...value, version: 4, workspaceData });
 }
 
 function migrateV3(value: unknown): ConsoleState | null {
@@ -804,9 +845,39 @@ function migrateV2(value: unknown): ConsoleState | null {
   return migrateLegacyState(value, 2, isV2WorkspaceData);
 }
 
-function isLegacyWorkspaceData(value: unknown): value is Omit<WorkspaceData, "channels" | "messages"> {
+/**
+ * v4→v5: sections appear. Every channel joins one materialized default section
+ * and drops the `kind` discriminant, whose only remaining job had been to mark
+ * three channels as undeletable.
+ */
+function migrateV4(value: unknown): ConsoleState | null {
+  if (!isStateVersion(value, 4, isV4WorkspaceData)) return null;
+  const workspaceData = Object.fromEntries(
+    Object.entries(value.workspaceData).map(([workspaceId, data]) => [
+      workspaceId,
+      {
+        ...data,
+        channelCategories: createDefaultChannelCategories(),
+        channels: data.channels.map((channel) => {
+          const { kind: _retired, ...rest } = channel as Channel & {
+            kind?: unknown;
+          };
+          return { ...rest, categoryId: DEFAULT_CATEGORY_ID };
+        }),
+      },
+    ]),
+  );
+  const migrated: ConsoleState = {
+    ...value,
+    version: CONSOLE_STATE_VERSION,
+    workspaceData,
+  };
+  return isState(migrated) ? migrated : null;
+}
+
+function isLegacyWorkspaceData(value: unknown): value is Omit<WorkspaceData, "channelCategories" | "channels" | "messages"> {
   if (!isRecord(value)) return false;
-  return Array.isArray(value.items) && value.items.every(isInboxItem) && Array.isArray(value.members) && value.members.every(isMember) && Array.isArray(value.enabledSkills) && value.enabledSkills.every((entry) => typeof entry === "string") && Array.isArray(value.audit) && value.audit.every(isAuditEvent) && typeof value.notifications === "boolean" && typeof value.selectedMember === "string";
+  return Array.isArray(value.items) && value.items.every(isInboxItem) && Array.isArray(value.members) && value.members.every(isMember) && Array.isArray(value.audit) && value.audit.every(isAuditEvent) && typeof value.notifications === "boolean" && typeof value.selectedMember === "string";
 }
 function migrateV1(value: unknown): ConsoleState | null {
   if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.workspaces) || !value.workspaces.every(isWorkspace) || !Array.isArray(value.archivedWorkspaces) || !value.archivedWorkspaces.every(isWorkspace) || !isRecord(value.workspaceData) || !isRecord(value.profile) || typeof value.profile.name !== "string" || typeof value.profile.role !== "string" || typeof value.activeWorkspaceId !== "string") return null;
@@ -815,8 +886,8 @@ function migrateV1(value: unknown): ConsoleState | null {
   const workspaceData: Record<string, WorkspaceData> = {};
   for (const workspace of all) {
     const data = value.workspaceData[workspace.id]; if (!isLegacyWorkspaceData(data)) return null;
-    const seeded = seedData(workspace, 0);
-    workspaceData[workspace.id] = { ...data, channels: seeded.channels, messages: seeded.messages };
+    const seeded = seedData(workspace);
+    workspaceData[workspace.id] = { ...data, channelCategories: seeded.channelCategories, channels: seeded.channels, messages: seeded.messages };
   }
   return { version: CONSOLE_STATE_VERSION, activeWorkspaceId: value.activeWorkspaceId, workspaces: value.workspaces as Workspace[], archivedWorkspaces: value.archivedWorkspaces as Workspace[], profile: { name: value.profile.name, role: value.profile.role }, workspaceData };
 }
@@ -835,7 +906,9 @@ export function loadConsoleState(): ConsoleState {
 /** Converts persisted state without consulting localStorage, for tests and import paths. */
 export function migrateConsoleState(value: unknown): ConsoleState | null {
   if (isState(value)) return value;
-  return migrateV3(value) ?? migrateV2(value) ?? migrateV1(value);
+  return (
+    migrateV4(value) ?? migrateV3(value) ?? migrateV2(value) ?? migrateV1(value)
+  );
 }
 
 export function saveConsoleState(state: ConsoleState) {
@@ -893,9 +966,6 @@ export function sendChannelMessage(
     body: input.body.trim(),
     reactions: sanitizeReactions(input.reactions),
     ...(parentMessageId ? { parentMessageId } : {}),
-    ...(parentMessageId && input.broadcastToChannel
-      ? { broadcastToChannel: true }
-      : {}),
   };
   if (!isChannelMessage(message)) return null;
   return {
@@ -1052,6 +1122,148 @@ export function toggleChannelStar(
     ...channel,
     starred: !channel.starred,
   }));
+}
+
+/**
+ * Comparison key for "is this label already taken". Falls back to the lowercased
+ * label when a name has no alphanumeric content at all, so two emoji-only names
+ * stay distinguishable instead of both normalizing to the empty string.
+ */
+function nameKey(value: string) {
+  const normalized = value
+    .trim()
+    .toLocaleLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  return normalized || value.trim().toLocaleLowerCase();
+}
+
+/** Renames the label only: the id stays, so messages and links keep resolving. */
+export function renameChannel(
+  data: WorkspaceData,
+  channelId: string,
+  name: string,
+): WorkspaceData | null {
+  const trimmed = name.trim();
+  if (!trimmed || !data.channels.some((entry) => entry.id === channelId)) return null;
+  if (
+    data.channels.some(
+      (entry) => entry.id !== channelId && nameKey(entry.name) === nameKey(trimmed),
+    )
+  )
+    return null;
+  return updateChannel(data, channelId, (channel) => ({ ...channel, name: trimmed }));
+}
+
+/**
+ * Drops a channel and its messages in one step. Splitting the two would leave a
+ * messages key with no channel, which the validator rejects — and a rejected
+ * payload is silently replaced by the seed on the next load.
+ */
+export function deleteChannel(
+  data: WorkspaceData,
+  channelId: string,
+): WorkspaceData | null {
+  if (!data.channels.some((entry) => entry.id === channelId)) return null;
+  const { [channelId]: _removed, ...messages } = data.messages;
+  return {
+    ...data,
+    channels: data.channels.filter((entry) => entry.id !== channelId),
+    messages,
+  };
+}
+
+export function createChannelCategory(
+  data: WorkspaceData,
+  id: string,
+  name: string,
+): WorkspaceData | null {
+  const trimmed = name.trim();
+  if (!CHANNEL_ID_PATTERN.test(id) || !trimmed) return null;
+  if (
+    data.channelCategories.some(
+      (category) => category.id === id || nameKey(category.name) === nameKey(trimmed),
+    )
+  )
+    return null;
+  return {
+    ...data,
+    channelCategories: [...data.channelCategories, { id, name: trimmed }],
+  };
+}
+
+export function renameChannelCategory(
+  data: WorkspaceData,
+  categoryId: string,
+  name: string,
+): WorkspaceData | null {
+  const trimmed = name.trim();
+  if (!trimmed || !data.channelCategories.some((entry) => entry.id === categoryId))
+    return null;
+  if (
+    data.channelCategories.some(
+      (entry) => entry.id !== categoryId && nameKey(entry.name) === nameKey(trimmed),
+    )
+  )
+    return null;
+  return {
+    ...data,
+    channelCategories: data.channelCategories.map((entry) =>
+      entry.id === categoryId ? { ...entry, name: trimmed } : entry,
+    ),
+  };
+}
+
+/**
+ * Deletes a section and hands its channels to the first remaining one. The last
+ * section standing cannot be deleted, whichever one it is: channels must always
+ * have somewhere to live.
+ */
+export function deleteChannelCategory(
+  data: WorkspaceData,
+  categoryId: string,
+): WorkspaceData | null {
+  if (data.channelCategories.length < 2) return null;
+  if (!data.channelCategories.some((entry) => entry.id === categoryId)) return null;
+  const channelCategories = data.channelCategories.filter(
+    (entry) => entry.id !== categoryId,
+  );
+  const fallbackId = channelCategories[0].id;
+  return {
+    ...data,
+    channelCategories,
+    channels: data.channels.map((channel) =>
+      channel.categoryId === categoryId
+        ? { ...channel, categoryId: fallbackId }
+        : channel,
+    ),
+  };
+}
+
+export function moveChannelToCategory(
+  data: WorkspaceData,
+  channelId: string,
+  categoryId: string,
+): WorkspaceData | null {
+  if (!data.channelCategories.some((entry) => entry.id === categoryId)) return null;
+  return updateChannel(data, channelId, (channel) => ({ ...channel, categoryId }));
+}
+
+/** Reorders one section by a single step; the array order is the display order. */
+export function moveChannelCategory(
+  data: WorkspaceData,
+  categoryId: string,
+  offset: -1 | 1,
+): WorkspaceData | null {
+  const index = data.channelCategories.findIndex((entry) => entry.id === categoryId);
+  const target = index + offset;
+  if (index < 0 || target < 0 || target >= data.channelCategories.length) return null;
+  const channelCategories = [...data.channelCategories];
+  const [moved] = channelCategories.splice(index, 1);
+  channelCategories.splice(target, 0, moved);
+  return { ...data, channelCategories };
 }
 
 function updateChannel(

@@ -4,44 +4,10 @@ import {
   MAX_ASSISTANT_ATTACHMENT_BYTES,
   addAcceptedAttachments,
   hydrateAssistantComposerOnce,
-  settleAttachmentPicker,
   toAssistantAttachments,
 } from "./composer-attachments";
 
 describe("assistant composer attachment recovery", () => {
-  test("leaves browser focus to the native picker before detaching it", () => {
-    const events: string[] = [];
-
-    settleAttachmentPicker({
-      composerInput: {
-        blur: () => events.push("blur"),
-        focus: () => events.push("focus"),
-      },
-      standalone: false,
-      detach: () => events.push("detach"),
-    });
-
-    expect(events).toEqual(["detach"]);
-  });
-
-  test("restores standalone focus before detaching the trusted picker target", () => {
-    const events: string[] = [];
-
-    settleAttachmentPicker({
-      composerInput: {
-        blur: () => events.push("blur"),
-        focus: (options?: FocusOptions) => {
-          expect(options).toEqual({ preventScroll: true });
-          events.push("focus");
-        },
-      },
-      standalone: true,
-      detach: () => events.push("detach"),
-    });
-
-    expect(events).toEqual(["blur", "focus", "detach"]);
-  });
-
   test("bounds picker and paste additions to eight accepted files", async () => {
     const added: string[] = [];
     const composer = {

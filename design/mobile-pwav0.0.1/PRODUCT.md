@@ -10,7 +10,7 @@ Opérateurs techniques et équipes produit qui pilotent des workspaces, des miss
 
 ## Product Purpose
 
-Hermes Console gouverne la transformation d’une intention en résultat vérifiable. Les salons facilitent la collaboration autour du travail, tandis que la File, les missions, le registre et l’audit restent les surfaces d’autorité.
+Hermes Console gouverne la transformation d’une intention en résultat vérifiable. Les canaux, regroupés en sections, facilitent la collaboration autour du travail, tandis que la File, les missions, le registre et l’audit restent les surfaces d’autorité.
 
 ## Brand Personality
 

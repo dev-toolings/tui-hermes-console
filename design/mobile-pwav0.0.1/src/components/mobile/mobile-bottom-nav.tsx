@@ -9,13 +9,13 @@ import { NavLink } from "react-router";
 import {
   MOBILE_TAB_ENTRIES,
   mobileTabForPath,
+  orgPath,
   persistMobileTabScroll,
-  withWorkspace,
+  stripOrg,
 } from "./mobile-nav";
 
 export type MobileBottomNavProps = {
   workspaceId: string;
-  unreadChannels?: number;
   pendingItems?: number;
 };
 
@@ -28,7 +28,6 @@ export type MobileBottomNavProps = {
  */
 export function MobileBottomNav({
   workspaceId,
-  unreadChannels = 0,
   pendingItems = 0,
 }: MobileBottomNavProps) {
   const entries: Array<{
@@ -37,13 +36,13 @@ export function MobileBottomNav({
     icon: LucideIcon;
     badge?: number;
   }> = [
-    { ...MOBILE_TAB_ENTRIES[0], icon: HouseIcon, badge: unreadChannels },
-    { ...MOBILE_TAB_ENTRIES[1], icon: ActivityIcon, badge: pendingItems },
+    { ...MOBILE_TAB_ENTRIES[0], icon: HouseIcon, badge: pendingItems },
+    { ...MOBILE_TAB_ENTRIES[1], icon: ActivityIcon },
     { ...MOBILE_TAB_ENTRIES[2], icon: SparklesIcon },
   ];
 
   const persistCurrentScroll = () => {
-    const path = window.location.pathname;
+    const path = stripOrg(window.location.pathname);
     const scrollContainer = document.querySelector<HTMLElement>(
       "[data-mobile-tab-scroll]",
     );
@@ -59,7 +58,7 @@ export function MobileBottomNav({
       {entries.map(({ path, label, icon: Icon, badge }) => (
         <NavLink
           key={path}
-          to={withWorkspace(path, workspaceId)}
+          to={orgPath(workspaceId, path)}
           end={path !== "/hermes"}
           onClick={persistCurrentScroll}
           className={({ isActive }) =>

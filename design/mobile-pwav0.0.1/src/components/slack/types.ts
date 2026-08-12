@@ -34,7 +34,6 @@ export type SlackChannelMessage = {
   parentMessageId?: string;
   reactions?: SlackReaction[];
   editedAt?: string;
-  broadcastToChannel?: boolean;
 };
 
 export type SlackDraft = {

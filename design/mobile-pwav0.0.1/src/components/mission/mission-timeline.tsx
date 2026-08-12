@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import {
   buildTimeline,
@@ -89,16 +89,47 @@ function Fact({ event }: { event: MissionEvent }) {
   );
 }
 
+/* A run can produce hundreds of calls; opening the fold must not pay for all
+   of them at once. Twenty rows show, a sentinel at the bottom of the list
+   pulls the next twenty each time the scroll reaches it. */
+const TRACE_PAGE = 20;
+
 function TraceFold({ row }: { row: Extract<TimelineRow, { type: "trace" }> }) {
   const [open, setOpen] = useState(false);
+  const [limit, setLimit] = useState(TRACE_PAGE);
+  const sentinel = useRef<HTMLDivElement>(null);
   const count = row.events.length;
+
+  useEffect(() => {
+    if (!open || limit >= count) return;
+    const node = sentinel.current;
+    if (!node) return;
+    // The list scrolls in place, so its own scrollport is the root — against
+    // the viewport the sentinel could sit below the fold and never intersect.
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setLimit((current) => current + TRACE_PAGE);
+        }
+      },
+      { root: node.parentElement },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [open, limit, count]);
+
   return (
     <div className="mission-trace">
       <button
         type="button"
         className="mission-trace__summary"
         aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() =>
+          setOpen((current) => {
+            if (current) setLimit(TRACE_PAGE);
+            return !current;
+          })
+        }
       >
         <time className="mission-fact__time" dateTime={row.from}>
           {formatTime(row.from)}
@@ -119,7 +150,7 @@ function TraceFold({ row }: { row: Extract<TimelineRow, { type: "trace" }> }) {
       </button>
       {open ? (
         <div className="mission-trace__list">
-          {row.events.map((event) => (
+          {row.events.slice(0, limit).map((event) => (
             <div className="mission-trace__row" key={event.id}>
               <time className="mission-fact__time" dateTime={event.at}>
                 {formatTime(event.at)}
@@ -128,6 +159,9 @@ function TraceFold({ row }: { row: Extract<TimelineRow, { type: "trace" }> }) {
               {event.value ? <code>{event.value}</code> : <span />}
             </div>
           ))}
+          {limit < count ? (
+            <div ref={sentinel} aria-hidden="true" className="mission-trace__sentinel" />
+          ) : null}
         </div>
       ) : null}
     </div>

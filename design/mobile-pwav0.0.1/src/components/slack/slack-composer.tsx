@@ -94,11 +94,7 @@ export function SlackComposer({
   };
 
   return (
-    <form
-      className={`slack-composer ${className ?? ""}`}
-      data-pwa-dirty={isEmpty ? undefined : "true"}
-      onSubmit={submit}
-    >
+    <form className={`slack-composer ${className ?? ""}`} onSubmit={submit}>
       {attachments.length > 0 ? (
         <ul className="slack-composer__attachments" aria-label="Pièces jointes sélectionnées">
           {attachments.map((file, index) => (

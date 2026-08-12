@@ -5,13 +5,13 @@ import {
   LockKeyholeIcon,
   PanelLeftIcon,
   PlusIcon,
-  SearchIcon,
   StarIcon,
   UsersRoundIcon,
   XIcon,
 } from "lucide-react";
 import { SlackComposer } from "./slack-composer";
 import { SlackMessage } from "./slack-message";
+import { buildThreadSummaries } from "./thread-summary";
 import type {
   SlackChannel,
   SlackChannelMessage,
@@ -31,17 +31,18 @@ export type SlackChannelViewProps = {
   profileName?: string;
   composer?: Partial<Omit<SlackComposerProps, "channelName" | "onSend">>;
   onSendMessage: (draft: SlackDraft) => void | Promise<void>;
-  onSendThreadMessage?: (parentMessageId: string, draft: SlackDraft, broadcastToChannel: boolean) => void | Promise<void>;
+  onSendThreadMessage?: (parentMessageId: string, draft: SlackDraft) => void | Promise<void>;
   onTabChange?: (tab: SlackChannelTab) => void;
   onToggleStar?: () => void;
   onShowMembers?: () => void;
-  onSearch?: () => void;
   onOpenDetails?: () => void;
   onUpdateDetails?: (patch: {
     topic: string;
     description: string;
     isPrivate: boolean;
   }) => void;
+  /** Returns false when the label is blank or already taken by another channel. */
+  onRenameChannel?: (name: string) => boolean;
   onClosePanel?: () => void;
   onOpenThread?: (messageId: string) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
@@ -70,9 +71,9 @@ export function SlackChannelView({
   onTabChange,
   onToggleStar,
   onShowMembers,
-  onSearch,
   onOpenDetails,
   onUpdateDetails,
+  onRenameChannel,
   onClosePanel,
   onOpenThread,
   onToggleReaction,
@@ -81,27 +82,15 @@ export function SlackChannelView({
   onToggleSidebar,
 }: SlackChannelViewProps) {
   const [bookmarkAdded, setBookmarkAdded] = useState(false);
+  // Replies live in their thread only: the channel timeline shows roots.
   const rootMessages = useMemo(
-    () =>
-      messages.filter(
-        (message) => !message.parentMessageId || message.broadcastToChannel,
-      ),
+    () => messages.filter((message) => !message.parentMessageId),
     [messages],
   );
   const activeThread = activeThreadId ? messages.find((message) => message.id === activeThreadId) ?? null : null;
   const threadReplies = activeThreadId ? messages.filter((message) => message.parentMessageId === activeThreadId) : [];
   const pinnedIds = new Set(channel.pinnedMessageIds ?? []);
-  const replyCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const message of messages) {
-      if (!message.parentMessageId) continue;
-      counts.set(
-        message.parentMessageId,
-        (counts.get(message.parentMessageId) ?? 0) + 1,
-      );
-    }
-    return counts;
-  }, [messages]);
+  const threadSummaries = useMemo(() => buildThreadSummaries(messages), [messages]);
   const panel = activeThread ? "thread" : showDetails ? "details" : null;
   const displayMessages = activeTab === "messages"
     ? rootMessages
@@ -119,27 +108,12 @@ export function SlackChannelView({
   }, [panel, onClosePanel]);
 
   return (
-    <section className={`slack-channel-view ${embedded ? "slack-channel-view--embedded" : ""} ${panel ? "slack-channel-view--panel-open" : ""}`} aria-label={`Salon ${channel.name}`}>
-      {panel === "thread" && activeThread ? (
-        <ThreadPanel
-          channel={channel}
-          parent={activeThread}
-          replies={threadReplies}
-          profileName={profileName}
-          onClose={onClosePanel}
-          onSend={onSendThreadMessage}
-          onOpenThread={onOpenThread}
-          onToggleReaction={onToggleReaction}
-          onTogglePin={onTogglePin}
-          onMore={onMoreMessageActions}
-        />
-      ) : (
-        <div className="slack-channel-view__main">
+    <section className={`slack-channel-view ${embedded ? "slack-channel-view--embedded" : ""} ${panel ? "slack-channel-view--panel-open" : ""}`} aria-label={`Canal ${channel.name}`}>
+      <div className="slack-channel-view__main">
           <ChannelHeader
             channel={channel}
             embedded={embedded}
             onShowMembers={onShowMembers}
-            onSearch={onSearch}
             onOpenDetails={onOpenDetails}
             onToggleSidebar={onToggleSidebar}
           />
@@ -153,7 +127,7 @@ export function SlackChannelView({
               {bookmarkAdded ? "Bookmark ajouté" : "Ajouter un bookmark"}
             </button>
           </div>
-          <nav className="slack-channel-tabs" aria-label="Contenu du salon">
+          <nav className="slack-channel-tabs" aria-label="Contenu du canal">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -186,7 +160,7 @@ export function SlackChannelView({
                       message={message}
                       grouped={grouped}
                       isPinned={pinnedIds.has(message.id)}
-                      replyCount={replyCounts.get(message.id) ?? 0}
+                      thread={threadSummaries.get(message.id)}
                       onOpenThread={(messageId) =>
                         onOpenThread?.(message.parentMessageId ?? messageId)
                       }
@@ -206,13 +180,27 @@ export function SlackChannelView({
             <SlackComposer channelName={channel.name} onSend={onSendMessage} {...composer} />
           </div>
         </div>
-      )}
-      {panel === "details" ? <ChannelDetails channel={channel} onClose={onClosePanel} onShowMembers={onShowMembers} onUpdateDetails={onUpdateDetails} onToggleStar={onToggleStar} /> : null}
+      {panel === "thread" && activeThread ? (
+        <ThreadPanel
+          channel={channel}
+          parent={activeThread}
+          replies={threadReplies}
+          profileName={profileName}
+          composer={composer}
+          onClose={onClosePanel}
+          onSend={onSendThreadMessage}
+          onOpenThread={onOpenThread}
+          onToggleReaction={onToggleReaction}
+          onTogglePin={onTogglePin}
+          onMore={onMoreMessageActions}
+        />
+      ) : null}
+      {panel === "details" ? <ChannelDetails channel={channel} onClose={onClosePanel} onShowMembers={onShowMembers} onUpdateDetails={onUpdateDetails} onRenameChannel={onRenameChannel} onToggleStar={onToggleStar} /> : null}
     </section>
   );
 }
 
-function ChannelHeader({ channel, embedded = false, onShowMembers, onSearch, onOpenDetails, onToggleSidebar }: Pick<SlackChannelViewProps, "channel" | "onShowMembers" | "onSearch" | "onOpenDetails" | "onToggleSidebar"> & { embedded?: boolean }) {
+function ChannelHeader({ channel, embedded = false, onShowMembers, onOpenDetails, onToggleSidebar }: Pick<SlackChannelViewProps, "channel" | "onShowMembers" | "onOpenDetails" | "onToggleSidebar"> & { embedded?: boolean }) {
   const memberCount = channel.memberNames?.length ?? 0;
   return (
     <header className={`slack-channel-header ${embedded ? "slack-channel-header--embedded" : ""}`}>
@@ -228,18 +216,18 @@ function ChannelHeader({ channel, embedded = false, onShowMembers, onSearch, onO
       {channel.topic ? <p className="slack-channel-header__topic">{channel.topic}</p> : null}
       <div className="slack-channel-header__actions">
         {onShowMembers && memberCount ? <HeaderButton label={`${memberCount} membres`} onClick={onShowMembers}><UsersRoundIcon size={17} /><span>{memberCount}</span></HeaderButton> : null}
-        {onSearch ? <HeaderButton label="Rechercher dans le salon" onClick={onSearch}><SearchIcon size={15} /><span>Rechercher</span></HeaderButton> : null}
-        {onOpenDetails ? <HeaderButton label="Informations du salon" onClick={onOpenDetails}><InfoIcon size={16} /><span>Informations</span></HeaderButton> : null}
+        {onOpenDetails ? <HeaderButton label="Informations du canal" onClick={onOpenDetails}><InfoIcon size={16} /><span>Informations</span></HeaderButton> : null}
       </div>
     </header>
   );
 }
 
-function ThreadPanel({ channel, parent, replies, profileName, onClose, onSend, onOpenThread, onToggleReaction, onTogglePin, onMore }: {
+function ThreadPanel({ channel, parent, replies, profileName, composer, onClose, onSend, onOpenThread, onToggleReaction, onTogglePin, onMore }: {
   channel: SlackChannel;
   parent: SlackChannelMessage;
   replies: SlackChannelMessage[];
   profileName?: string;
+  composer?: SlackChannelViewProps["composer"];
   onClose?: () => void;
   onSend?: SlackChannelViewProps["onSendThreadMessage"];
   onOpenThread?: SlackChannelViewProps["onOpenThread"];
@@ -247,9 +235,8 @@ function ThreadPanel({ channel, parent, replies, profileName, onClose, onSend, o
   onTogglePin?: SlackChannelViewProps["onTogglePin"];
   onMore?: SlackChannelViewProps["onMoreMessageActions"];
 }) {
-  const [broadcast, setBroadcast] = useState(false);
   return (
-    <aside className="slack-context-panel slack-context-panel--thread" aria-label={`Fil de discussion dans ${channel.name}`}>
+    <aside className="slack-context-panel" aria-label={`Fil de discussion dans ${channel.name}`}>
       <header className="slack-context-panel__header">
         <div><h2>Fil de discussion</h2><p>#{channel.name}</p></div>
         {onClose ? <HeaderButton label="Fermer le fil" onClick={onClose}><XIcon size={18} /></HeaderButton> : null}
@@ -260,8 +247,9 @@ function ThreadPanel({ channel, parent, replies, profileName, onClose, onSend, o
       </div>
       {onSend ? (
         <div className="slack-context-panel__composer">
-          <label className="slack-broadcast"><input type="checkbox" checked={broadcast} onChange={(event) => setBroadcast(event.target.checked)} /> Envoyer aussi dans #{channel.name}</label>
-          <SlackComposer channelName={channel.name} placeholder="Répondre dans le fil" submitLabel="Envoyer la réponse" onSend={(draft) => onSend(parent.id, draft, broadcast)} />
+          {/* Same tools as the channel composer: Slack gives the thread the full
+              bar, and a shorter footer would break the shared baseline. */}
+          <SlackComposer {...composer} channelName={channel.name} placeholder="Répondre dans le fil" submitLabel="Envoyer la réponse" onSend={(draft) => onSend(parent.id, draft)} />
         </div>
       ) : <p className="slack-context-panel__notice">Lecture seule pour ce fil.</p>}
       {profileName ? <span className="sr-only">Réponse envoyée au nom de {profileName}</span> : null}
@@ -269,16 +257,20 @@ function ThreadPanel({ channel, parent, replies, profileName, onClose, onSend, o
   );
 }
 
-function ChannelDetails({ channel, onClose, onShowMembers, onUpdateDetails, onToggleStar }: Pick<SlackChannelViewProps, "channel" | "onClosePanel" | "onShowMembers" | "onUpdateDetails" | "onToggleStar"> & { onClose?: () => void }) {
+function ChannelDetails({ channel, onClose, onShowMembers, onUpdateDetails, onRenameChannel, onToggleStar }: Pick<SlackChannelViewProps, "channel" | "onClosePanel" | "onShowMembers" | "onUpdateDetails" | "onRenameChannel" | "onToggleStar"> & { onClose?: () => void }) {
   const [topic, setTopic] = useState(channel.topic ?? "");
   const [description, setDescription] = useState(channel.description ?? "");
   const [isPrivate, setIsPrivate] = useState(Boolean(channel.isPrivate));
+  const [name, setName] = useState(channel.name);
+  const [nameError, setNameError] = useState("");
 
   useEffect(() => {
     setTopic(channel.topic ?? "");
     setDescription(channel.description ?? "");
     setIsPrivate(Boolean(channel.isPrivate));
-  }, [channel.description, channel.id, channel.isPrivate, channel.topic]);
+    setName(channel.name);
+    setNameError("");
+  }, [channel.description, channel.id, channel.isPrivate, channel.name, channel.topic]);
 
   return (
     <aside className="slack-context-panel" aria-label={`Informations sur ${channel.name}`}>
@@ -287,6 +279,45 @@ function ChannelDetails({ channel, onClose, onShowMembers, onUpdateDetails, onTo
         {onClose ? <HeaderButton label="Fermer les informations" onClick={onClose}><XIcon size={18} /></HeaderButton> : null}
       </header>
       <div className="slack-details">
+        {onRenameChannel ? (
+          <form
+            className="slack-details__form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!onRenameChannel(name)) {
+                setNameError(
+                  "Nom vide ou déjà pris par un autre canal de cet espace.",
+                );
+                return;
+              }
+              setNameError("");
+            }}
+          >
+            <label>
+              Nom
+              <input
+                value={name}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  if (nameError) setNameError("");
+                }}
+                aria-invalid={Boolean(nameError)}
+                maxLength={80}
+              />
+            </label>
+            {nameError ? (
+              <p role="alert" className="slack-details__error">
+                {nameError}
+              </p>
+            ) : null}
+            <p className="slack-details__local-note">
+              L’identifiant technique reste <code>{channel.id}</code> : les
+              messages, les liens et les missions rattachées continuent de
+              résoudre après un renommage.
+            </p>
+            <button type="submit">Renommer le canal</button>
+          </form>
+        ) : null}
         {onToggleStar ? (
           <section>
             <h3>Favoris</h3>
@@ -299,13 +330,6 @@ function ChannelDetails({ channel, onClose, onShowMembers, onUpdateDetails, onTo
         {onUpdateDetails ? (
           <form
             className="slack-details__form"
-            data-pwa-dirty={
-              topic !== (channel.topic ?? "") ||
-              description !== (channel.description ?? "") ||
-              isPrivate !== Boolean(channel.isPrivate)
-                ? "true"
-                : undefined
-            }
             onSubmit={(event) => {
               event.preventDefault();
               onUpdateDetails({
@@ -317,14 +341,14 @@ function ChannelDetails({ channel, onClose, onShowMembers, onUpdateDetails, onTo
           >
             <label>Sujet<input value={topic} onChange={(event) => setTopic(event.target.value)} maxLength={120} /></label>
             <label>Description<textarea data-composer-input value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} rows={4} /></label>
-            <label className="slack-details__privacy"><input type="checkbox" checked={isPrivate} onChange={(event) => setIsPrivate(event.target.checked)} /> Limiter aux membres du salon</label>
+            <label className="slack-details__privacy"><input type="checkbox" checked={isPrivate} onChange={(event) => setIsPrivate(event.target.checked)} /> Limiter aux membres du canal</label>
             <p className="slack-details__local-note">Restriction simulée localement pour la maquette ; ce n’est pas une autorisation serveur.</p>
             <button type="submit">Enregistrer les informations</button>
           </form>
         ) : (
           <>
             <section><h3>Sujet</h3><p>{channel.topic || "Aucun sujet défini."}</p></section>
-            <section><h3>À propos de ce salon</h3><p>{channel.description || "Aucune description définie."}</p></section>
+            <section><h3>À propos de ce canal</h3><p>{channel.description || "Aucune description définie."}</p></section>
           </>
         )}
         <section><h3>Membres</h3><p>{channel.memberNames?.length ?? 0} membre{(channel.memberNames?.length ?? 0) > 1 ? "s" : ""}</p>{onShowMembers ? <button type="button" onClick={onShowMembers}>Voir les membres</button> : null}</section>
@@ -338,7 +362,7 @@ function HeaderButton({ label, onClick, children }: { label: string; onClick: ()
 }
 
 function EmptyTab({ tab }: { tab: SlackChannelTab }) {
-  const label = tab === "messages" ? "Aucun message pour l’instant." : tab === "files" ? "Aucun fichier partagé dans ce salon." : "Aucun message épinglé dans ce salon.";
+  const label = tab === "messages" ? "Aucun message pour l’instant." : tab === "files" ? "Aucun fichier partagé dans ce canal." : "Aucun message épinglé dans ce canal.";
   return <p className="slack-empty-state">{label}</p>;
 }
 

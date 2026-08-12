@@ -11,7 +11,7 @@ export type MobileStack = {
 };
 
 export const MOBILE_TAB_ENTRIES = [
-  { id: "home", path: "/channels", label: "Accueil" },
+  { id: "home", path: "/inbox", label: "Accueil" },
   { id: "activity", path: "/activity", label: "Activité" },
   { id: "hermes", path: "/hermes", label: "Hermes" },
   { id: "search", path: "", label: "Recherche" },
@@ -62,29 +62,37 @@ const STACK: Record<
   string,
   { title: string; parent: string | null; short?: string }
 > = {
-  "/channels": { title: "Accueil", parent: null, short: "Accueil" },
+  "/inbox": { title: "File", parent: null, short: "File" },
   "/activity": { title: "Activité", parent: null, short: "Activité" },
   "/hermes": { title: "Hermes", parent: null, short: "Hermes" },
-  "/menu": { title: "Menu", parent: "/channels", short: "Menu" },
-  "/inbox": { title: "File", parent: "/activity" },
+  "/menu": { title: "Menu", parent: "/inbox", short: "Menu" },
+  "/channels": { title: "Canaux", parent: "/menu", short: "Canaux" },
   "/missions": { title: "Missions", parent: "/activity" },
-  "/layouts": { title: "Layout lab", parent: "/menu" },
+  "/labs": { title: "Labs", parent: "/menu", short: "Labs" },
+  "/labs/training": { title: "Terrain d'entraînement", parent: "/labs" },
+  "/labs/layout-lab": { title: "Layout lab", parent: "/labs" },
   "/tasks/new": { title: "Nouvelle tâche", parent: "/activity" },
   "/history": { title: "Historique", parent: "/activity" },
   "/members": { title: "Membres", parent: "/menu" },
-  "/registry": { title: "Registre", parent: "/menu" },
   "/audit": { title: "Audit", parent: "/menu" },
   "/settings": { title: "Réglages", parent: "/menu" },
   "/account": { title: "Profil opérateur", parent: "/menu" },
-  "/workspaces": { title: "Workspaces", parent: "/channels" },
+  "/workspaces": { title: "Workspaces", parent: "/inbox" },
 };
 
-export function withWorkspace(path: string, workspaceId: string) {
-  const [pathname, hash] = path.split("#");
-  const [base, ownSearch] = pathname.split("?");
-  const search = new URLSearchParams(ownSearch ?? "");
-  search.set("workspace", workspaceId);
-  return `${base}?${search.toString()}${hash ? `#${hash}` : ""}`;
+/** Prefix an app path with its organization slug: orgPath("acme", "/inbox") → "/acme/inbox". */
+export function orgPath(org: string, path: string) {
+  return `/${org}${path === "/" ? "" : path}`;
+}
+
+/**
+ * Drop the leading org segment so route matching keeps its unprefixed keys:
+ * stripOrg("/acme/inbox/42") → "/inbox/42". Strip exactly once, at the point
+ * where a router pathname enters app logic.
+ */
+export function stripOrg(pathname: string) {
+  const rest = pathname.replace(/^\/[^/]+/, "");
+  return rest === "" ? "/" : rest;
 }
 
 export function decodeChannelId(pathname: string) {
@@ -101,28 +109,29 @@ export function decodeChannelId(pathname: string) {
 export function resolveMobileStack({
   pathname,
   search,
-  workspaceId,
+  org,
   channelName,
   itemTitle,
   missionName,
 }: {
+  /** Org-less pathname — callers strip the org segment first. */
   pathname: string;
   search: string;
-  workspaceId: string;
+  org: string;
   channelName?: string;
   itemTitle?: string;
   missionName?: string;
 }): MobileStack {
   const params = new URLSearchParams(search);
   const link = (to: string, label: string) => ({
-    to: withWorkspace(to, workspaceId),
+    to: orgPath(org, to),
     label,
   });
 
   if (pathname.startsWith("/channels/")) {
     const channelId = decodeChannelId(pathname);
-    const channelLabel = channelName ? `# ${channelName}` : "Salon";
-    if (!channelId) return { title: "Salons", parent: link("/menu", "Menu") };
+    const channelLabel = channelName ? `# ${channelName}` : "Canal";
+    if (!channelId) return { title: "Canaux", parent: link("/menu", "Menu") };
     const channelPath = `/channels/${encodeURIComponent(channelId)}`;
     if (params.get("thread"))
       return { title: "Fil de discussion", parent: link(channelPath, channelLabel) };
@@ -132,7 +141,7 @@ export function resolveMobileStack({
       return { title: "Fichiers", parent: link(channelPath, channelLabel) };
     if (params.get("tab") === "pins")
       return { title: "Épinglés", parent: link(channelPath, channelLabel) };
-    return { title: channelLabel, parent: link("/channels", "Accueil") };
+    return { title: channelLabel, parent: link("/channels", "Canaux") };
   }
 
   if (pathname.startsWith("/inbox/"))

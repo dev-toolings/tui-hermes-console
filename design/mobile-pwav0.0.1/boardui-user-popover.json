@@ -1,0 +1,12 @@
+{
+  "className": "flex w-full flex-col gap-1.5 pt-[5px]",
+  "style": {
+    "width": "243px",
+    "bg": "rgba(0, 0, 0, 0)",
+    "radius": "0px",
+    "shadow": "none",
+    "border": "0px solid lab(2.75381 0 0)",
+    "padding": "5px 0px 0px"
+  },
+  "html": "<div class=\"flex w-full flex-col gap-1.5 pt-[5px]\"><span class=\"px-2 text-body-medium text-text-secondary\">Users with access</span><div class=\"flex w-full flex-col gap-1\"><a href=\"#\" class=\"flex w-full items-center gap-2 rounded-2lg px-2 py-1.5 outline-none transition-colors hover:bg-background-primary-hover focus-visible:bg-background-primary-hover\"><span class=\"inline-flex shrink-0 select-none items-center justify-center overflow-hidden rounded-full text-center align-middle transition-[width,height,font-size] duration-200 ease size-5 text-[10px] leading-[15px] font-semibold bg-avatar-neutral-background text-text-secondary\">M</span><span class=\"truncate text-body-medium text-text-primary\">Mertcan Esmergul</span></a><a href=\"#\" class=\"flex w-full items-center gap-2 rounded-2lg px-2 py-1.5 outline-none transition-colors hover:bg-background-primary-hover focus-visible:bg-background-primary-hover\"><span class=\"inline-flex shrink-0 select-none items-center justify-center overflow-hidden rounded-full text-center align-middle transition-[width,height,font-size] duration-200 ease size-5 text-[10px] leading-[15px] font-semibold bg-lime-200 text-lime-700\">S</span><span class=\"truncate text-body-medium text-text-primary\">Steven Raule</span></a><a href=\"#\" class=\"flex w-full items-center gap-2 rounded-2lg px-2 py-1.5 outline-none transition-colors hover:bg-background-primary-hover focus-visible:bg-background-primary-hover\"><span class=\"inline-flex shrink-0 select-none items-center justify-center overflow-hidden rounded-full text-center align-middle transition-[width,height,font-size] duration-200 ease size-5 text-[10px] leading-[15px] font-semibold bg-pink-200 text-pink-500\">L</span><span class=\"truncate text-body-medium text-text-primary\">Lauren Proso</span></a></div></div>"
+}

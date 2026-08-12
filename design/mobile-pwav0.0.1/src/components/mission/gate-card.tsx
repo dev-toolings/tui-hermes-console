@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { CheckIcon, ShieldAlertIcon, ShieldCheckIcon, XIcon } from "lucide-react";
 import type { GateDecision, MissionEvent } from "../../state/mission-events";
 import { formatTime } from "../../state/mission-events";
@@ -6,6 +7,8 @@ export type GateCardProps = {
   gate: MissionEvent;
   decision: GateDecision;
   onDecide: (decision: Exclude<GateDecision, "pending">) => void;
+  /** Replaces the default settled note, e.g. with a training verdict. */
+  settledNote?: ReactNode;
 };
 
 /**
@@ -14,7 +17,7 @@ export type GateCardProps = {
  * to answer it. Once answered it drops out of the sticky position and stays in
  * the timeline as the audit record of who decided what.
  */
-export function GateCard({ gate, decision, onDecide }: GateCardProps) {
+export function GateCard({ gate, decision, onDecide, settledNote }: GateCardProps) {
   const radius = gate.blastRadius;
   const pending = decision === "pending";
   const danger = pending && Boolean(radius?.irreversible);
@@ -87,10 +90,12 @@ export function GateCard({ gate, decision, onDecide }: GateCardProps) {
           ) : null}
         </>
       ) : (
-        <p className="mission-gate__note">
-          Décision enregistrée localement dans cette maquette, sans effet sur un
-          runtime réel.
-        </p>
+        settledNote ?? (
+          <p className="mission-gate__note">
+            Décision enregistrée localement dans cette maquette, sans effet sur un
+            runtime réel.
+          </p>
+        )
       )}
     </section>
   );

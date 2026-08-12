@@ -1,0 +1,30 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - link "BoardUI BoardUI" [ref=e4] [cursor=pointer]:
+        - /url: /
+      - button "Quick Search" [ref=e7]
+      - navigation "Component library" [ref=e13]
+    - main [ref=e161]:
+      - generic [ref=e162]
+      - generic [ref=e192]
+      - generic [ref=e315]
+      - generic [ref=e350]
+      - generic [ref=e479]
+    - complementary "Join the BoardUI waitlist" [ref=e486]:
+      - generic [ref=e487]
+      - button "Dismiss waitlist" [ref=e502] [cursor=pointer]
+  - alert [ref=e506]
+  - generic "Mertcan Esmergul" [ref=e509]:
+    - button "Rejeter" [ref=e511]
+    - dialog "Account menu" [ref=e512]:
+      - generic [ref=e513]
+      - generic [ref=e526]
+    - button "Rejeter" [ref=e536]
+  - generic "Board team" [ref=e539]:
+    - button "Rejeter" [ref=e541]
+    - dialog "Board team menu" [active] [ref=e542]:
+      - generic [ref=e543]
+      - generic [ref=e549]
+      - generic [ref=e611]
+    - button "Rejeter" [ref=e615]

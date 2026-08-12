@@ -20,12 +20,19 @@
   .app-shell { font-size: var(--text-row); line-height: var(--text-row-lh); }
   .app-shell h1, .app-shell h2 { font-size: var(--text-nav); line-height: var(--text-nav-lh); }
   .app-shell h3 { font-size: var(--text-row); line-height: var(--text-row-lh); }
+  /* Tailwind v4 defaults an unqualified `border` to currentColor; every shadcn/ui
+     component still writes `border-b` / `border` expecting the theme colour.
+     Scoped to their data-slot markers so no existing component shifts. */
+  [data-slot] { border-color: var(--border); }
   button, input, textarea, select { font: inherit; }
   button { cursor: pointer; }
   button:disabled { cursor: default; }
 }
 
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+/* Fields already answer focus with a border + halo of their own; the global
+   outline would stack a third ring on top and read as a bug. */
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline: none; }
 [data-cmdk-input]:focus,
 [data-cmdk-input]:focus-visible { outline: none; box-shadow: none; }
 [data-composer-input]:focus,
@@ -49,13 +56,13 @@
 
 .control { width: 100%; min-height: var(--row-h-lg); border: 1px solid var(--border-control); border-radius: 8px; background: var(--card); color: var(--foreground); padding: .4375rem .5rem; font-size: var(--text-row); line-height: var(--text-row-lh); outline: none; }
 .control::placeholder { color: var(--muted-foreground); }
-.control:focus { border-color: var(--ring); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 25%, transparent); }
+.control:focus { border-color: color-mix(in srgb, var(--ring) 55%, var(--border-control)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 14%, transparent); }
 
 /*
  * Safari iOS zooms the whole layout when a focused field computes under 16px,
- * and it never zooms back out on blur: the app stays enlarged, in the browser
- * tab and in the installed web app alike, and iOS remembers that zoom for the
- * origin across reloads. 16px is the platform threshold, not a design choice,
+ * and it never zooms back out on blur: the app stays enlarged and iOS
+ * remembers that zoom for the origin across reloads. 16px is the platform
+ * threshold, not a design choice,
  * so it outranks the 13px density tokens every field otherwise inherits
  * (.control, .slack-composer__textarea, .slack-details__form, Tailwind's
  * text-sm / text-body-1 / text-body-2-regular). Hence !important: nothing else

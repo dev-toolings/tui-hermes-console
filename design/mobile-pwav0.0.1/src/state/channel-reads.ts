@@ -25,6 +25,26 @@ function loadReadCounts(workspaceId: string): Record<string, number> {
   }
 }
 
+/**
+ * Forgets one channel's read marker after it is deleted. These markers live
+ * outside the console state and are not validated, so a leftover entry is
+ * harmless — but it would silently come back to life if the same id were ever
+ * created again.
+ */
+export function dropChannelReadCount(workspaceId: string, channelId: string) {
+  try {
+    const counts = loadReadCounts(workspaceId);
+    if (!(channelId in counts)) return;
+    delete counts[channelId];
+    window.localStorage.setItem(
+      readCountsStorageKey(workspaceId),
+      JSON.stringify(counts),
+    );
+  } catch {
+    /* The marker is cosmetic: losing this cleanup changes nothing visible. */
+  }
+}
+
 export function useChannelReadCounts(
   workspaceId: string,
   channelMessageCounts: Record<string, number>,

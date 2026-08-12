@@ -306,9 +306,14 @@
   color: var(--foreground);
 }
 
+/* The open fold scrolls in place: 186 calls must not stretch the timeline,
+   so the list caps its height and the sentinel pages inside this scrollport. */
 .mission-trace__list {
   display: flex;
   flex-direction: column;
+  max-height: min(45vh, 360px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border-top: 1px solid var(--border-separator);
   padding: 4px 8px 8px;
 }
@@ -324,10 +329,191 @@
   color: var(--muted-foreground);
 }
 
+.mission-trace__sentinel {
+  flex: none; /* an empty flex item otherwise collapses to 0 and never intersects */
+  height: 1px;
+}
+
 .mission-trace__row code {
   font-family: var(--font-jetbrains);
   overflow-wrap: anywhere;
   color: var(--text-secondary);
+}
+
+/* --- Board (desktop) ------------------------------------------------------
+   Columns are read-only lanes: status is derived from the run, so a card is
+   never dragged between lanes — the "Décisions" lane empties by deciding. */
+
+.mission-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 12px;
+}
+
+.mission-board__column {
+  display: flex;
+  min-height: 160px;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 14px;
+  background: var(--surface-sunken);
+  padding: 10px;
+}
+
+.mission-board__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 2px 4px;
+}
+
+.mission-board__head h2 {
+  margin: 0;
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  font-weight: 600;
+  letter-spacing: 0.15px;
+  color: var(--muted-foreground);
+}
+
+.mission-board__count {
+  font-family: var(--font-jetbrains);
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  color: var(--text-tertiary);
+}
+
+.mission-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--border-separator);
+  border-radius: 10px;
+  background: var(--card);
+  padding: 10px 12px;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.mission-card:hover {
+  border-color: var(--border-control);
+  background: var(--surface-hover);
+}
+
+.mission-card__title {
+  font-size: var(--text-row);
+  line-height: var(--text-row-lh);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.mission-card__intent {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  color: var(--muted-foreground);
+}
+
+.mission-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 2px;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  color: var(--text-tertiary);
+}
+
+.mission-card[aria-current="page"] {
+  border-color: var(--border-control);
+  background: var(--surface-raised);
+}
+
+.mission-board__empty {
+  margin: 0;
+  padding: 20px 4px;
+  text-align: center;
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  color: var(--text-tertiary);
+}
+
+/* --- Side peek (desktop) --------------------------------------------------
+   Non-modal by design: no overlay, the board behind stays clickable and the
+   sheet's own body is the scroll container that makes the gate sticky. */
+
+:root {
+  --mission-sheet-width: clamp(480px, 50vw, 720px);
+}
+
+/* A covered card cannot be clicked: while the peek is open the board owns
+   only the strip left of the sheet instead of centring underneath it.
+   `width: auto` (not the utility `w-full`) is what lets the margin actually
+   shrink the box; the lanes then stack by whatever width the strip affords. */
+.mission-board--peeked {
+  width: auto;
+  max-width: none;
+  margin-right: var(--mission-sheet-width);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.mission-sheet {
+  position: fixed;
+  inset-block: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  width: var(--mission-sheet-width);
+  flex-direction: column;
+  border: 1px solid var(--border-card);
+  border-right: 0;
+  border-radius: 16px 0 0 16px;
+  background: var(--panel);
+  box-shadow: var(--shadow-elevated);
+  outline: none;
+  animation: sheet-in-right 240ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes sheet-in-right {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+
+.mission-sheet__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-separator);
+  padding: 8px 10px 8px 16px;
+}
+
+.mission-sheet__eyebrow {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  font-weight: 500;
+  letter-spacing: 0.15px;
+  color: var(--muted-foreground);
+}
+
+.mission-sheet__body {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px 16px 16px;
+}
+
+/* In the peek the gate scrolls with the stream: pinned it would shadow half
+   of an already-half-width panel. The full page keeps the sticky behaviour. */
+.mission-sheet__body .mission-gate {
+  position: static;
 }
 
 .mission-empty {
@@ -368,7 +554,12 @@
 
 @media (prefers-reduced-motion: reduce) {
   .mission-gate__actions button,
-  .mission-lenses button {
+  .mission-lenses button,
+  .mission-card {
     transition: none;
+  }
+
+  .mission-sheet {
+    animation: none;
   }
 }
