@@ -1,0 +1,11 @@
+node_modules/
+dist/
+target/
+binaries/
+.bun/
+*.local
+.env
+.env.*
+.env.local
+auth.md
+.playwright-cli/

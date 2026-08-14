@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Permissions de la fenêtre principale — le sidecar est la seule capacité shell accordée.","local":true,"windows":["main"],"permissions":["core:default",{"identifier":"shell:allow-spawn","allow":[{"name":"binaries/hermes-server","sidecar":true}]}]}}
