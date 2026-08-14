@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type PointerEvent,
   type ReactNode,
 } from "react";
 import { flushSync } from "react-dom";
@@ -19,6 +20,8 @@ import { Modal, ModalButton } from "./components/ui/modal";
 import { MembersDialog } from "./components/members/members-dialog";
 import { MobileHeader, MobileHeaderAction } from "./components/mobile/mobile-header";
 import { MobileNavDrawer } from "./components/mobile/mobile-nav-drawer";
+import { DEFAULT_DRAWER_WIDTH } from "./components/mobile/drawer";
+import { useMediaQuery } from "./components/mobile/use-media-query";
 import {
   decodeChannelId,
   mobileTabForPath,
@@ -106,7 +109,6 @@ import {
   CircleHelpIcon,
   Clock3Icon,
   FilterIcon,
-  MenuIcon,
   MoonIcon,
   MoreHorizontalIcon,
   PlusIcon,
@@ -132,6 +134,7 @@ import {
   InboxIcon,
   InfoIcon,
   ListChecksIcon,
+  MenuIcon,
   MessageSquareTextIcon,
   MessagesSquareIcon,
   Settings2Icon,
@@ -146,6 +149,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+const MOBILE_EDGE_SIZE = 28;
+const MOBILE_EDGE_LOCK = 8;
+const MOBILE_EDGE_VELOCITY = 0.5;
+
+export function shouldOpenEdgeSwipe(distanceX: number, elapsed: number) {
+  const progress = Math.min(1, Math.max(0, distanceX / DEFAULT_DRAWER_WIDTH));
+  return distanceX / elapsed >= MOBILE_EDGE_VELOCITY || progress >= 0.5;
+}
+
+type EdgeSwipe = {
+  axis: "pending" | "horizontal" | "vertical";
+  pointerId: number;
+  startTime: number;
+  startX: number;
+  startY: number;
+};
 
 type Filter = "all" | "decisions" | "agents";
 
@@ -1210,9 +1230,11 @@ function Shell() {
   const channelActions = useChannelActions();
   const location = useLocation();
   const navigate = useNavigate();
+  const isMobile = useMediaQuery("(max-width: 1023px)");
   const mainScrollRef = useRef<HTMLElement>(null);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [navDrawerOpen, setNavDrawerOpen] = useState(false);
+  const edgeSwipeRef = useRef<EdgeSwipe | null>(null);
   useAppHeight();
   // Offcanvas from 1024px up, exactly like shadcn `dashboard-01`: the panel is
   // either present at full width or slid out. Below 1024px the mobile stack owns
@@ -1305,6 +1327,55 @@ function Shell() {
         {primaryAction}
       </>
     );
+
+  const onShellPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (!isMobile || assistantRoute || navDrawerOpen) return;
+    if (event.pointerType === "mouse" || event.clientX > MOBILE_EDGE_SIZE) return;
+    edgeSwipeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startTime: event.timeStamp,
+      axis: "pending",
+    };
+  };
+  const onShellPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const swipe = edgeSwipeRef.current;
+    if (!swipe || swipe.pointerId !== event.pointerId || swipe.axis === "vertical") return;
+    const distanceX = event.clientX - swipe.startX;
+    const distanceY = event.clientY - swipe.startY;
+    if (swipe.axis === "pending") {
+      const axis =
+        Math.max(Math.abs(distanceX), Math.abs(distanceY)) < MOBILE_EDGE_LOCK
+          ? ("pending" as const)
+          : Math.abs(distanceY) >= Math.abs(distanceX)
+            ? ("vertical" as const)
+            : ("horizontal" as const);
+      if (axis === "pending") return;
+      if (axis === "vertical" || distanceX < 0) {
+        swipe.axis = "vertical";
+        return;
+      }
+      swipe.axis = "horizontal";
+    }
+    event.preventDefault();
+  };
+  const finishShellSwipe = (event: PointerEvent<HTMLDivElement>) => {
+    const swipe = edgeSwipeRef.current;
+    if (!swipe || swipe.pointerId !== event.pointerId) return;
+    edgeSwipeRef.current = null;
+    if (swipe.axis !== "horizontal") return;
+    const distanceX = event.clientX - swipe.startX;
+    const elapsed = Math.max(1, event.timeStamp - swipe.startTime);
+    if (shouldOpenEdgeSwipe(distanceX, elapsed)) {
+      setNavDrawerOpen(true);
+    }
+  };
+  const cancelShellSwipe = (event: PointerEvent<HTMLDivElement>) => {
+    const swipe = edgeSwipeRef.current;
+    if (!swipe || swipe.pointerId !== event.pointerId) return;
+    edgeSwipeRef.current = null;
+  };
   useEffect(() => {
     document.title = `Hermes Console — ${meta.label}`;
   }, [meta.label]);
@@ -1344,7 +1415,14 @@ function Shell() {
     });
   };
   return (
-    <div className="app-shell flex w-full overflow-hidden bg-[var(--surface-sunken)]">
+    <div
+      className="app-shell flex w-full overflow-hidden bg-[var(--surface-sunken)]"
+      onPointerDown={onShellPointerDown}
+      onPointerMove={onShellPointerMove}
+      onPointerUp={finishShellSwipe}
+      onPointerCancel={cancelShellSwipe}
+      onLostPointerCapture={cancelShellSwipe}
+    >
       <GlobalSearch />
       <WorkspaceSidebar
         workspaces={workspaces}
