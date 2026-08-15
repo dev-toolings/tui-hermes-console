@@ -66,8 +66,12 @@ function selectionFromSettings(body: ModelSettingsDto): {
   effort: HermesReasoningEffort | "";
 } {
   return {
-    provider: body.selectedProvider,
-    model: body.selectedModel,
+    // `""` et non `null` : tout l'aval de ce composant traite déjà la chaîne
+    // vide comme « rien de sélectionné » (`useState(... ?? "")`, les gardes
+    // `!selectedProvider`, la valeur `undefined` passée au Select). Introduire
+    // un second vocabulaire pour le même état ferait diverger les deux.
+    provider: body.selectedProvider ?? "",
+    model: body.selectedModel ?? "",
     effort: isHermesReasoningEffort(body.selectedReasoningEffort)
       ? body.selectedReasoningEffort
       : body.availableReasoningEfforts.length > 0
