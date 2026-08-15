@@ -199,6 +199,69 @@ describe("normalizeHermesModelOptions", () => {
       models: [{ id: "anthropic/claude-opus-4.6", fast: false, reasoning: false }],
     });
   });
+  // La charge utile REELLE d'un runtime Hermes 0.20.1 deploye sans une seule
+  // cle dans le pool, relevee sur un LXC le 15-08-2026 : `provider: ""`,
+  // `model: ""`, et les 43 fournisseurs au complet. Une reponse valide et
+  // entiere, qui decrit un etat.
+  //
+  // Elle levait `HERMES_MODEL_PROVIDER_MISSING` (502), ce qui coutait a
+  // l'ecran « Modeles » tout son catalogue — donc la liste des fournisseurs et
+  // le formulaire de cle, au moment precis ou l'operateur en a besoin pour
+  // sortir de cet etat. Une installation fraiche est le seul moment ou
+  // l'application DOIT savoir s'expliquer.
+  test("un runtime deploye sans aucune cle rend un catalogue, pas une erreur", () => {
+    const catalog = normalizeHermesModelOptions({
+      provider: "",
+      model: "",
+      providers: [
+        {
+          slug: "openai-api",
+          name: "OpenAI",
+          is_current: false,
+          authenticated: false,
+          auth_type: "api_key",
+          models: [],
+          total_models: 0,
+        },
+        {
+          slug: "anthropic",
+          name: "Anthropic",
+          is_current: false,
+          authenticated: false,
+          auth_type: "api_key",
+          models: [],
+          total_models: 0,
+        },
+      ],
+    });
+
+    expect(catalog.currentProvider).toBeNull();
+    expect(catalog.runtimeDefaultModel).toBeNull();
+    // Le catalogue reste lisible : c'est LUI qui permet a l'ecran de proposer
+    // « pose une cle pour celui-ci ».
+    expect(catalog.providers).toHaveLength(2);
+    expect(catalog.providers.every((provider) => provider.acceptsApiKey)).toBe(true);
+    // Aucun fournisseur ne pretend etre la route active quand il n'y en a pas.
+    expect(catalog.providers.some((provider) => provider.isCurrent)).toBe(false);
+  });
+
+  test("aucun modele nulle part reste un catalogue — chaque liste est simplement vide", () => {
+    const catalog = normalizeHermesModelOptions({
+      provider: "openai-api",
+      model: "",
+      providers: [{ slug: "openai-api", name: "OpenAI", models: [] }],
+    });
+
+    expect(catalog.runtimeDefaultModel).toBeNull();
+    expect(catalog.providers[0]!.models).toEqual([]);
+  });
+
+  // La frontiere : « je n'ai pas pu conclure » n'est pas « j'ai conclu qu'il
+  // n'y a rien ». Une reponse illisible doit toujours lever.
+  test("une reponse illisible reste une erreur", () => {
+    expect(() => normalizeHermesModelOptions({ providers: "pas-un-tableau" })).toThrow();
+  });
+
 });
 
 describe("listHermesModelOptions errors", () => {

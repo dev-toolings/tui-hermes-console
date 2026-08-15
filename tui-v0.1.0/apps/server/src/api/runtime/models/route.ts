@@ -125,18 +125,37 @@ async function getModelSettings(options?: {
     ) ??
     catalog.providers.find((provider) => provider.authenticated && provider.models.length > 0);
 
+  // Aucun fournisseur utilisable : c'est l'état d'un runtime déployé sans clé,
+  // et l'écran de réglages est précisément l'endroit d'où on en sort. Lever
+  // ici le priverait du catalogue dont il a besoin pour proposer d'en poser
+  // une — la panne que ce module a portée jusqu'ici.
+  //
+  // À NE PAS confondre avec `available-model-selection.ts`, qui lève le même
+  // code au LANCEMENT d'un run : là, sans modèle, il n'y a rien à exécuter.
+  // Décrire un état et exécuter une inférence ne sont pas la même question.
   if (!selectedProvider) {
-    throw new HermesRuntimeError(
-      "Aucun provider Hermes authentifié ne propose de modèle.",
-      503,
-      "HERMES_MODEL_PROVIDER_UNAVAILABLE",
-    );
+    return {
+      catalog,
+      selectedProvider: null,
+      selectedModel: null,
+      selectedReasoningEffort: null,
+      availableReasoningEfforts: [],
+      persistence: {
+        source: "hermes_runtime" as const,
+        appliesTo: "new_threads" as const,
+        envOverride: false,
+        reason:
+          "Aucun fournisseur authentifié sur ce runtime : le catalogue est lisible, mais aucun modèle ne peut être sélectionné tant qu'une clé n'est pas posée.",
+      },
+    };
   }
 
   const available = new Set(selectedProvider.models.map((model) => model.id));
   const selectedModel =
     (selection.model && available.has(selection.model) ? selection.model : null) ??
-    (available.has(catalog.runtimeDefaultModel) ? catalog.runtimeDefaultModel : null) ??
+    (catalog.runtimeDefaultModel && available.has(catalog.runtimeDefaultModel)
+      ? catalog.runtimeDefaultModel
+      : null) ??
     selectedProvider.models[0]!.id;
 
   const selectedMeta = selectedProvider.models.find((model) => model.id === selectedModel);

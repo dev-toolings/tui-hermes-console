@@ -11,11 +11,14 @@ export type ModelSettingsDto = {
       source: string | null;
       models: Array<{ id: string; fast: boolean; reasoning: boolean }>;
     }>;
-    currentProvider: string;
-    runtimeDefaultModel: string;
+    // `null` = runtime joignable mais jamais configuré. Ce DTO est recopié à la
+    // main et ne partage AUCUN type avec le serveur : une divergence ici ne
+    // casse pas le typecheck, elle casse l'écran à l'exécution.
+    currentProvider: string | null;
+    runtimeDefaultModel: string | null;
   };
-  selectedProvider: string;
-  selectedModel: string;
+  selectedProvider: string | null;
+  selectedModel: string | null;
   selectedReasoningEffort: string | null;
   availableReasoningEfforts: string[];
   persistence: {

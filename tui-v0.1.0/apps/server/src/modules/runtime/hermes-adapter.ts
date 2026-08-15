@@ -93,8 +93,10 @@ export type HermesModelCatalog = {
       reasoning: boolean;
     }>;
   }>;
-  currentProvider: string;
-  runtimeDefaultModel: string;
+  /** `null` quand le runtime n'a aucune route active — installation fraîche. */
+  currentProvider: string | null;
+  /** `null` quand aucun modèle par défaut n'est résolu — même situation. */
+  runtimeDefaultModel: string | null;
 };
 
 export type HermesSkill = HermesSkillDto;
@@ -354,22 +356,32 @@ export async function listHermesModelOptions(config: {
   }
 }
 
+/**
+ * Ce que rend `/api/model/options`, traduit — y compris quand il ne rend rien.
+ *
+ * **Une installation fraîche n'est pas une panne.** Hermes déployé et sans
+ * aucune clé répond `provider: ""`, `model: ""` et ses fournisseurs au complet :
+ * une réponse valide, entière, qui décrit un état. Cette fonction levait un 502
+ * dessus (`HERMES_MODEL_PROVIDER_MISSING`), et le coût n'était pas théorique —
+ * l'écran « Modèles » perdait tout son catalogue, donc la liste des
+ * fournisseurs et le formulaire de clé, au moment précis où l'opérateur en a
+ * besoin pour sortir de cet état.
+ *
+ * `null` plutôt que `""` : « rien n'est configuré » se distingue ainsi d'un nom
+ * vide, et le type force chaque lecteur à en tenir compte.
+ *
+ * Ce qui reste une erreur : une réponse qu'on ne sait pas lire, ou une absence
+ * de réponse. « Je n'ai pas pu conclure » et « j'ai conclu qu'il n'y a rien »
+ * ne sont pas la même nouvelle.
+ */
 export function normalizeHermesModelOptions(input: unknown): HermesModelCatalog {
   const body = modelOptionsSchema.parse(input);
-  const runtimeDefaultModel = body.model.trim();
+  const runtimeDefaultModel = body.model.trim() || null;
   const declaredProvider = body.provider.trim();
   const currentProvider =
     body.providers.find((item) => item.slug === declaredProvider)?.slug ??
     body.providers.find((item) => item.is_current)?.slug ??
-    (declaredProvider && runtimeDefaultModel ? declaredProvider : "");
-
-  if (!currentProvider) {
-    throw new HermesRuntimeError(
-      "Hermes n’a pas indiqué de provider LLM actif.",
-      502,
-      "HERMES_MODEL_PROVIDER_MISSING",
-    );
-  }
+    (declaredProvider && runtimeDefaultModel ? declaredProvider : null);
 
   const providers = body.providers.map((provider) => {
     const authenticated =
@@ -403,7 +415,10 @@ export function normalizeHermesModelOptions(input: unknown): HermesModelCatalog 
   // néanmoins la seule valeur fiable à afficher et à transmettre aux runs.
   // Conserver ce couple évite de transformer un runtime distant valide en
   // erreur « provider manquant » dans Settings > Modèles.
-  if (runtimeDefaultModel) {
+  // Les DEUX sont requis : sans route active il n'y a rien à synthétiser, et un
+  // modèle par défaut orphelin reste non rattaché plutôt que d'inventer un
+  // fournisseur sans nom.
+  if (runtimeDefaultModel && currentProvider) {
     const activeProvider = providers.find((provider) => provider.slug === currentProvider);
     if (!activeProvider) {
       const backingProvider =
@@ -444,14 +459,10 @@ export function normalizeHermesModelOptions(input: unknown): HermesModelCatalog 
     }
   }
 
-  if (!providers.some((provider) => provider.models.length > 0)) {
-    throw new HermesRuntimeError(
-      "Hermes n’a retourné aucun modèle disponible.",
-      502,
-      "HERMES_MODELS_EMPTY",
-    );
-  }
-
+  // Aucun modèle nulle part est le prolongement du même état : un runtime sans
+  // clé ne peut lister les modèles d'aucun fournisseur. Le catalogue le porte
+  // déjà — chaque `provider.models` est vide. Lever ici rendrait l'écran
+  // aveugle une seconde fois, pour la même raison.
   return {
     providers,
     currentProvider,
