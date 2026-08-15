@@ -31,6 +31,7 @@ import {
   type SiteRequestContext,
 } from "@/modules/auth/service";
 import { assertSameOriginMutation } from "@/modules/api/same-origin";
+import { assertLocalOAuthRouting } from "@/modules/auth/local-oauth-routing";
 import { consoleSetupRequired } from "@/modules/setup/service";
 import {
   runStartPreconditionResponse,
@@ -269,9 +270,13 @@ if (hasSpa) {
 // avec `NODE_ENV=development` exporté ferait mourir le runner sur un
 // `process.exit(1)` muet. `import.meta.main` n'est vrai que si ce fichier est le
 // point d'entrée — il couvre aussi les scripts `scripts/*.ts` qui l'importent.
+const port = Number(process.env.CONSOLE_SERVER_PORT ?? 3170);
+const hostname = process.env.CONSOLE_SERVER_HOST ?? "127.0.0.1";
+
 if (import.meta.main) {
   // Configuration invalide = refus de démarrer, avant d'exposer le moindre port.
   developmentAuthBypassConfig();
+  assertLocalOAuthRouting(port);
   await assertSchemaMigrated();
   // Une coupure pendant un cutover doit être réconciliée avant que le serveur
   // puisse accepter une nouvelle mission.
@@ -283,13 +288,17 @@ if (import.meta.main) {
   });
 }
 
-const port = Number(process.env.CONSOLE_SERVER_PORT ?? 3170);
-const hostname = process.env.CONSOLE_SERVER_HOST ?? "127.0.0.1";
-
+// `oauthCallback` est la seule copie de cette valeur que le dépôt maîtrise :
+// l'autre vit dans la console Google Cloud, hors d'atteinte de tout garde. Un
+// écart entre les deux ne se voit qu'en fin de parcours, sous un
+// `redirect_uri_mismatch` qui ne dit pas quelle chaîne Google attendait. La
+// journaliser au démarrage donne la valeur exacte à recopier, sans avoir à la
+// reconstituer.
 log.info("[hermes-console] API démarrée", {
   hostname,
   port,
   spa: hasSpa ? spaDir : "non compilé (dev : Vite sur :1470)",
+  oauthCallback: process.env.GOOGLE_REDIRECT_URI?.trim() || "non configuré",
 });
 
 export default { hostname, port, fetch: app.fetch, idleTimeout: 0 };

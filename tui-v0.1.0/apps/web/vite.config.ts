@@ -14,6 +14,18 @@ import tailwindcss from "@tailwindcss/vite";
  */
 const webPort = Number(process.env.CONSOLE_WEB_PORT ?? 1470);
 const apiPort = Number(process.env.CONSOLE_SERVER_PORT ?? 3170);
+
+/**
+ * Hôte d'écoute du dev server, loopback par défaut, sur le même modèle que
+ * `CONSOLE_WEB_PORT` : une seule variable, lue ici et exportée par l'appelant.
+ *
+ * `CONSOLE_WEB_HOST=0.0.0.0` ouvre le SPA au réseau local, pour le consulter
+ * depuis un autre appareil. Ça reste un choix explicite et jamais le défaut :
+ * ce serveur n'a ni TLS ni authentification propre, et l'API qu'il proxifie
+ * doit alors être ouverte de la même façon (`CONSOLE_SERVER_HOST`) et connaître
+ * l'origine LAN (`CONSOLE_DEV_LAN_ORIGIN`, voir apps/server/src/modules/api/origins.ts).
+ */
+const webHost = process.env.CONSOLE_WEB_HOST ?? "127.0.0.1";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   clearScreen: false,
@@ -28,7 +40,7 @@ export default defineConfig({
     },
   },
   server: {
-    host: "127.0.0.1",
+    host: webHost,
     port: webPort,
     strictPort: true,
     proxy: {

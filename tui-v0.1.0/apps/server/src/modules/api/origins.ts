@@ -28,6 +28,47 @@ const DEV_ORIGINS =
     : [`http://localhost:${DEV_WEB_PORT}`, `http://127.0.0.1:${DEV_WEB_PORT}`];
 
 /**
+ * Origines de développement supplémentaires, déclarées à la main.
+ *
+ * Consulter la Console depuis un autre appareil du réseau local (le SPA sur
+ * `http://192.168.1.57:1470`) envoie un `Origin` que ni `localhost` ni
+ * `127.0.0.1` ne couvrent : CORS et le garde anti-CSRF refuseraient alors
+ * toutes les mutations, et le proxy Vite n'y change rien puisque
+ * `changeOrigin` réécrit `Host`, pas `Origin`.
+ *
+ * `CONSOLE_DEV_LAN_ORIGIN` autorise ces origines-là et elles seules, séparées
+ * par des virgules. Pas de joker et pas de « toute IP privée » : une origine
+ * non déclarée reste refusée, et la variable est ignorée en production, comme
+ * le reste des origines de développement.
+ *
+ * Lue à chaque appel plutôt qu'au chargement du module : les tests peuvent la
+ * poser sans dépendre de l'ordre des imports.
+ *
+ * Exportée parce que le bypass d'authentification locale s'appuie sur la même
+ * liste : c'est elle qui décide quelle origine non-loopback a le droit d'ouvrir
+ * une session. Deux listes séparées finiraient par diverger, et la moins
+ * stricte des deux ferait autorité.
+ */
+export function developmentLanOrigins(
+  env: Record<string, string | undefined> = process.env,
+): string[] {
+  if (env.NODE_ENV === "production") return [];
+  return (env.CONSOLE_DEV_LAN_ORIGIN ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .flatMap((value) => {
+      // Normalisé via URL : une valeur avec un chemin ou un slash final ne doit
+      // pas rater la comparaison avec l'en-tête `Origin`, qui n'en a jamais.
+      try {
+        return [new URL(value).origin];
+      } catch {
+        return [];
+      }
+    });
+}
+
+/**
  * Une fenêtre Tauri sert son front sous un schéma dédié. macOS et Linux
  * utilisent `tauri://localhost`, Windows `http://tauri.localhost`.
  */
@@ -56,6 +97,7 @@ function forwardedOrigin(request: Request, requestUrl: URL): string | null {
 export function isAllowedOrigin(origin: string, request: Request): boolean {
   if (isTauriOrigin(origin)) return true;
   if (DEV_ORIGINS.includes(origin)) return true;
+  if (developmentLanOrigins().includes(origin)) return true;
 
   let parsed: URL;
   try {

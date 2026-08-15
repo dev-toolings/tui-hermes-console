@@ -107,13 +107,39 @@ test("rejects the auth bypass in production or on a non-loopback boundary", () =
   ).toThrow("NODE_ENV=development");
   expect(() =>
     developmentAuthBypassConfig({ ...local, CONSOLE_SERVER_HOST: "0.0.0.0" }),
-  ).toThrow("strictement locaux");
+  ).toThrow("CONSOLE_DEV_LAN_ORIGIN");
   expect(() =>
     developmentAuthBypassConfig({ ...local, CONSOLE_APP_ORIGIN: "https://console.example.com" }),
-  ).toThrow("strictement locaux");
+  ).toThrow("CONSOLE_DEV_LAN_ORIGIN");
   expect(() =>
     developmentAuthBypassConfig({ ...local, CONSOLE_DEV_AUTH_EMAIL: "other@example.com" }),
   ).toThrow("explicitement autorisé");
+});
+
+test("opens the auth bypass to the LAN origin that was explicitly declared", () => {
+  const lan = {
+    NODE_ENV: "development",
+    CONSOLE_DEV_AUTH_BYPASS: "1",
+    CONSOLE_DEV_AUTH_EMAIL: "operator@example.com",
+    GOOGLE_ALLOWED_EMAILS: "operator@example.com",
+    CONSOLE_SERVER_HOST: "0.0.0.0",
+    CONSOLE_APP_ORIGIN: "http://192.168.1.57:1470",
+    CONSOLE_DEV_LAN_ORIGIN: "http://192.168.1.57:1470",
+  };
+  expect(developmentAuthBypassConfig(lan)).toEqual({
+    email: "operator@example.com",
+    appOrigin: "http://192.168.1.57:1470",
+  });
+  // La déclaration porte sur une origine précise : une voisine du même réseau
+  // n'en hérite pas.
+  expect(() =>
+    developmentAuthBypassConfig({ ...lan, CONSOLE_APP_ORIGIN: "http://192.168.1.58:1470" }),
+  ).toThrow("CONSOLE_DEV_LAN_ORIGIN");
+  // La brèche reste une affaire de développement : en production, la variable
+  // n'existe plus et le bypass est refusé avant même d'être évalué.
+  expect(() =>
+    developmentAuthBypassConfig({ ...lan, NODE_ENV: "production" }),
+  ).toThrow("NODE_ENV=development");
 });
 
 test("le bypass local fait tourner les sessions au lieu de verrouiller le compte", () => {

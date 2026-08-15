@@ -28,11 +28,13 @@ import {
   type AuthMandate,
 } from "@/lib/auth-site-context";
 import { requestDevelopmentLogin } from "@/lib/development-login";
+import { googleLoginReachable } from "@/lib/google-login";
 import { Link, useRouter } from "@/lib/router";
 
 type AuthState = {
   authenticated: boolean;
   developmentLoginAvailable?: boolean;
+  googleLoginRequiresLoopback?: boolean;
   setupRequired: boolean;
   user?: { email?: string; name?: string | null } | null;
   siteContext: AuthSiteContext | null;
@@ -174,6 +176,10 @@ export function SetupScreen() {
     content = (
       <Welcome
         onGoogle={() => window.location.assign("/api/auth?action=login")}
+        googleReachable={googleLoginReachable(
+          auth?.googleLoginRequiresLoopback,
+          window.location.hostname,
+        )}
         onDevelopment={
           auth?.developmentLoginAvailable ? () => void loginForDevelopment() : undefined
         }
@@ -498,10 +504,12 @@ function oauthCallbackNotice() {
 
 function Welcome({
   onGoogle,
+  googleReachable = true,
   onDevelopment,
   developmentLoginBusy = false,
 }: {
   onGoogle: () => void;
+  googleReachable?: boolean;
   onDevelopment?: () => void;
   developmentLoginBusy?: boolean;
 }) {
@@ -525,7 +533,8 @@ function Welcome({
             <button
               type="button"
               onClick={onGoogle}
-              className="inline-flex h-11 items-center gap-3 rounded-[6px] border border-[oklch(0.78_0.004_258)] bg-[oklch(0.99_0.001_258)] px-4 text-[0.875rem] font-medium text-[oklch(0.28_0.008_258)] shadow-[0_1px_2px_oklch(0.06_0.006_258/0.22)] transition-colors duration-150 hover:bg-[oklch(0.96_0.002_258)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.63_0.18_251)] focus-visible:ring-offset-2 focus-visible:ring-offset-[oklch(0.135_0.008_258)] active:bg-[oklch(0.93_0.003_258)]"
+              disabled={!googleReachable}
+              className="inline-flex h-11 items-center gap-3 rounded-[6px] border border-[oklch(0.78_0.004_258)] bg-[oklch(0.99_0.001_258)] px-4 text-[0.875rem] font-medium text-[oklch(0.28_0.008_258)] shadow-[0_1px_2px_oklch(0.06_0.006_258/0.22)] transition-colors duration-150 hover:bg-[oklch(0.96_0.002_258)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.63_0.18_251)] focus-visible:ring-offset-2 focus-visible:ring-offset-[oklch(0.135_0.008_258)] active:bg-[oklch(0.93_0.003_258)] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:bg-[oklch(0.99_0.001_258)]"
             >
               <GoogleGlyph />
               Continuer avec Google
@@ -547,9 +556,20 @@ function Welcome({
             ) : null}
             <span className="flex items-center gap-2 text-[0.6875rem] text-white/42"><ShieldCheckIcon className="size-3.5 text-[oklch(0.78_0.16_141)]" aria-hidden />Accès limité aux opérateurs autorisés</span>
           </div>
+          {!googleReachable ? (
+            <p className="mt-3 max-w-[52ch] text-[0.6875rem] leading-5 text-white/52">
+              Google refuse les adresses IP privées comme URI de redirection. Lancée
+              depuis cet appareil, la connexion reviendrait sur sa propre machine, où
+              rien ne répond.{" "}
+              {onDevelopment
+                ? "Utilisez la connexion locale."
+                : "Ouvrez la Console depuis la machine qui la sert."}
+            </p>
+          ) : null}
           {onDevelopment ? (
-            <p className="mt-3 text-[0.6875rem] leading-5 text-white/38">
-              Disponible uniquement sur localhost avec l’identité de développement autorisée par le serveur.
+            <p className="mt-3 max-w-[52ch] text-[0.6875rem] leading-5 text-white/38">
+              Connexion locale : identité de développement autorisée par le serveur, sur
+              localhost et sur les origines déclarées dans CONSOLE_DEV_LAN_ORIGIN.
             </p>
           ) : null}
         </div>

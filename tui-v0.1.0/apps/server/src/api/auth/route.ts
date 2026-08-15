@@ -2,6 +2,7 @@ import { apiErrorResponse } from "@/modules/api/errors";
 import { assertSameOriginMutation } from "@/modules/api/same-origin";
 import { consoleSetupRequired } from "@/modules/setup/service";
 import { AuthError, assertCsrf, beginGoogleLogin, clearSessionHeaders, completeDevelopmentLogin, completeGoogleLogin, deleteSession, developmentAuthBypassAvailable, findActiveAssignedMandates, getSession, oidcStateClearingHeader, requireSiteRequestContext, resolveSiteRequirement, selectSessionMandate, selectSessionSite, type SiteRequestContext } from "@/modules/auth/service";
+import { googleCallbackRequiresLoopback } from "@/modules/auth/local-oauth-routing";
 import { siteCapabilitiesForRole } from "@/modules/auth/site-authorization";
 import { z } from "zod";
 import {
@@ -39,6 +40,7 @@ export function authStatusPayload(
   mandates: Awaited<ReturnType<typeof findActiveAssignedMandates>> = [],
   mandateSelectionRequired = false,
   developmentLoginAvailable = false,
+  googleLoginRequiresLoopback = false,
 ) {
   const consentRequired = session
     ? !hasCurrentAiDisclosureConsent(session)
@@ -46,6 +48,9 @@ export function authStatusPayload(
   return {
     authenticated: session !== null,
     developmentLoginAvailable,
+    // Le SPA en déduit si le bouton Google mène quelque part depuis l'origine
+    // que le navigateur a demandée : lui seul connaît cet hôte.
+    googleLoginRequiresLoopback,
     setupRequired,
     consentRequired,
     user: session
@@ -144,6 +149,7 @@ export async function GET(request: Request) {
         mandates,
         mandateSelectionRequired,
         developmentAuthBypassAvailable(),
+        googleCallbackRequiresLoopback(),
       ),
       { headers: { "cache-control": "no-store" } },
     );

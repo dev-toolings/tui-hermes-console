@@ -13,6 +13,7 @@ import {
 } from "@/db/schema";
 import { getDatabase } from "@/db/client";
 import { appendAuditEntry } from "@/modules/audit/service";
+import { developmentLanOrigins } from "@/modules/api/origins";
 import { describeError, log } from "@/observability/log";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
@@ -122,6 +123,21 @@ function isLoopbackHostname(hostname: string) {
 /**
  * Le bypass ne remplace jamais Google en production : il exige un opt-in
  * explicite, un serveur lié au loopback et une origine navigateur locale.
+ *
+ * Une seule brèche est ouverte, et elle se déclare à la main. Tester le SPA
+ * mobile depuis un téléphone impose de servir la Console sur le réseau local,
+ * or Google refuse les adresses IP privées comme URI de redirection : sans
+ * cette exception, aucune session ne peut exister sur l'origine LAN, et
+ * l'appareil ne voit qu'un écran de connexion suivi de 401. `CONSOLE_DEV_LAN_ORIGIN`
+ * autorise donc les origines qu'elle nomme, et elles seules, à ouvrir une
+ * session sans Google.
+ *
+ * Ce que cette exception coûte, en toutes lettres : tant que le serveur de
+ * développement tourne avec `CONSOLE_DEV_AUTH_BYPASS=1`, n'importe quel
+ * appareil du réseau local capable d'atteindre cette origine ouvre une session
+ * du compte visé sans mot de passe. Les trois autres verrous tiennent toujours
+ * (`NODE_ENV=development`, opt-in explicite, compte déjà autorisé par Google),
+ * et la variable est ignorée en production.
  */
 export function developmentAuthBypassConfig(
   env: Record<string, string | undefined> = process.env,
@@ -149,13 +165,19 @@ export function developmentAuthBypassConfig(
     );
   }
 
+  // Déclarer une origine LAN, c'est accepter que le serveur écoute au-delà du
+  // loopback : `0.0.0.0` n'a plus de raison d'être refusé, sinon l'exception
+  // serait inatteignable. Sans déclaration, le verrou d'origine reste entier.
+  const lanOrigins = developmentLanOrigins(env);
+  const serverReachableFromLan = lanOrigins.length > 0;
+  const localAppOrigin =
+    isLoopbackHostname(appOrigin.hostname) && appOrigin.protocol === "http:";
   if (
-    !isLoopbackHostname(serverHost) ||
-    !isLoopbackHostname(appOrigin.hostname) ||
-    appOrigin.protocol !== "http:"
+    (!isLoopbackHostname(serverHost) && !serverReachableFromLan) ||
+    (!localAppOrigin && !lanOrigins.includes(appOrigin.origin))
   ) {
     throw new AuthError(
-      "Le bypass d’authentification exige un serveur et une origine HTTP strictement locaux.",
+      "Le bypass d’authentification exige un serveur et une origine locaux, ou une origine déclarée dans CONSOLE_DEV_LAN_ORIGIN.",
       503,
       "DEV_AUTH_BYPASS_UNSAFE",
     );

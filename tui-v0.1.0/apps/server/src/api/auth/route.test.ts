@@ -34,6 +34,7 @@ describe("GET /api/auth status", () => {
     expect(authStatusPayload(session(), false)).toMatchObject({
       authenticated: true,
       developmentLoginAvailable: false,
+      googleLoginRequiresLoopback: false,
       setupRequired: false,
       consentRequired: false,
       user: {

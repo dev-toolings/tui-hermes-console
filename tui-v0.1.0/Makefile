@@ -154,14 +154,63 @@ port-free:
 # `api` et `web` uniquement le leur).
 PORTS_FREED ?= $(PORT) $(WEB_PORT)
 
+# `db-check` ici et pas seulement dans `setup` : une base absente ne se voit
+# qu'au boot du serveur, sous forme d'un 3D000 noyé au milieu des logs de Vite,
+# et `bun --watch` ne relance rien tant qu'un fichier ne bouge pas. Même esprit
+# que `port-free` : dire ce qui manque avant de lancer, pas après.
 .PHONY: dev
-dev: env port-free ## Lance l'API et le SPA Vite (voir Variables)
+dev: env db-check port-free ## Lance l'API et le SPA Vite (voir Variables)
 	$(call say,Starting API on :$(PORT) and web app on http://127.0.0.1:$(WEB_PORT))
 	@$(PKG) run dev
 
+# Adresse par laquelle les autres appareils voient cette machine, déduite de la
+# route par défaut et pas de `ip addr` : la machine porte une dizaine d'adresses
+# (bridges Docker, tailscale) dont aucune n'est celle que le téléphone doit
+# viser. Surchargeable quand la détection se trompe : `make dev-lan LAN_IP=…`.
+LAN_IP ?= $(shell ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1)
+
+# `dev` n'écoute que le loopback, et c'est le bon défaut : ce serveur n'a ni TLS
+# ni authentification propre. L'ouvrir à un téléphone du réseau local demande
+# quatre variables cohérentes entre elles, et en oublier une donne une panne
+# muette à trois couches de sa cause :
+#
+#   CONSOLE_WEB_HOST manquante    -> Vite reste sur 127.0.0.1, connexion refusée
+#   CONSOLE_SERVER_HOST manquante -> le SPA charge, l'API est injoignable
+#   CONSOLE_DEV_LAN_ORIGIN vide   -> tout charge, les mutations tombent en 403
+#   CONSOLE_DEV_AUTH_BYPASS à 0   -> tout marche, aucune session ne peut s'ouvrir
+#                                    (Google refuse les IP privées en URI de
+#                                    redirection, cf. le postmortem du 15-08-2026)
+#
+# Les poser à la main c'est se tromper une fois sur deux, d'où cette cible : les
+# quatre ensemble ou rien.
+.PHONY: dev-lan
+dev-lan: env db-check port-free ## Comme `dev`, mais exposé au réseau local (session sans mot de passe)
+	@ip="$(LAN_IP)"; \
+	if [ -z "$$ip" ]; then \
+	  printf "$(RED)✗$(RESET) %s\n" "adresse LAN introuvable : pas de route par défaut ?" >&2; \
+	  printf "    %s\n" "donne-la à la main : make dev-lan LAN_IP=192.168.1.57" >&2; \
+	  exit 1; \
+	fi; \
+	case "$$ip" in \
+	  10.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*) ;; \
+	  *) printf "$(RED)✗$(RESET) %s\n" "$$ip n'est pas une adresse privée, refus d'exposer la Console dessus" >&2; \
+	     printf "    %s\n" "route par défaut détournée (VPN, exit node) ou machine exposée à Internet" >&2; \
+	     printf "    %s\n" "si le réseau est bien de confiance : make dev-lan LAN_IP=<ip privée>" >&2; \
+	     exit 1;; \
+	esac; \
+	printf "$(YELLOW)!$(RESET) %s\n" "Console ouverte au réseau local, sans TLS :"; \
+	printf "    %s\n" "tout appareil qui atteint http://$$ip:$(WEB_PORT) ouvre une session sans mot de passe."; \
+	printf "    %s\n" "réseau de confiance uniquement. Ctrl-C puis 'make dev' pour refermer."; \
+	printf "$(CYAN)▸$(RESET) %s\n" "SPA sur http://$$ip:$(WEB_PORT), API sur http://$$ip:$(PORT)"; \
+	CONSOLE_WEB_HOST=0.0.0.0 \
+	CONSOLE_SERVER_HOST=0.0.0.0 \
+	CONSOLE_DEV_AUTH_BYPASS=1 \
+	CONSOLE_DEV_LAN_ORIGIN="http://$$ip:$(WEB_PORT)" \
+	$(PKG) run dev
+
 .PHONY: api
 api: PORTS_FREED := $(PORT)
-api: env port-free ## Lance l'API seule, sans le SPA
+api: env db-check port-free ## Lance l'API seule, sans le SPA
 	$(call say,Starting API on :$(PORT))
 	@$(PKG) run dev:server
 
