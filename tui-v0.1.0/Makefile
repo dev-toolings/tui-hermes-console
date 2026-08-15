@@ -14,7 +14,13 @@ ENV_TPL  := $(SERVER)/.env.example
 # Le serveur Hono sert l'API et le SPA compilé sur ce même port.
 PORT     ?= 3170
 # Port du dev server Vite (apps/web), lancé par `make dev` / `make web`.
-WEB_PORT ?= 1420
+# 1420 (le défaut historique de Tauri) est déjà pris par un autre projet local :
+# la Console vit sur 1470. Vite, Tauri et les origines CORS du serveur lisent
+# tous CONSOLE_WEB_PORT, exporté ci-dessous — un seul endroit à changer.
+WEB_PORT ?= 1470
+
+export CONSOLE_SERVER_PORT := $(PORT)
+export CONSOLE_WEB_PORT    := $(WEB_PORT)
 
 # Postgres local — conteneur `infra-postgres` (~/Documents/infra/compose.yml)
 PG_HOST ?= localhost
@@ -57,7 +63,7 @@ help: ## Affiche cette aide
 			printf "\n%sHermes Console%s %s— make <target> [VAR=value]%s\n", bold, reset, dim, reset } \
 		/^##@/ { printf "\n%s%s%s\n", bold, substr($$0, 5), reset } \
 		/^[a-zA-Z0-9_.-]+:.*## / { printf "  %s%-16s%s %s\n", cyan, $$1, reset, $$2 } \
-		END { printf "\n%sVariables:%s PORT=%s PG_DB=%s PG_PORT=%s\n\n", dim, reset, "$(PORT)", "$(PG_DB)", "$(PG_PORT)" } \
+		END { printf "\n%sVariables:%s PORT=%s WEB_PORT=%s PG_DB=%s PG_PORT=%s\n\n", dim, reset, "$(PORT)", "$(WEB_PORT)", "$(PG_DB)", "$(PG_PORT)" } \
 	' $(MAKEFILE_LIST)
 
 ##@ Setup
@@ -105,54 +111,65 @@ setup: install env workdir db-check db-migrate ## Setup complet (install + env +
 #   - processus de ce dépôt avec un parent vivant -> l'app desktop tourne
 #     vraiment, on ne la casse pas dans son dos ;
 #   - tout le reste -> on n'a pas lancé ce processus, on n'y touche pas.
+#
+# Vite lui aussi meurt sur $(WEB_PORT) occupé (`strictPort`), et le message se
+# perd dans les logs de l'API : les deux ports passent donc par le même garde.
 .PHONY: port-free
 port-free:
-	@pid=$$(lsof -nP -iTCP:$(PORT) -sTCP:LISTEN -t 2>/dev/null | head -1); \
-	[ -n "$$pid" ] || exit 0; \
-	cmd=$$(ps -o command= -p "$$pid" 2>/dev/null); \
-	ppid=$$(ps -o ppid= -p "$$pid" 2>/dev/null | tr -d ' '); \
-	cwd=$$(lsof -a -p "$$pid" -d cwd -Fn 2>/dev/null | sed -n 's|^n||p' | head -1); \
-	ours=no; \
-	case "$$cmd" in $(CURDIR)/*) ours=yes;; esac; \
-	case "$$cwd" in $(CURDIR)|$(CURDIR)/*) ours=yes;; esac; \
-	if [ "$$ours" != yes ]; then \
-	  printf "$(RED)✗$(RESET) %s\n" "port $(PORT) occupé par un processus étranger (PID $$pid) :" >&2; \
-	  printf "    %s\n" "$$cmd" >&2; \
-	  printf "    %s\n" "il n'a pas été lancé depuis ce dépôt — à toi de trancher : kill $$pid" >&2; \
-	  exit 1; \
-	fi; \
-	if [ "$$ppid" != "1" ]; then \
-	  printf "$(RED)✗$(RESET) %s\n" "port $(PORT) tenu par un processus VIVANT de ce dépôt (PID $$pid, parent $$ppid) :" >&2; \
-	  printf "    %s\n" "$$cmd" >&2; \
-	  printf "    %s\n" "app desktop ou autre 'make dev' en cours — 'make stop', ou : make dev PORT=3171" >&2; \
-	  exit 1; \
-	fi; \
-	printf "$(YELLOW)!$(RESET) %s\n" "port $(PORT) tenu par un processus orphelin de ce dépôt (PID $$pid) — arrêt"; \
-	printf "    %s\n" "$$cmd"; \
-	kill "$$pid" 2>/dev/null || true; \
-	for _ in 1 2 3 4 5 6 7 8 9 10; do \
-	  lsof -nP -iTCP:$(PORT) -sTCP:LISTEN -t >/dev/null 2>&1 || break; sleep 0.3; \
-	done; \
-	if lsof -nP -iTCP:$(PORT) -sTCP:LISTEN -t >/dev/null 2>&1; then kill -9 "$$pid" 2>/dev/null || true; sleep 0.5; fi; \
-	if lsof -nP -iTCP:$(PORT) -sTCP:LISTEN -t >/dev/null 2>&1; then \
-	  printf "$(RED)✗$(RESET) %s\n" "port $(PORT) toujours occupé" >&2; exit 1; \
-	fi; \
-	printf "$(GREEN)✓$(RESET) %s\n" "port $(PORT) libéré"
+	@for port in $(PORTS_FREED); do \
+	  pid=$$(lsof -nP -iTCP:$$port -sTCP:LISTEN -t 2>/dev/null | head -1); \
+	  [ -n "$$pid" ] || continue; \
+	  cmd=$$(ps -o command= -p "$$pid" 2>/dev/null); \
+	  ppid=$$(ps -o ppid= -p "$$pid" 2>/dev/null | tr -d ' '); \
+	  cwd=$$(lsof -a -p "$$pid" -d cwd -Fn 2>/dev/null | sed -n 's|^n||p' | head -1); \
+	  ours=no; \
+	  case "$$cmd" in $(CURDIR)/*) ours=yes;; esac; \
+	  case "$$cwd" in $(CURDIR)|$(CURDIR)/*) ours=yes;; esac; \
+	  if [ "$$ours" != yes ]; then \
+	    printf "$(RED)✗$(RESET) %s\n" "port $$port occupé par un processus étranger (PID $$pid) :" >&2; \
+	    printf "    %s\n" "$$cmd" >&2; \
+	    printf "    %s\n" "il n'a pas été lancé depuis ce dépôt — à toi de trancher : kill $$pid" >&2; \
+	    exit 1; \
+	  fi; \
+	  if [ "$$ppid" != "1" ]; then \
+	    printf "$(RED)✗$(RESET) %s\n" "port $$port tenu par un processus VIVANT de ce dépôt (PID $$pid, parent $$ppid) :" >&2; \
+	    printf "    %s\n" "$$cmd" >&2; \
+	    printf "    %s\n" "app desktop ou autre 'make dev' en cours — 'make stop', ou : make dev PORT=3171 WEB_PORT=1471" >&2; \
+	    exit 1; \
+	  fi; \
+	  printf "$(YELLOW)!$(RESET) %s\n" "port $$port tenu par un processus orphelin de ce dépôt (PID $$pid) — arrêt"; \
+	  printf "    %s\n" "$$cmd"; \
+	  kill "$$pid" 2>/dev/null || true; \
+	  for _ in 1 2 3 4 5 6 7 8 9 10; do \
+	    lsof -nP -iTCP:$$port -sTCP:LISTEN -t >/dev/null 2>&1 || break; sleep 0.3; \
+	  done; \
+	  if lsof -nP -iTCP:$$port -sTCP:LISTEN -t >/dev/null 2>&1; then kill -9 "$$pid" 2>/dev/null || true; sleep 0.5; fi; \
+	  if lsof -nP -iTCP:$$port -sTCP:LISTEN -t >/dev/null 2>&1; then \
+	    printf "$(RED)✗$(RESET) %s\n" "port $$port toujours occupé" >&2; exit 1; \
+	  fi; \
+	  printf "$(GREEN)✓$(RESET) %s\n" "port $$port libéré"; \
+	done
+
+# Ports que `port-free` inspecte, surchargé par cible (`dev` prend les deux,
+# `api` et `web` uniquement le leur).
+PORTS_FREED ?= $(PORT) $(WEB_PORT)
 
 .PHONY: dev
-dev: port-free ## Lance l'API (3170) et le SPA Vite (1420)
-	$(call say,Starting API on :$(PORT) and web app on http://127.0.0.1:1420)
-	@CONSOLE_SERVER_PORT=$(PORT) $(PKG) run dev
+dev: env port-free ## Lance l'API et le SPA Vite (voir Variables)
+	$(call say,Starting API on :$(PORT) and web app on http://127.0.0.1:$(WEB_PORT))
+	@$(PKG) run dev
 
 .PHONY: api
-api: port-free ## Lance l'API seule (3170), sans le SPA
+api: PORTS_FREED := $(PORT)
+api: env port-free ## Lance l'API seule, sans le SPA
 	$(call say,Starting API on :$(PORT))
-	@CONSOLE_SERVER_PORT=$(PORT) $(PKG) run dev:server
+	@$(PKG) run dev:server
 
 .PHONY: web
-web: ## Lance l'app web Vite seule (1420), proxie /api vers l'API
-	$(call say,Starting web app on http://127.0.0.1:1420 — API expected on :$(PORT))
-	@CONSOLE_SERVER_PORT=$(PORT) $(PKG) run dev:web
+web: PORTS_FREED := $(WEB_PORT)
+web: port-free ## Lance le SPA Vite seul, proxie /api vers l'API
+	$(call say,Starting web app on http://127.0.0.1:$(WEB_PORT) — API expected on :$(PORT))
+	@$(PKG) run dev:web
 
 # `port-free` refuse de tuer un processus vivant : c'est un garde-fou pour `dev`,
 # pas pour un arrêt demandé explicitement. `stop` est l'ordre explicite : il tue
@@ -203,9 +220,10 @@ build: ## Build de production du SPA
 	@$(PKG) run build
 
 .PHONY: start
-start: build ## Sert l'API et le SPA compilé sur un seul port
+start: PORTS_FREED := $(PORT)
+start: env build port-free ## Sert l'API et le SPA compilé sur un seul port
 	$(call say,Serving the console on http://localhost:$(PORT))
-	@CONSOLE_SERVER_PORT=$(PORT) $(PKG) run start
+	@$(PKG) run start
 
 ##@ Qualité
 
@@ -265,20 +283,28 @@ db-check: ## Vérifie Postgres et crée la base $(PG_DB) si elle manque
 	fi; \
 	printf "$(GREEN)✓$(RESET) %s\n" "Postgres $(PG_HOST):$(PG_PORT) — database $(PG_DB) ready"
 
+# drizzle-kit lit DATABASE_URL depuis $(ENV_FILE) : sans lui, il sort en erreur
+# « DATABASE_OWNER_URL or DATABASE_URL is required ». D'où la dépendance à `env`.
+# Les migrations sont écrites à la main depuis 0003 : `drizzle/meta/` s'arrête à
+# `0002_snapshot.json`. `generate` compare donc le schéma à un instantané vieux
+# de 39 migrations et recrache la base entière comme si elle était neuve — un
+# fichier à jeter, pas une migration. Reconstruire la chaîne de snapshots avant
+# de se fier à cette cible.
 .PHONY: db-generate
-db-generate: ## Génère une migration Drizzle depuis le schéma
+db-generate: env ## Génère une migration Drizzle depuis le schéma (voir l'avertissement)
+	$(call warn,snapshots Drizzle figés à 0002 — la migration générée sera un dump complet du schéma)
 	$(call say,Generating Drizzle migration)
 	@$(PKG) run db:generate
 
 .PHONY: db-migrate
-db-migrate: ## Applique les migrations
+db-migrate: env ## Applique les migrations
 	$(call say,Applying migrations)
 	@$(PKG) run db:migrate
 
 .PHONY: db-studio
-db-studio: ## Ouvre Drizzle Studio
+db-studio: env ## Ouvre Drizzle Studio
 	$(call say,Opening Drizzle Studio)
-	@cd $(SERVER) && bunx drizzle-kit studio
+	@$(PKG) run db:studio
 
 ##@ Runtime Hermes
 

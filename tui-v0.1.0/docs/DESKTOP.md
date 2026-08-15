@@ -65,7 +65,7 @@ de tous les tests. Le sidecar laisse la porte ouverte à un passage progressif
 Reproduire :
 
 ```bash
-bun run dev                              # serveur (3170) + SPA (1420)
+bun run dev                              # serveur (3170) + SPA (1470)
 bun run build && bun run start           # un seul process, tout sur :3170
 bun run --cwd apps/web sidecar:build # binaire autonome
 cd apps/web/src-tauri && cargo check

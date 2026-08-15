@@ -33,7 +33,7 @@ describe("assertSameOriginMutation", () => {
   test("accepts the Vite dev server serving the SPA", () => {
     const request = new Request("http://127.0.0.1:3170/api/runtime", {
       method: "PUT",
-      headers: { origin: "http://localhost:1420", "sec-fetch-site": "same-site" },
+      headers: { origin: "http://localhost:1470", "sec-fetch-site": "same-site" },
     });
 
     expect(() => assertSameOriginMutation(request)).not.toThrow();

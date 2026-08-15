@@ -9,7 +9,7 @@ changed a file, sent a message, or completed an action unless the runtime confir
 
 ## How to use
 
-1. Open `http://localhost:1420/agents/new`.
+1. Open `http://localhost:1470/agents/new`.
 2. Copy the recommended name and description.
 3. Copy exactly one prompt block into `Instructions`.
 4. Leave `Model` empty unless this agent needs a deliberately different model.

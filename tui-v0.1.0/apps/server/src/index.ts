@@ -92,7 +92,7 @@ app.get("/docs/installation-utilisation", serveInstallationGuide);
 app.get("/docs/installation-utilisation.md", serveInstallationGuide);
 
 /**
- * Le SPA est servi depuis une autre origine en dev (Vite sur :1420) et depuis
+ * Le SPA est servi depuis une autre origine en dev (Vite sur :1470) et depuis
  * `tauri://localhost` une fois empaqueté. La liste vient de `origins.ts`, la
  * même que celle du garde anti-CSRF : deux listes divergentes autoriseraient en
  * CORS ce que le garde refuse.
@@ -230,7 +230,7 @@ app.get("/__routes", (c) =>
  * exactement les mêmes octets que la version web — un écart entre les deux
  * serait invisible jusqu'à la mise en production.
  *
- * En dev, `dist/` n'existe pas : Vite sert le SPA sur :1420 et proxifie `/api`
+ * En dev, `dist/` n'existe pas : Vite sert le SPA sur :1470 et proxifie `/api`
  * jusqu'ici. On ne monte donc rien plutôt que de répondre des 404 trompeurs.
  */
 const spaDir = process.env.WEB_DIST_DIR ?? join(import.meta.dir, "../../web/dist");
@@ -289,7 +289,7 @@ const hostname = process.env.CONSOLE_SERVER_HOST ?? "127.0.0.1";
 log.info("[hermes-console] API démarrée", {
   hostname,
   port,
-  spa: hasSpa ? spaDir : "non compilé (dev : Vite sur :1420)",
+  spa: hasSpa ? spaDir : "non compilé (dev : Vite sur :1470)",
 });
 
 export default { hostname, port, fetch: app.fetch, idleTimeout: 0 };

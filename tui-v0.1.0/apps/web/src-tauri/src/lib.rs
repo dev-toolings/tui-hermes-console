@@ -130,8 +130,8 @@ fn spawn_console_server(
         .env("CONSOLE_SERVER_HOST", "127.0.0.1")
         .env("CONSOLE_SERVER_PORT", "3170")
         // Ferme l'origine du serveur Vite une fois empaquetée : plus rien ne
-        // sert le SPA sur :1420, l'autoriser n'ouvrirait qu'une porte de plus.
-        // En `tauri dev`, la fenêtre charge justement depuis :1420 — d'où la
+        // sert le SPA sur :1470, l'autoriser n'ouvrirait qu'une porte de plus.
+        // En `tauri dev`, la fenêtre charge justement depuis :1470 — d'où la
         // distinction, que `cfg!(dev)` fournit (posé par tauri-build).
         .env(
             "NODE_ENV",

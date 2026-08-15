@@ -15,7 +15,7 @@ peut, lui, être local ou distant.
 ```mermaid
 flowchart TD
     subgraph local["Poste local"]
-        web["apps/web · Vite<br/>127.0.0.1:1420"]
+        web["apps/web · Vite<br/>127.0.0.1:1470"]
         server["apps/server · Bun/Hono<br/>127.0.0.1:3170"]
         web -->|"HTTP / proxy"| server
     end
@@ -31,7 +31,7 @@ PostgreSQL est utilisé par `apps/server` pour les comptes, sites, agents, missi
 
 | Composant | Adresse de développement | Rôle |
 |---|---:|---|
-| Web Vite (`apps/web`) | `http://127.0.0.1:1420/` | interface et HMR |
+| Web Vite (`apps/web`) | `http://127.0.0.1:1470/` | interface et HMR |
 | API Bun (`apps/server`) | `http://127.0.0.1:3170/` | API, auth, orchestration |
 | Hermes local natif | `http://127.0.0.1:8642` | runtime sélectionné |
 | Hermes Dashboard local | `http://127.0.0.1:9119` | gestion des skills et réglages |
@@ -39,14 +39,14 @@ PostgreSQL est utilisé par `apps/server` pour les comptes, sites, agents, missi
 
 Ne pas utiliser `localhost` et `127.0.0.1` en alternance pour le parcours OAuth : ce sont deux
 origines navigateur différentes. La configuration de développement du dépôt utilise
-`http://127.0.0.1:1420`.
+`http://127.0.0.1:1470`.
 
 ### Ouvrir ce guide pendant `make dev`
 
 Le serveur `apps/server` expose ce fichier en lecture seule et `apps/web` le proxifie :
 
-- [version via le Web Vite](http://127.0.0.1:1420/docs/installation-utilisation) ;
-- [version Markdown via le Web Vite](http://127.0.0.1:1420/docs/installation-utilisation.md) ;
+- [version via le Web Vite](http://127.0.0.1:1470/docs/installation-utilisation) ;
+- [version Markdown via le Web Vite](http://127.0.0.1:1470/docs/installation-utilisation.md) ;
 - [accès direct API](http://127.0.0.1:3170/docs/installation-utilisation.md).
 
 ## Prérequis communs
@@ -78,7 +78,7 @@ Renseigner ensuite au minimum dans `apps/server/.env.local` :
 GOOGLE_CLIENT_ID=<client-id-google>
 GOOGLE_CLIENT_SECRET=<secret-google>
 GOOGLE_REDIRECT_URI=http://127.0.0.1:3170/api/auth?action=callback
-CONSOLE_APP_ORIGIN=http://127.0.0.1:1420
+CONSOLE_APP_ORIGIN=http://127.0.0.1:1470
 GOOGLE_ALLOWED_EMAILS=<votre-email-google>
 INSTALLATION_ADMIN_EMAILS=<votre-email-google>
 ```
@@ -89,7 +89,7 @@ Puis démarrer le mode développement :
 make dev
 ```
 
-Ouvrir **http://127.0.0.1:1420/**. Le port `3170` est l’API ; il peut servir un build compilé,
+Ouvrir **http://127.0.0.1:1470/**. Le port `3170` est l’API ; il peut servir un build compilé,
 mais ce n’est pas l’URL Vite/HMR.
 
 Après la première connexion Google, ouvrir `Paramètres → Runtime` et enregistrer la cible Hermes.
@@ -525,7 +525,7 @@ bun run runtime:probe
 | SSH `forwarding refused` | activer `AllowTcpForwarding yes` et vérifier `sshd_config` |
 | `/health` répond mais pas les missions | vérifier `/v1/capabilities`, le provider Hermes et son setup |
 | fichiers absents | aligner `HERMES_SHARED_WORKDIR` et le montage Docker/workdir distant |
-| écran blanc sur `:3170` en développement | utiliser `http://127.0.0.1:1420/` avec `make dev` |
+| écran blanc sur `:3170` en développement | utiliser `http://127.0.0.1:1470/` avec `make dev` |
 | OAuth boucle ou perd la session | utiliser partout `127.0.0.1`, pas un mélange avec `localhost` |
 
 ## Sources Hermes officielles

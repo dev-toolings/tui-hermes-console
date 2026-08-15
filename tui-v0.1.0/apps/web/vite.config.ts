@@ -4,11 +4,16 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 /**
- * Port 1420 : celui qu'attend Tauri (`devUrl` de tauri.conf.json).
+ * Port du SPA : 1470, celui qu'attend Tauri (`devUrl` de tauri.conf.json) et
+ * qu'annonce `CONSOLE_APP_ORIGIN`. Pas le 1420 par défaut de Tauri : il est déjà
+ * pris par un autre projet local. `CONSOLE_WEB_PORT` (posé par le Makefile) le
+ * surcharge — les trois autres doivent alors bouger ensemble.
  *
  * L'API est servie par `apps/server`, le serveur autonome embarqué en sidecar.
  * Le SPA ne connaît donc qu'une seule origine d'API, en dev comme en prod.
  */
+const webPort = Number(process.env.CONSOLE_WEB_PORT ?? 1470);
+const apiPort = Number(process.env.CONSOLE_SERVER_PORT ?? 3170);
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   clearScreen: false,
@@ -24,15 +29,15 @@ export default defineConfig({
   },
   server: {
     host: "127.0.0.1",
-    port: 1420,
+    port: webPort,
     strictPort: true,
     proxy: {
       "/api": {
-        target: `http://127.0.0.1:${process.env.CONSOLE_SERVER_PORT ?? 3170}`,
+        target: `http://127.0.0.1:${apiPort}`,
         changeOrigin: true,
       },
       "/docs/installation-utilisation.md": {
-        target: `http://127.0.0.1:${process.env.CONSOLE_SERVER_PORT ?? 3170}`,
+        target: `http://127.0.0.1:${apiPort}`,
         changeOrigin: true,
       },
     },
